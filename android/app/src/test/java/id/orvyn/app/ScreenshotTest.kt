@@ -33,6 +33,11 @@ class ScreenshotTest(private val night: Boolean) {
     }
 
     @Test fun welcome() = capture("welcome") { WelcomeScreen(onSignIn = {}, onRegister = {}) }
+    @Test fun componentsBasics() = capture("components-basics") { CatalogBasics() }
+    @Test fun componentsDisplay() = capture("components-display") { CatalogDisplay() }
+    @Test fun componentsAmount() = capture("components-amount") { CatalogAmount() }
+    @Test fun componentsPin() = capture("components-pin") { CatalogPin() }
+    @Test fun componentsEmpty() = capture("components-empty") { CatalogEmpty() }
 }
 
 private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onRoot() =

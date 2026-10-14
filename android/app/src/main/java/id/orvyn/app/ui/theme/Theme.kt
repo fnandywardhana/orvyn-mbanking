@@ -2,6 +2,7 @@ package id.orvyn.app.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -53,6 +54,7 @@ private val LightScheme = lightColorScheme(
     outline = Color(0xFF858FA3), outlineVariant = Color(0xFFDCE2EE),
     error = Color(0xFFC62828), onError = Color.White,
     errorContainer = Color(0xFFFCE8E8), onErrorContainer = Color(0xFFC62828),
+    inverseSurface = Color(0xFF0A0B10), inverseOnSurface = Color.White, inversePrimary = Color(0xFF7FA2FF),
     scrim = Color.Black,
 )
 
@@ -65,6 +67,7 @@ private val DarkScheme = darkColorScheme(
     outline = Color(0xFF5D6884), outlineVariant = Color(0xFF212A3E),
     error = Color(0xFFFF8A80), onError = Color(0xFF3A1416),
     errorContainer = Color(0xFF3A1416), onErrorContainer = Color(0xFFFF8A80),
+    inverseSurface = Color(0xFFE8ECF6), inverseOnSurface = Color(0xFF0B1020), inversePrimary = Color(0xFF0032A0),
     scrim = Color.Black,
 )
 
@@ -120,6 +123,9 @@ object OrvynTheme {
 fun OrvynTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
     val scheme: ColorScheme = if (dark) DarkScheme else LightScheme
     CompositionLocalProvider(LocalOrvynColors provides if (dark) DarkExtra else LightExtra) {
-        MaterialTheme(colorScheme = scheme, typography = OrvynTypography, content = content)
+        MaterialTheme(colorScheme = scheme, typography = OrvynTypography) {
+            // Text without an explicit color follows the theme instead of defaulting to black.
+            CompositionLocalProvider(LocalContentColor provides scheme.onBackground, content = content)
+        }
     }
 }
