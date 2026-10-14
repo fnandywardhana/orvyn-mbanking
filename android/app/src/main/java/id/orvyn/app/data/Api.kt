@@ -101,6 +101,7 @@ object Api {
     var onSignedOut: () -> Unit = {}
 
     private suspend fun call(method: String, path: String, body: JSONObject? = null): JSONObject = withContext(Dispatchers.IO) {
+        val hadSession = session != null
         val conn = (URL(BuildConfig.API_URL + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 10_000
@@ -118,7 +119,8 @@ object Api {
             val text = (if (status < 400) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
             val json = runCatching { JSONObject(text) }.getOrElse { JSONObject() }
             if (status >= 400) {
-                if (json.optString("error") == "signed_out") { session = null; onSignedOut() }
+                // Only someone who was signed in can be signed out; sign-up and sign-in screens just show the message.
+                if (json.optString("error") == "signed_out" && hadSession) { session = null; onSignedOut() }
                 throw ApiException(json.optString("error", "http_$status"), json.optString("message", "Something went wrong on our side. Try again in a moment."), status, json)
             }
             json
