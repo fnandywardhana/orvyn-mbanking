@@ -12,3 +12,4 @@ captures/
 .kotlin/
 backups/
 signing.properties
+releases/*.apk

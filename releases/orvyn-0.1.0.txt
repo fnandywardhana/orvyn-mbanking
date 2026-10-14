@@ -1,0 +1,13 @@
+ORVYN 0.1.0 (Fase 0)
+
+What's in it
+- Splash screen and welcome screen. Sign in and registration come in Fase 1.
+
+Permissions this app asks for
+- INTERNET: to talk to the ORVYN server.
+That's all. No contacts, location, SMS, files, device IDs, analytics or ads.
+
+How to install
+1. Open the download link on your Android phone and download the APK.
+2. Tap the downloaded file. If Android asks, allow your browser to install apps.
+3. Tap Install, then Open.

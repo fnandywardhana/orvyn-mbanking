@@ -20,6 +20,7 @@ services:
       DATABASE_URL: postgres://orvyn:${DB_PASSWORD}@db:5432/orvyn
       ADMIN_EMAIL: ${ADMIN_EMAIL:?set ADMIN_EMAIL in .env}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+    volumes: [./releases:/app/releases:ro]
     # Reached only through the Cloudflare Tunnel, which lives on the coolify network.
     networks:
       default: {}

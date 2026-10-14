@@ -14,6 +14,12 @@ const app = new Hono()
 app.get('/health', async c => (await sql`select 1`, c.text('ok')))
 app.use('/fonts/*', serveStatic({ root: './public' }))
 app.use('/mark-*', serveStatic({ root: './public' }))
+// APKs and release notes for testers, mounted from ./releases on the host
+app.use('/download/*', async (c, next) => {
+  await next()
+  if (c.req.path.endsWith('.apk')) c.res.headers.set('Content-Type', 'application/vnd.android.package-archive') // lets Android offer "Install"
+})
+app.use('/download/*', serveStatic({ root: './', rewriteRequestPath: p => p.replace(/^\/download/, '/releases') }))
 app.route('/admin', adminRoutes(sql))
 app.get('/', c => c.redirect('/admin'))
 
