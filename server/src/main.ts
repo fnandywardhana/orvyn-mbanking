@@ -18,6 +18,8 @@ const app = new Hono()
 app.get('/health', async c => (await sql`select 1`, c.text('ok')))
 app.use('/fonts/*', serveStatic({ root: './public' }))
 app.use('/mark-*', serveStatic({ root: './public' }))
+app.use('/banners/*', async (c, next) => { await next(); c.res.headers.set('Cache-Control', 'public, max-age=86400') })
+app.use('/banners/*', serveStatic({ root: './public' }))
 // APKs and release notes for testers, mounted from ./releases on the host
 app.use('/download/*', async (c, next) => {
   await next()

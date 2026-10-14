@@ -1,6 +1,6 @@
 # Progres ORVYN
 
-Terakhir diperbarui: 14 Okt 2026, sekitar 23.00 WIB. Versi online: **0.4.0** di `https://orvyn.delvault.uk`.
+Terakhir diperbarui: 15 Okt 2026, sekitar 06.40 WIB. Versi online: **0.4.1** di `https://orvyn.delvault.uk`.
 
 ## Fase 0: Fondasi ✅
 
@@ -12,8 +12,8 @@ Semua story S0.1–S0.7 selesai (lihat riwayat commit).
 |---|---|---|
 | Daftar dari aplikasi: OTP, data diri, foto KTP + selfie (tidak dikirim), password, PIN, menunggu persetujuan | S1.1–S1.3 | ✅ Diuji di HP. Pengambilan foto hanya teruji sampai build (saya tidak memotret ruangan Anda). |
 | Petugas menyetujui/menolak pendaftaran | S1.4 | ✅ |
-| Masuk pertama, ganti HP, PIN/sidik jari, keluar otomatis 5 menit | S1.5–S1.6 | ✅ Sidik jari belum diuji (HP belum punya sidik jari terdaftar) |
-| Beranda, banner | S1.7–S1.8 | ✅ |
+| Masuk pertama, ganti HP, PIN/sidik jari, keluar otomatis 5 menit | S1.5–S1.6 | ✅ Sidik jari sudah diuji pemilik di HP lain |
+| Beranda, banner | S1.7–S1.8 | ✅ Banner berfoto (0.4.1), bergeser otomatis, dengan tombol ke fitur |
 | Rekening, mutasi + cari + filter, detail + bagikan bukti (gambar) | S1.9–S1.11 | ✅ |
 | Transfer sesama ORVYN, BI-FAST, RTGS, penerima favorit (simpan, ubah nama, hapus) | S1.12–S1.14 | ✅ |
 | QRIS: scan kamera / galeri, QR-ku, merchant di admin | S1.15–S1.17 | ✅ |
@@ -24,7 +24,7 @@ Semua story S0.1–S0.7 selesai (lihat riwayat commit).
 | Admin: nasabah dari persona, nasabah dummy massal, kelola nasabah, lihat sebagai nasabah | S1.32–S1.33 | ✅ |
 | Admin: tambah/kurangi uang, uang masuk realistis | S1.34 | ✅ |
 | Admin: daftar transaksi, pembatalan, dashboard | S1.35 | ✅ |
-| Admin: konten (banner, FAQ) | S1.36 | ✅ Banner memakai desain brand, bukan unggah gambar (DECISIONS-PENDING #4) |
+| Admin: konten (banner, FAQ) | S1.36 | ✅ Banner dipilih dari pustaka foto di admin (tanpa unggah) |
 | Admin: pengaturan (limit, biaya, rekening bank lain, fitur on/off, maintenance) | S1.37 | ✅ |
 | Admin: petugas, audit log, reset demo | S1.38 | ✅ |
 
@@ -41,4 +41,4 @@ Semua story S0.1–S0.7 selesai (lihat riwayat commit).
 
 Fitur: Vyna (asisten AI), insight pengeluaran, kantong tabungan, transfer terjadwal, minta uang / split bill, e-statement PDF, widget.
 
-Vyna butuh API key Anthropic dari Anda. Fitur lain bisa langsung dikerjakan.
+Vyna butuh API key Anthropic di `.env` (lihat DECISIONS-PENDING #5). Fitur lain bisa langsung dikerjakan.

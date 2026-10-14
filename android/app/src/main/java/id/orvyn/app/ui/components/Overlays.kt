@@ -20,6 +20,7 @@ import id.orvyn.app.ui.theme.OrvynTheme
 fun OrvynBottomSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true), // tall sheets open fully, so buttons at the bottom are never hidden
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = MaterialTheme.colorScheme.surface,
         scrimColor = Color.Black.copy(alpha = if (isSystemInDarkTheme()) 0.6f else 0.5f),

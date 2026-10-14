@@ -377,7 +377,7 @@ export function apiRoutes(sql: Sql) {
 
   // Content and profile (stories S1.8, S1.30, S1.31)
   app.get('/content', async c => {
-    const banners = await sql`select id, title, body, detail, style from banners where starts_at <= now() and ends_at > now() order by sort, id`
+    const banners = await sql`select id, title, body, detail, style, image, action from banners where starts_at <= now() and ends_at > now() order by sort, id`
     const faqs = await sql`select id, category, question, answer from faqs order by sort, id`
     return c.json({ banners: banners.map(b => ({ ...b, id: String(b.id) })), faqs: faqs.map(f => ({ ...f, id: String(f.id) })) })
   })

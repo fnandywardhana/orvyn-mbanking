@@ -1,0 +1,16 @@
+ORVYN 0.4.1
+
+What's new
+- Home banners now have photos, move along on their own every few seconds, and show dots for where you are.
+- Tap a banner for the details and a button that takes you straight there: Transfer, QRIS, Pay or Cards.
+- Sheets that slide up from the bottom now open all the way, so their buttons are never hidden.
+
+Permissions this app asks for
+- INTERNET: to talk to the ORVYN server.
+- CAMERA: only while scanning a QR code or taking the sign-up photos. Nothing is uploaded.
+- POST_NOTIFICATIONS: to show your sign-up code (Android 13 and newer ask first).
+- USE_BIOMETRIC / USE_FINGERPRINT: only if you turn on fingerprint sign-in.
+No contacts, location, SMS, storage, device IDs, analytics or ads.
+
+How to update
+Open the download link on your phone, download, tap the file, then Update.

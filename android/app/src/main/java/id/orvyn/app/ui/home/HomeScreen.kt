@@ -10,6 +10,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -144,7 +148,7 @@ fun HomeScreen(
             item {
                 Hero(h, hidden, onToggle = { hidden = !hidden; store.balanceHidden = hidden }, onInbox = onInbox)
                 QuickActions(enabled = !offline, onAction = onQuickAction)
-                Banners()
+                Banners(onAction = onQuickAction)
             }
             if (offline) item {
                 Text(
@@ -244,34 +248,85 @@ private fun Hero(h: Home?, hidden: Boolean, onToggle: () -> Unit, onInbox: () ->
 /** Story S1.8: banners from the admin, swipeable, tap for details. Nothing at all when there are none. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Banners() {
+private fun Banners(onAction: (String) -> Unit) {
     var banners by remember { mutableStateOf<List<id.orvyn.app.data.Banner>>(emptyList()) }
     var open by remember { mutableStateOf<id.orvyn.app.data.Banner?>(null) }
     LaunchedEffect(Unit) { runCatching { banners = Api.content().banners } }
     if (banners.isEmpty()) return
     val pager = androidx.compose.foundation.pager.rememberPagerState { banners.size }
+    val reduced = rememberReducedMotion()
+    // Moves on every 6 seconds, like most banking apps; waits while the customer swipes or reads a banner.
+    // Keyed on drag, not isScrollInProgress: the auto-scroll itself sets that and would cancel itself.
+    val dragged by pager.interactionSource.collectIsDraggedAsState()
+    LaunchedEffect(pager.settledPage, dragged, open, reduced) {
+        if (reduced || open != null || dragged || banners.size < 2) return@LaunchedEffect
+        kotlinx.coroutines.delay(6_000)
+        pager.animateScrollToPage((pager.settledPage + 1) % banners.size)
+    }
     androidx.compose.foundation.pager.HorizontalPager(pager, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp), pageSpacing = 12.dp,
         modifier = Modifier.padding(top = 8.dp)) { i ->
         val b = banners[i]
-        val bg = when (b.style) { "gold" -> androidx.compose.ui.graphics.Brush.linearGradient(listOf(Brand.Giallo, Color(0xFFE0A800))); "black" -> androidx.compose.ui.graphics.Brush.linearGradient(listOf(Brand.Nero, Color(0xFF1A1B22))); else -> Brand.Hero }
-        val fg = if (b.style == "gold") Brand.Nero else Color.White
-        Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(bg).clickable { open = b }
-                .drawBehind { val w = 16.dp.toPx(); var x = size.width * 0.7f; while (x < size.width) { drawRect(fg.copy(alpha = 0.08f), Offset(x, 0f), Size(w, size.height)); x += w * 2 } }
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(b.title, style = MaterialTheme.typography.titleMedium, color = fg)
-            Text(b.body, style = MaterialTheme.typography.bodyMedium, color = fg.copy(alpha = 0.85f), minLines = 2)
+        BannerArt(b, Modifier.height(156.dp).clickable(role = Role.Button, onClickLabel = "Read more") { open = b }) {
+            Column(Modifier.fillMaxWidth(0.66f).fillMaxHeight().padding(16.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(b.title, style = MaterialTheme.typography.titleMedium, color = Color.White, maxLines = 2)
+                    Text(b.body, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.88f), maxLines = 2)
+                }
+                b.action?.let { a ->
+                    Row(Modifier.clip(RoundedCornerShape(50)).background(Color.White).padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(BANNER_ACTIONS[a]?.first ?: "Open", style = MaterialTheme.typography.labelMedium, color = Brand.Nerazzurro)
+                        Icon(painterResource(R.drawable.ph_caret_right), contentDescription = null, tint = Brand.Nerazzurro, modifier = Modifier.size(14.dp))
+                    }
+                }
+            }
+        }
+    }
+    if (banners.size > 1) Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.Center) {
+        banners.indices.forEach { i ->
+            val w by androidx.compose.animation.core.animateDpAsState(if (i == pager.currentPage) 18.dp else 6.dp, label = "dot")
+            Box(Modifier.padding(horizontal = 3.dp).height(6.dp).width(w).clip(RoundedCornerShape(50))
+                .background(if (i == pager.currentPage) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant))
         }
     }
     open?.let { b ->
         id.orvyn.app.ui.components.OrvynBottomSheet(onDismiss = { open = null }) {
             Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (b.image != null) BannerArt(b, Modifier.aspectRatio(16f / 7f), fade = false) {}
                 Text(b.title, style = MaterialTheme.typography.titleLarge)
                 Text(b.detail, style = MaterialTheme.typography.bodyLarge, color = OrvynTheme.colors.textSecondary)
+                b.action?.let { a ->
+                    Spacer(Modifier.height(4.dp))
+                    id.orvyn.app.ui.components.OrvynButton(BANNER_ACTIONS[a]?.first ?: "Open", onClick = { open = null; onAction(BANNER_ACTIONS[a]?.second ?: return@OrvynButton) }, modifier = Modifier.fillMaxWidth())
+                }
             }
         }
+    }
+}
+
+/** Button text, and the home action it runs. */
+private val BANNER_ACTIONS = mapOf(
+    "transfer" to ("Send money" to "Transfer"), "qris" to ("Scan to pay" to "QRIS"), "pay" to ("Pay a bill" to "Pay"),
+    "topup" to ("Top up" to "Top up"), "cards" to ("Open Cards" to "Cards"),
+)
+
+/** The photo with a dark fade on the left so white text stays readable; brand colours while it loads or when there is no photo. */
+@Composable
+private fun BannerArt(b: id.orvyn.app.data.Banner, modifier: Modifier, fade: Boolean = true, content: @Composable () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val photo by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, b.image) {
+        value = b.image?.let { id.orvyn.app.data.BannerImages.load(context, it) }
+    }
+    val alpha by androidx.compose.animation.core.animateFloatAsState(if (photo != null) 1f else 0f, tween(250), label = "photo")
+    Box(modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if (b.style == "black") androidx.compose.ui.graphics.Brush.linearGradient(listOf(Brand.Nero, Color(0xFF1A1B22))) else Brand.Hero)
+        .drawBehind { val w = 16.dp.toPx(); var x = size.width * 0.7f; while (x < size.width) { drawRect(Color.White.copy(alpha = 0.06f), Offset(x, 0f), Size(w, size.height)); x += w * 2 } }) {
+        photo?.let {
+            androidx.compose.foundation.Image(it, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha })
+            if (fade) Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.horizontalGradient(
+                0f to Brand.Nero.copy(alpha = 0.86f), 0.5f to Brand.Nero.copy(alpha = 0.5f), 0.8f to Color.Transparent)))
+        }
+        content()
     }
 }
 

@@ -121,7 +121,9 @@ test('scanning a merchant QR and paying it; scanning a friend\'s My QR starts a 
 
 test('content lists live banners and FAQs; PIN and password changes need the current ones', async () => {
   const content = await call('GET', '/content')
-  assert.equal(content.body.banners.length, 2)
+  assert.equal(content.body.banners.length, 6)
+  assert.equal(content.body.banners[0].image, 'qris.webp')
+  assert.equal(content.body.banners[0].action, 'qris')
   assert.ok(content.body.faqs.length >= 8)
   assert.equal((await call('POST', '/me/pin', { oldPin: '000000', newPin: '135791' })).body.error, 'WRONG_PIN')
   assert.equal((await call('POST', '/me/pin', { oldPin: '482915', newPin: '111111' })).body.error, 'WEAK_PIN')

@@ -4,10 +4,16 @@ Claude's working notes for things that need your answer. None of them blocks the
 
 | # | Question | Default in use | Since |
 |---|---|---|---|
-| 1 | Vyna is shown in English. If a customer writes in Indonesian, should Vyna reply in Indonesian, or always in English? | Replies in the customer's language | 14 Oct |
-| 2 | Fingerprint sign-in hasn't been tested because the Note10+ on the server has no fingerprint enrolled. Can you enrol one finger on it? | Fingerprint code is built but untested | 14 Oct |
-| 4 | Home banners use ORVYN's own card art (blue, black or gold, with the jersey stripes) instead of uploaded pictures. Uploading pictures needs an image library on the server and more work for little gain in a demo. Want real picture uploads? | Brand-styled banners, three looks | 14 Oct |
-| 3 | Push notifications need a Firebase project on your Google account (free). Steps: console.firebase.google.com → Add project "ORVYN" → Add Android app with package `id.orvyn.app` → download `google-services.json`; then Project settings → Service accounts → Generate new private key. Put both files in `/home/fnandywardhana/mbanking_apps/secrets/`. | In-app Inbox works without it; push is switched off until the files exist | 14 Oct |
+| 3 | Push notifications need a Firebase project. Steps are in the 15 Oct chat. Put `google-services.json` and `firebase-service-account.json` in `/home/fnandywardhana/mbanking_apps/secrets/`. | In-app Inbox works without it; push is switched off until the files exist | 14 Oct |
+| 5 | Vyna needs your Anthropic API key as `ANTHROPIC_API_KEY=...` in `/home/fnandywardhana/mbanking_apps/.env`. Add it yourself so the key never appears in chat. | Phase 2 starts with the features that need no key; Vyna comes when the key is there | 15 Oct |
+
+# Decided
+
+| # | Decision | Date |
+|---|---|---|
+| 1 | Vyna replies in the language the customer writes in. | 15 Oct |
+| 2 | Fingerprint sign-in: the owner tested it on another phone and it works. | 15 Oct |
+| 4 | Banners use real photos that Claude picks (public-domain, see `docs/CREDITS.md`), chosen from a photo library in admin. No uploads. Done in 0.4.1. | 15 Oct |
 
 # For your information
 

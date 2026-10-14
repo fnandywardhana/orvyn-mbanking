@@ -80,6 +80,7 @@ h1{font-size:24px;line-height:30px;margin:0 0 24px}
 label{display:grid;gap:6px;font-weight:600}
 input{font:inherit;font-size:16px;height:48px;padding:0 14px;border:1px solid var(--outline-strong);border-radius:10px;background:var(--surface);color:var(--text)}
 input:focus{outline:none;border:2px solid var(--primary);padding:0 13px}
+input[type=radio]{height:auto;width:18px;height:18px;padding:0;accent-color:var(--primary);vertical-align:-3px}
 button{font:inherit;font-weight:600;font-size:15px;height:48px;border:0;border-radius:14px;cursor:pointer;background:var(--primary);color:var(--on-primary)}
 button.link{background:none;color:#C9D4F5;height:auto;padding:0;text-align:left;text-decoration:underline}
 .err{background:var(--error-c);color:var(--error);border-radius:10px;padding:10px 12px}

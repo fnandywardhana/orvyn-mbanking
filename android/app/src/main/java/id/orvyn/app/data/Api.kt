@@ -85,7 +85,7 @@ data class CardSecret(val number: String, val cvv: String, val expiry: String)
 data class InboxItem(val id: String, val title: String, val body: String, val link: String?, val read: Boolean, val at: Instant)
 data class Announcement(val id: String, val title: String, val body: String)
 
-data class Banner(val id: String, val title: String, val body: String, val detail: String, val style: String)
+data class Banner(val id: String, val title: String, val body: String, val detail: String, val style: String, val image: String?, val action: String?)
 data class Faq(val id: String, val category: String, val question: String, val answer: String)
 data class Content(val banners: List<Banner>, val faqs: List<Faq>)
 
@@ -271,7 +271,8 @@ object Api {
     suspend fun content(): Content {
         val r = call("GET", "/content")
         return Content(
-            r.getJSONArray("banners").map { Banner(it.getString("id"), it.getString("title"), it.getString("body"), it.getString("detail"), it.getString("style")) },
+            r.getJSONArray("banners").map { Banner(it.getString("id"), it.getString("title"), it.getString("body"), it.getString("detail"), it.getString("style"),
+                it.optString("image").takeIf { s -> s.isNotEmpty() && s != "null" }, it.optString("action").takeIf { s -> s.isNotEmpty() && s != "null" }) },
             r.getJSONArray("faqs").map { Faq(it.getString("id"), it.getString("category"), it.getString("question"), it.getString("answer")) },
         )
     }

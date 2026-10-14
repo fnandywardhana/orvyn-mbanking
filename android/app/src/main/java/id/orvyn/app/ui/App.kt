@@ -199,6 +199,7 @@ private fun MainShell(store: DeviceStore, onOpenTransaction: (String) -> Unit, o
         Box(Modifier.padding(pad)) {
             when (tab) {
                 Tab.Home -> HomeScreen(store, onSeeAll = { tab = Tab.History }, onOpenTransaction = onOpenTransaction, onQuickAction = { action ->
+                    if (action == "Cards") { tab = Tab.Cards; return@HomeScreen }
                     val feature = mapOf("Transfer" to "transfer", "QRIS" to "qris", "Pay" to "bills", "Top up" to "bills")[action]!!
                     if (!AppConfig.on(feature)) say("$action is switched off for now. Try again later.")
                     else when (action) { "Transfer" -> onTransfer(); "QRIS" -> onQris(); "Pay" -> onRoute("bills"); else -> onRoute("topup") }
