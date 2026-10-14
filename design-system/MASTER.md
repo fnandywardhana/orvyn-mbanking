@@ -125,15 +125,15 @@ Rules: nothing below 11sp. Body text 14sp minimum. Layouts must survive 200% fon
 
 ## 6. Writing (applies to all copy, before the humanizer pass)
 
-- Address the customer as **"kamu"** (ID) and **"you"** (EN). Sentence case everywhere, no ALL CAPS except eyebrows.
-- Buttons say exactly what happens: "Kirim Rp500.000", not "Lanjut" or "Submit".
-- Errors give the cause and the fix: "Saldo kurang Rp120.000. Isi saldo atau ubah nominal."
+- The app and admin are **English only**. Address the customer as "you". Sentence case everywhere, no ALL CAPS except eyebrows.
+- Buttons say exactly what happens: "Send Rp500,000", not "Continue" or "Submit".
+- Errors give the cause and the fix: "You're Rp120,000 short. Top up or change the amount."
 - Fees are always shown before the PIN, never after.
 - **Formats:**
-  - ID: `Rp1.250.000`, `14 Okt 2026, 19.27 WIB`
-  - EN: `Rp1,250,000`, `14 Oct 2026, 19:27 WIB`
+  - Money: `Rp1,250,000` (no decimals for Rupiah)
+  - Dates: `14 Oct 2026, 19:27 WIB`
   - Account numbers in groups of 4.
-- Use terms from `CONTEXT.md` labels only (Rekening, Kantong, Penerima favorit, Blokir sementara, …).
+- Use the terms from `CONTEXT.md` (Account, Pocket, Saved recipient, Freeze, …).
 
 ## 7. ORVYN Admin (web)
 

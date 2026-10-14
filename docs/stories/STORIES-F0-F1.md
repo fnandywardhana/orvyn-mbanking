@@ -11,7 +11,7 @@ Sumber: `PRD-ORVYN.md` (F1–F10), istilah dari `CONTEXT.md`.
 ## Definisi selesai (berlaku untuk semua story)
 
 Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
-1. Semua teks tersedia dalam ID dan EN, dan sudah melewati skill humanizer.
+1. Semua teks berbahasa Inggris dan sudah melewati skill humanizer.
 2. Layar rapi di tema terang dan gelap, dan tetap rapi saat ukuran font diperbesar sampai 200%.
 3. Semua tombol punya label TalkBack, area sentuh minimal 48dp, dan kontras minimal WCAG AA.
 4. Ada tampilan loading (skeleton), kosong, dan error yang dirancang.
@@ -61,7 +61,7 @@ Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
 ### S0.5 Tampilan bisa diperiksa tanpa manusia
 **Sebagai** pemilik proyek, **saya ingin** setiap layar bisa dirender jadi gambar dan dicek di HP asli, **supaya** kualitas UI terjaga walau tidak ada desainer manusia.
 
-1. Setiap layar punya screenshot test untuk tema terang dan gelap, dalam bahasa ID dan EN.
+1. Setiap layar punya screenshot test untuk tema terang dan gelap.
 2. Render layar beranda dibandingkan dengan screenshot dari Galaxy Note10+. Perbedaan font, warna, dan jarak dicatat.
 3. Aplikasi bisa dipasang dan dibuka di HP lewat adb dengan satu perintah.
 4. Screenshot dari HP hanya diambil saat ORVYN sedang tampil di layar.
@@ -155,7 +155,7 @@ Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
 #### S1.8 Banner promo
 **Sebagai** nasabah, **saya ingin** melihat promo terbaru di beranda, **supaya** saya tahu penawaran ORVYN.
 
-1. Banner aktif tampil di beranda sesuai jadwal tayang dan bahasa aplikasi.
+1. Banner aktif tampil di beranda sesuai jadwal tayang.
 2. Banner bisa digeser jika ada lebih dari satu.
 3. Ketukan pada banner membuka halaman detail promo.
 4. Jika tidak ada banner aktif, bagian ini tidak ditampilkan dan tidak menyisakan ruang kosong.
@@ -329,18 +329,17 @@ Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
 **Sebagai** petugas Konten, **saya ingin** mengirim pesan ke nasabah, **supaya** saya bisa mengumumkan promo atau info demo.
 
 1. Target pesan bisa semua nasabah, satu tier, atau satu nasabah.
-2. Pesan ditulis dalam ID dan EN, dan nasabah menerima sesuai bahasa aplikasinya.
+2. Pesan berisi judul dan isi, dengan batas panjang yang sesuai notifikasi Android.
 3. Pengumuman pop-up tampil sekali saat aplikasi dibuka, sampai tanggal berakhirnya.
 4. Admin menampilkan pratinjau pesan sebelum dikirim.
 
 ### F9. Profil dan pengaturan
 
-#### S1.29 Bahasa dan tema
-**Sebagai** nasabah, **saya ingin** memilih bahasa dan tema, **supaya** aplikasi nyaman dipakai.
+#### S1.29 Tema
+**Sebagai** nasabah, **saya ingin** memilih tema, **supaya** aplikasi nyaman dipakai.
 
-1. Bahasa bisa diganti antara Indonesia dan English dan langsung berlaku tanpa restart. Bahasa awal mengikuti bahasa HP.
-2. Tema bisa diatur: ikut sistem, terang, atau gelap.
-3. Format angka dan tanggal mengikuti bahasa yang dipilih (Rp1.000.000 dan "14 Okt 2026" untuk ID).
+1. Tema bisa diatur: ikut sistem, terang, atau gelap, dan langsung berlaku tanpa restart.
+2. Angka dan tanggal memakai format Inggris (Rp1,000,000 dan "14 Oct 2026, 19:27 WIB").
 
 #### S1.30 Keamanan akun
 **Sebagai** nasabah, **saya ingin** mengganti PIN dan password, **supaya** saya tetap memegang kendali atas akun saya.
@@ -395,8 +394,8 @@ Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
 #### S1.36 Konten aplikasi
 **Sebagai** petugas Konten, **saya ingin** mengatur banner, FAQ, dan artikel, **supaya** isi aplikasi bisa diganti tanpa update APK.
 
-1. Banner punya gambar, judul dan teks ID/EN, halaman detail, jadwal tayang, dan urutan.
-2. FAQ dan artikel punya kategori dan teks ID/EN.
+1. Banner punya gambar, judul dan teks, halaman detail, jadwal tayang, dan urutan.
+2. FAQ dan artikel punya kategori dan teks.
 3. Perubahan langsung terlihat di aplikasi saat beranda diperbarui.
 4. Gambar yang diunggah diperkecil otomatis supaya cepat dimuat.
 

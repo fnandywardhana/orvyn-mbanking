@@ -45,7 +45,7 @@ ORVYN adalah aplikasi mobile banking demo untuk portofolio. Tampilan dan pengala
 | KR3 | Nol crash yang dilaporkan penguji selama uji tim (tidak ada crash reporter otomatis, lihat 7.4) | Setiap fase |
 | KR4 | Aplikasi terbuka sampai beranda dalam kurang dari 2 detik di HP Android kelas menengah | Setiap fase |
 | KR5 | Rata-rata nilai penguji minimal 4,5 dari 5 untuk tampilan dan kemudahan (survei 5 pertanyaan) | Setiap fase |
-| KR6 | Vyna menjawab benar minimal 27 dari 30 pertanyaan uji baku (ID dan EN) | Akhir Fase 2 |
+| KR6 | Vyna menjawab benar minimal 27 dari 30 pertanyaan uji baku | Akhir Fase 2 |
 | KR7 | Repo GitHub punya README, screenshot, dan cerita proyek yang siap dipamerkan | Akhir Fase 3 |
 
 ## 5. Segmen pasar
@@ -89,7 +89,7 @@ Segmen dibagi berdasarkan **kebutuhan**, mengikuti struktur layanan OCBC Indones
 2. Empat aksi utama (Transfer, QRIS, Bayar, Top up) selalu terlihat. QRIS ada di tengah navigasi bawah.
 3. Setiap transaksi melewati alur yang sama: **pilih → isi → periksa → PIN → berhasil**. Layar "periksa" selalu menampilkan biaya dan saldo setelah transaksi.
 4. Layar berhasil punya animasi singkat, getaran halus, dan tombol bagikan bukti.
-5. Semua teks tersedia dalam ID dan EN, dan semuanya sudah dilewatkan skill humanizer.
+5. Aplikasi dan admin hanya berbahasa Inggris (keputusan 14 Okt 2026). Semua teks sudah dilewatkan skill humanizer.
 6. Dark mode penuh, mengikuti setelan HP.
 7. Aksesibilitas: label TalkBack di semua tombol, area sentuh minimal 48dp, tetap rapi saat ukuran font diperbesar sampai 200%, kontras warna minimal WCAG AA.
 8. Setiap layar punya tampilan loading (skeleton), kosong, dan error yang dirancang. Tidak ada layar putih kosong.
@@ -158,7 +158,7 @@ Wireframe dan desain final dibuat dengan skill ui-ux-pro-max sebelum tiap fase d
 - Kotak masuk di aplikasi menyimpan semua notifikasi.
 
 **F9. Profil dan pengaturan**
-- Bahasa ID/EN dan tema (ikut sistem / terang / gelap).
+- Tema (ikut sistem / terang / gelap).
 - Ganti PIN dan password, nyalakan atau matikan biometrik.
 - Bantuan / FAQ, yang isinya diatur dari admin.
 - Keluar.
@@ -176,7 +176,7 @@ Wireframe dan desain final dibuat dengan skill ui-ux-pro-max sebelum tiap fase d
   - Batalkan transaksi (reversal).
 - **Transaksi:** daftar lengkap, pencarian, filter, dan ringkasan harian.
 - **Konten:**
-  - Banner beranda (gambar, teks ID/EN, jadwal tayang).
+  - Banner beranda (gambar, teks, jadwal tayang).
   - FAQ dan artikel.
   - Pengumuman pop-up.
   - Kirim push ke semua nasabah, satu tier, atau satu nasabah.
@@ -193,7 +193,7 @@ Wireframe dan desain final dibuat dengan skill ui-ux-pro-max sebelum tiap fase d
 **F11. Vyna, asisten AI**
 - Layar chat dengan jawaban yang mengalir per kata. Input bisa diketik atau diucapkan, dan Vyna bisa membacakan jawaban dengan suara perempuan.
 - Pengenalan suara hanya memakai mesin yang berjalan di dalam HP (on-device), jadi rekaman suara tidak keluar dari HP. Jika HP tidak mendukung, tombol mikrofon disembunyikan.
-- Bahasa mengikuti bahasa nasabah (ID/EN).
+- Tampilan Vyna berbahasa Inggris, tapi Vyna tetap memahami dan menjawab pesan yang ditulis dalam bahasa Indonesia.
 - **Yang bisa dilakukan Vyna:**
   - Cek saldo.
   - Cari transaksi ("berapa total belanja Grab bulan lalu?").
