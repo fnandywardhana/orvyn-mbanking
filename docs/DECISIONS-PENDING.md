@@ -2,10 +2,8 @@
 
 Claude's working notes for things that need your answer. None of them blocks the work. Each item lists the default Claude is using until you decide.
 
-| # | Question | Default in use | Since |
-|---|---|---|---|
-| 3 | Push notifications need a Firebase project. Steps are in the 15 Oct chat. Put `google-services.json` and `firebase-service-account.json` in `/home/fnandywardhana/mbanking_apps/secrets/`. | In-app Inbox works without it; push is switched off until the files exist | 14 Oct |
-| 5 | Vyna needs your Anthropic API key as `ANTHROPIC_API_KEY=...` in `/home/fnandywardhana/mbanking_apps/.env`. Add it yourself so the key never appears in chat. | Phase 2 starts with the features that need no key; Vyna comes when the key is there | 15 Oct |
+Nothing is waiting right now.
+
 
 # Decided
 
@@ -13,6 +11,8 @@ Claude's working notes for things that need your answer. None of them blocks the
 |---|---|---|
 | 1 | Vyna replies in the language the customer writes in. | 15 Oct |
 | 2 | Fingerprint sign-in: the owner tested it on another phone and it works. | 15 Oct |
+| 3 | Firebase project `orvyn-94fcb` is set up; both files are in `secrets/` and were checked against Google. | 15 Oct |
+| 5 | Anthropic API key (workspace-scoped) is in `.env` and was checked with a test message to Claude Haiku 5.5. | 15 Oct |
 | 4 | Banners use real photos that Claude picks (public-domain, see `docs/CREDITS.md`), chosen from a photo library in admin. No uploads. Done in 0.4.1. | 15 Oct |
 
 # For your information
