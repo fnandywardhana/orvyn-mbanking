@@ -1,0 +1,14 @@
+node_modules/
+.env
+*.log
+# Android
+.gradle/
+build/
+local.properties
+*.keystore
+*.jks
+captures/
+.idea/
+.kotlin/
+backups/
+signing.properties

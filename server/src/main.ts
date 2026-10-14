@@ -1,0 +1,27 @@
+import { Hono } from 'hono'
+import { serve } from '@hono/node-server'
+import { serveStatic } from '@hono/node-server/serve-static'
+import { connect, migrate } from './db.ts'
+import { seedSuperAdmin } from './auth.ts'
+import { checkLedger } from './ledger.ts'
+import { adminRoutes } from './admin.ts'
+
+const sql = connect()
+await migrate(sql)
+await seedSuperAdmin(sql, process.env.ADMIN_EMAIL, process.env.ADMIN_PASSWORD)
+
+const app = new Hono()
+app.get('/health', async c => (await sql`select 1`, c.text('ok')))
+app.use('/fonts/*', serveStatic({ root: './public' }))
+app.use('/mark-*', serveStatic({ root: './public' }))
+app.route('/admin', adminRoutes(sql))
+app.get('/', c => c.redirect('/admin'))
+
+// ponytail: in-process daily timer; a missed run after a restart just waits for the next one.
+setInterval(async () => {
+  const r = await checkLedger(sql)
+  if (!r.ok) console.error('LEDGER CHECK FAILED', r.problems)
+}, 24 * 60 * 60 * 1000)
+
+const port = Number(process.env.PORT ?? 8790)
+serve({ fetch: app.fetch, port }, () => console.log(`ORVYN server on :${port}`))

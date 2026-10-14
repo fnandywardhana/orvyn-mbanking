@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">ORVYN</string>
+    <string name="tagline" translatable="false">Your money, one step ahead.</string>
+    <string name="welcome_title">Everyday banking, minus the queue</string>
+    <string name="welcome_body">Transfer and pay with QRIS from your phone, then see where your money went each month.</string>
+    <string name="welcome_sign_in">Sign in</string>
+    <string name="welcome_register">New to ORVYN? Open an account</string>
+    <string name="demo_label">Demo · ORVYN Bank is a fictional bank</string>
+</resources>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="welcome_title">Urusan bank, tanpa antre</string>
+    <string name="welcome_body">Transfer dan bayar QRIS dari HP, lalu lihat ke mana uangmu pergi setiap bulan.</string>
+    <string name="welcome_sign_in">Masuk</string>
+    <string name="welcome_register">Belum punya rekening? Buka di sini</string>
+    <string name="demo_label">Demo · ORVYN Bank adalah bank fiktif</string>
+</resources>
