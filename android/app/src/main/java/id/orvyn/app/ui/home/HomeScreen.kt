@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import id.orvyn.app.R
 import id.orvyn.app.data.Api
 import id.orvyn.app.data.ApiException
+import id.orvyn.app.data.DataVersion
 import id.orvyn.app.data.DeviceStore
 import id.orvyn.app.data.Home
 import id.orvyn.app.data.Transaction
@@ -122,7 +123,7 @@ fun HomeScreen(
             if (e.code == "offline") offline = true else error = e.message
         }
     }
-    LaunchedEffect(Unit) { load() }
+    LaunchedEffect(DataVersion.count) { load() } // reloads after money moves
 
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { scope.launch { refreshing = true; load(); refreshing = false } },
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {

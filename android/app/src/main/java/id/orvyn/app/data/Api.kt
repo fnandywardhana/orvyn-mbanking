@@ -10,6 +10,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.time.Instant
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 /** Something the customer should read: server messages are already written for them. */
 class ApiException(val code: String, override val message: String, val status: Int, val body: JSONObject? = null) : Exception(message)
@@ -41,6 +43,22 @@ data class Home(
 )
 
 data class Page(val items: List<Transaction>, val next: String?)
+
+data class Bank(val code: String, val name: String)
+
+/** Someone to send money to. [id] is set for Saved Recipients. */
+data class Recipient(
+    val bank: String,
+    val bankName: String,
+    val accountNumber: String,
+    val name: String,
+    val nickname: String? = null,
+    val id: String? = null,
+) { val internal get() = bank == "ORVYN" }
+
+data class Method(val method: String, val label: String, val fee: Long, val note: String)
+data class TransferOptions(val methods: List<Method>, val remainingToday: Long, val balance: Long)
+data class Recipients(val saved: List<Recipient>, val recent: List<Recipient>)
 
 /**
  * Tiny JSON-over-HTTPS client on the platform's HttpURLConnection and org.json (no extra libraries).
@@ -117,6 +135,35 @@ object Api {
 
     suspend fun transaction(id: String): Transaction = parseTransaction(call("GET", "/transactions/$id"))
 
+    suspend fun banks(): List<Bank> = call("GET", "/banks").getJSONArray("banks").map { Bank(it.getString("code"), it.getString("name")) }
+
+    suspend fun lookup(bank: String, accountNumber: String): Recipient =
+        parseRecipient(call("POST", "/transfers/lookup", JSONObject().put("bank", bank).put("accountNumber", accountNumber)))
+
+    suspend fun transferOptions(bank: String, amount: Long): TransferOptions {
+        val r = call("GET", "/transfers/options?bank=${enc(bank)}&amount=$amount")
+        return TransferOptions(
+            r.getJSONArray("methods").map { Method(it.getString("method"), it.getString("label"), it.getLong("fee"), it.getString("note")) },
+            r.getLong("remainingToday"), r.getLong("balance"),
+        )
+    }
+
+    /** Returns the reference shown on the success screen. */
+    suspend fun sendTransfer(to: Recipient, amount: Long, method: String, note: String, pin: String, idempotencyKey: String): String =
+        call("POST", "/transfers", JSONObject().put("bank", to.bank).put("accountNumber", to.accountNumber).put("amount", amount)
+            .put("method", method).put("note", note).put("pin", pin).put("idempotencyKey", idempotencyKey)).getString("reference")
+
+    suspend fun recipients(): Recipients {
+        val r = call("GET", "/recipients")
+        return Recipients(r.getJSONArray("saved").map(::parseRecipient), r.getJSONArray("recent").map(::parseRecipient))
+    }
+
+    suspend fun saveRecipient(to: Recipient, nickname: String?) {
+        call("POST", "/recipients", JSONObject().put("bank", to.bank).put("accountNumber", to.accountNumber).put("nickname", nickname ?: ""))
+    }
+
+    suspend fun deleteRecipient(id: String) { call("DELETE", "/recipients/$id") }
+
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 }
 
@@ -133,6 +180,14 @@ fun parseHome(j: JSONObject): Home {
         recent = j.getJSONArray("recent").map(::parseTransaction),
     )
 }
+
+fun parseRecipient(r: JSONObject) = Recipient(
+    bank = r.getString("bank"), bankName = r.getString("bankName"), accountNumber = r.getString("accountNumber"),
+    name = r.getString("name"), nickname = r.optStringOrNull("nickname"), id = r.optStringOrNull("id"),
+)
+
+/** Bumped after money moves so screens that show balances reload. */
+object DataVersion { var count by androidx.compose.runtime.mutableIntStateOf(0) }
 
 fun parseTransaction(t: JSONObject) = Transaction(
     id = t.getString("id"),

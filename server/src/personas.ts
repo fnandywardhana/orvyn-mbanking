@@ -4,7 +4,7 @@ import { postJournal, houseAccount, LedgerError } from './ledger.ts'
 // Persona Templates (CONTEXT.md): ready-made customers with six months of history, modelled on
 // OCBC Indonesia segments (PRD §5). Merchant names are made up; billers use real Indonesian names.
 
-export type Party = { name: string; bank?: string }
+export type Party = { name: string; bank?: string; account?: string }
 export type Memo = { from?: Party; to?: Party; channel: string; category: string; fee?: number; note?: string }
 
 type Spec =
@@ -123,6 +123,13 @@ export async function generateHistory(tx: TransactionSql, personaKey: string, sa
   }
 }
 
+/** A stable 10-digit number for a made-up person at another bank. */
+function accountFor(name: string) {
+  let h = 17
+  for (const ch of name) h = (h * 131 + ch.charCodeAt(0)) % 1e10
+  return String(h).padStart(10, '1')
+}
+
 function post(tx: TransactionSql, s: Spec, savings: string, house: Record<string, string>, at: Date) {
   switch (s.type) {
     case 'in':
@@ -130,6 +137,7 @@ function post(tx: TransactionSql, s: Spec, savings: string, house: Record<string
         postings: [{ accountId: house[s.source ?? 'EXTERNAL_CLEARING'], amount: -s.amount }, { accountId: savings, amount: s.amount }] })
     case 'transfer': {
       const fee = s.rtgs ? 25_000 : 2_500
+      s = { ...s, to: { ...s.to, account: s.to.account ?? accountFor(s.to.name) } } // so they show up as recent recipients
       return postJournal(tx, { kind: 'external_transfer', at,
         memo: { to: s.to, channel: `${s.rtgs ? 'RTGS' : 'BI-FAST'} · ${s.to.bank}`, category: s.category, fee, note: s.note } satisfies Memo,
         postings: [{ accountId: savings, amount: -(s.amount + fee) }, { accountId: house.EXTERNAL_CLEARING, amount: s.amount }, { accountId: house.FEE_INCOME, amount: fee }] })

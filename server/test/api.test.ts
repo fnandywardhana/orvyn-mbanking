@@ -75,3 +75,27 @@ test("a customer can't read someone else's account", async () => {
   const [other] = await sql`select id from accounts where kind = 'house' limit 1`
   assert.equal((await call('GET', `/accounts/${other.id}/transactions`)).status, 404)
 })
+
+test('a tester saves a recipient, sends money, and the recipient shows up in the list', async () => {
+  const other = await sql.begin(tx => createCustomer(tx, { fullName: 'Dimas Prakoso', phone: '081299990001', password: 'rahasia123' }))
+  const lookup = await call('POST', '/transfers/lookup', { bank: 'ORVYN', accountNumber: other.savings.number })
+  assert.equal(lookup.body.name, 'Dimas Prakoso')
+  assert.equal((await call('POST', '/recipients', { bank: 'ORVYN', accountNumber: other.savings.number, nickname: 'Dimas kantor' })).status, 200)
+
+  const opts = await call('GET', '/transfers/options?bank=ORVYN&amount=50000')
+  assert.deepEqual(opts.body.methods.map((m: any) => m.method), ['internal'])
+  const sent = await call('POST', '/transfers', { bank: 'ORVYN', accountNumber: other.savings.number, amount: 50_000, method: 'internal', pin: '482915', note: 'Patungan' })
+  assert.equal(sent.status, 200)
+  assert.match(sent.body.reference, /^[0-9A-F]{12}$/)
+
+  const ext = await call('POST', '/transfers', { bank: 'BCA', accountNumber: '9876543210', amount: 75_000, method: 'bifast', pin: '482915' })
+  assert.equal(ext.status, 200)
+  const list = await call('GET', '/recipients')
+  assert.equal(list.body.saved[0].nickname, 'Dimas kantor')
+  assert.ok(list.body.recent.some((r: any) => r.bank === 'BCA' && r.accountNumber === '9876543210'))
+  assert.ok(!list.body.recent.some((r: any) => r.accountNumber === other.savings.number), 'saved recipients are not repeated in recent')
+
+  const wrong = await call('POST', '/transfers', { bank: 'ORVYN', accountNumber: other.savings.number, amount: 50_000, method: 'internal', pin: '000001' })
+  assert.equal(wrong.body.error, 'WRONG_PIN')
+  assert.equal(wrong.body.attemptsLeft, 4)
+})
