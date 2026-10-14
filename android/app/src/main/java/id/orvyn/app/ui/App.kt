@@ -74,6 +74,7 @@ import id.orvyn.app.ui.profile.ChangePinFlow
 import id.orvyn.app.ui.profile.HelpScreen
 import id.orvyn.app.ui.profile.PrivacyScreen
 import id.orvyn.app.ui.profile.ProfileScreen
+import id.orvyn.app.ui.register.RegisterFlow
 import id.orvyn.app.ui.welcome.WelcomeScreen
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -109,7 +110,8 @@ fun OrvynApp(store: DeviceStore) {
     var pendingQrTransfer by remember { mutableStateOf<Pair<id.orvyn.app.data.Recipient, Long?>?>(null) }
 
     NavHost(nav, startDestination = start) {
-        composable("welcome") { WelcomeScreen(onSignIn = { nav.navigate("signin") }, onRegister = { nav.navigate("signin") }) }
+        composable("welcome") { WelcomeScreen(onSignIn = { nav.navigate("signin") }, onRegister = { nav.navigate("register") }) }
+        composable("register") { RegisterFlow(store, onExit = { nav.popBackStack() }, onSignIn = { nav.navigate("signin") { popUpTo("welcome") } }) }
         composable("signin") {
             SignInScreen(store, onBack = { nav.popBackStack() }) { needsPin -> if (needsPin) nav.navigate("pin/create") { popUpTo(0) } else toMain() }
         }

@@ -10,6 +10,7 @@ import { merchantRoutes } from './admin-merchants.ts'
 import { messageRoutes } from './admin-messages.ts'
 import { contentRoutes } from './admin-content.ts'
 import { transactionRoutes } from './admin-transactions.ts'
+import { registrationRoutes } from './admin-registrations.ts'
 
 export type Officer = { id: string; email: string; name: string; role: 'super_admin' | 'operator' | 'content'; must_change_password: boolean }
 type Env = { Variables: { officer: Officer } }
@@ -21,6 +22,7 @@ const ROLE_LABEL = { super_admin: 'Super Admin', operator: 'Operator', content: 
 const MENU: { href: string; label: string; roles: Officer['role'][] }[] = [
   { href: '/admin', label: 'Dashboard', roles: ['super_admin', 'operator', 'content'] },
   { href: '/admin/customers', label: 'Customers', roles: ['super_admin', 'operator'] },
+  { href: '/admin/applications', label: 'Applications', roles: ['super_admin', 'operator'] },
   { href: '/admin/transactions', label: 'Transactions', roles: ['super_admin', 'operator'] },
   { href: '/admin/merchants', label: 'Merchants', roles: ['super_admin', 'operator'] },
   { href: '/admin/messages', label: 'Messages', roles: ['super_admin', 'content'] },
@@ -183,10 +185,15 @@ ${error ? html`<div class="err" role="alert">${error}</div>` : ''}
   app.get('/', async c => {
     const ledger = await checkLedger(sql)
     const [{ customers }] = await sql`select count(*)::int as customers from customers`
-    const [{ today }] = await sql`select count(*)::int as today from journal_entries where created_at >= date_trunc('day', now() at time zone 'Asia/Jakarta') at time zone 'Asia/Jakarta'`
+    const [{ today, moved }] = await sql`
+      select count(distinct j.id)::int as today, coalesce(sum(p.amount) filter (where p.amount > 0), 0)::bigint as moved
+      from journal_entries j join postings p on p.journal_id = j.id
+      where j.created_at >= date_trunc('day', now() at time zone 'Asia/Jakarta') at time zone 'Asia/Jakarta'`
+    const [{ pending }] = await sql`select count(*)::int as pending from registrations where status = 'pending'`
     return c.html(shell(c.get('officer'), '/admin', 'Dashboard', html`<div class="cards">
 <div class="card"><span class="eyebrow">Customers</span><span class="big">${customers}</span></div>
-<div class="card"><span class="eyebrow">Transactions today</span><span class="big">${today}</span></div>
+<div class="card"><span class="eyebrow">Transactions today</span><span class="big">${today}</span><span class="hint">Rp${Number(moved).toLocaleString('en-US')} moved</span></div>
+<div class="card"><span class="eyebrow">Applications waiting</span><span class="big">${pending}</span>${pending ? html`<a href="/admin/applications">Review them</a>` : ''}</div>
 <div class="card"><span class="eyebrow">Ledger</span>
 ${ledger.ok ? html`<span class="chip ok">✓ Balanced</span><p class="hint">Every balance matches its transaction history.</p>`
   : html`<span class="chip bad">✕ Out of balance</span><p class="hint">${ledger.problems.join(' · ')}</p>`}</div></div>`))
@@ -197,6 +204,7 @@ ${ledger.ok ? html`<span class="chip ok">✓ Balanced</span><p class="hint">Ever
   app.route('/messages', messageRoutes(sql))
   app.route('/content', contentRoutes(sql))
   app.route('/transactions', transactionRoutes(sql))
+  app.route('/applications', registrationRoutes(sql))
 
   return app
 }

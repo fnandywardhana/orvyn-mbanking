@@ -9,6 +9,7 @@ import { inquire, payBill } from './bills.ts'
 import { listCards, updateCard, cardDetails, payCardBill } from './cards.ts'
 import { hashPassword, verifyPassword, isStrongPassword } from './auth.ts'
 import { isAcceptablePin } from './customers.ts'
+import { sendOtp, verifyOtp, submitRegistration, registrationStatus, RegistrationError } from './registrations.ts'
 
 type Customer = { id: string; full_name: string; tier: string; pin_hash: string | null }
 type Env = { Variables: { customer: Customer; token: string } }
@@ -70,6 +71,30 @@ export function apiRoutes(sql: Sql) {
     const r = await signInWithDevice(sql, String(b.deviceToken ?? ''))
     if (!r.ok) return c.json({ error: r.reason, message: r.reason === 'locked' ? SIGN_IN_ERRORS.locked : 'Sign in with your password again.' }, 401)
     return c.json({ sessionToken: r.sessionToken })
+  })
+
+  // Opening an account (stories S1.1–S1.3) happens before there is a customer.
+  const regFail = (c: any, e: unknown) => {
+    if (e instanceof RegistrationError) return c.json({ error: e.code, message: e.message }, 400)
+    throw e
+  }
+  app.post('/register/otp', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try { const r = await sendOtp(sql, String(b.phone ?? '')); return c.json({ phone: r.phone, demoCode: r.code }) } catch (e) { return regFail(c, e) }
+  })
+  app.post('/register/verify', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try { return c.json({ token: await verifyOtp(sql, String(b.phone ?? ''), String(b.code ?? '')) } ) } catch (e) { return regFail(c, e) }
+  })
+  app.post('/register/submit', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try {
+      await submitRegistration(sql, String(b.token ?? ''), b.details ?? {}, String(b.password ?? ''), String(b.pin ?? ''))
+      return c.json({ status: 'pending' })
+    } catch (e) { return regFail(c, e) }
+  })
+  app.get('/register/status', async c => {
+    try { return c.json(await registrationStatus(sql, c.req.query('token') ?? '')) } catch (e) { return regFail(c, e) }
   })
 
   // Everything below needs a signed-in customer.

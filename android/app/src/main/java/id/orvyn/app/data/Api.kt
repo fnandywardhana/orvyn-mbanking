@@ -276,6 +276,21 @@ object Api {
 
     suspend fun changePassword(old: String, new: String) { call("POST", "/me/password", JSONObject().put("oldPassword", old).put("newPassword", new)) }
 
+    /** Returns the demo OTP; a real bank would only send it by SMS. */
+    suspend fun registerOtp(phone: String): Pair<String, String> =
+        call("POST", "/register/otp", JSONObject().put("phone", phone)).let { it.getString("phone") to it.getString("demoCode") }
+
+    suspend fun registerVerify(phone: String, code: String): String =
+        call("POST", "/register/verify", JSONObject().put("phone", phone).put("code", code)).getString("token")
+
+    suspend fun registerSubmit(token: String, details: JSONObject, password: String, pin: String) {
+        call("POST", "/register/submit", JSONObject().put("token", token).put("details", details).put("password", password).put("pin", pin))
+    }
+
+    /** (status, reason, phone) */
+    suspend fun registerStatus(token: String): Triple<String, String?, String> =
+        call("GET", "/register/status?token=${enc(token)}").let { Triple(it.getString("status"), if (it.isNull("reason")) null else it.getString("reason"), it.getString("phone")) }
+
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 }
 

@@ -30,6 +30,11 @@ class DeviceStore(context: Context) {
         get() = prefs.getString("theme", "system")!!
         set(v) = prefs.edit().putString("theme", v).apply()
 
+    /** An application in progress (story S1.1 AC5): token + details typed so far. Password and PIN are never stored. */
+    var registration: String?
+        get() = prefs.getString("registration", null)
+        set(v) = prefs.edit().apply { if (v == null) remove("registration") else putString("registration", v) }.apply()
+
     var balanceHidden: Boolean
         get() = prefs.getBoolean("balance_hidden", false)
         set(v) = prefs.edit().putBoolean("balance_hidden", v).apply()
