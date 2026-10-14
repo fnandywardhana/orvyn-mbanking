@@ -6,6 +6,7 @@ import {
 import { BANKS, lookupRecipient, transferOptions, sendTransfer, payMerchant, TransferError } from './transfers.ts'
 import { parseQris, buildQris } from './qris.ts'
 import { inquire, payBill } from './bills.ts'
+import { listCards, updateCard, cardDetails, payCardBill } from './cards.ts'
 
 type Customer = { id: string; full_name: string; tier: string; pin_hash: string | null }
 type Env = { Variables: { customer: Customer; token: string } }
@@ -98,7 +99,7 @@ export function apiRoutes(sql: Sql) {
   app.get('/home', async c => {
     const me = c.get('customer')
     const accounts = await sql`
-      select id, kind, name, number, balance from accounts where customer_id = ${me.id} order by created_at`
+      select id, kind, name, number, balance from accounts where customer_id = ${me.id} and kind in ('savings', 'pocket') order by created_at`
     const ids = accounts.map(a => a.id)
     const recent = ids.length ? await sql`
       select ${txColumns(sql)} from postings p join journal_entries j on j.id = p.journal_id
@@ -210,7 +211,7 @@ export function apiRoutes(sql: Sql) {
     } catch (e) { return fail(c, e) }
   })
 
-  app.patch('/recipients/:id', async c => {
+  app.post('/recipients/:id/nickname', async c => {
     const b = await c.req.json().catch(() => ({}))
     const nickname = String(b.nickname ?? '').trim().slice(0, 30) || null
     await sql`update saved_recipients set nickname = ${nickname} where id = ${c.req.param('id')} and customer_id = ${c.get('customer').id}`
@@ -272,6 +273,46 @@ export function apiRoutes(sql: Sql) {
         pin: String(b.pin ?? ''), idempotencyKey: String(b.idempotencyKey ?? crypto.randomUUID()),
       })
       return c.json({ reference: r.journal.id.replace(/-/g, '').slice(0, 12).toUpperCase(), token: r.token, amount: r.amount, fee: r.fee, label: r.label })
+    } catch (e) { return fail(c, e) }
+  })
+
+  // Cards (stories S1.23–S1.25)
+  app.get('/cards', async c => c.json({ cards: await listCards(sql, c.get('customer').id) }))
+
+  app.post('/cards/:id/settings', async c => { // POST, not PATCH: Android's HttpURLConnection has no PATCH
+    const b = await c.req.json().catch(() => ({}))
+    const pick = (k: string) => typeof b[k] === 'boolean' ? b[k] : undefined
+    try {
+      await updateCard(sql, c.get('customer').id, c.req.param('id'), {
+        frozen: pick('frozen'), online: pick('online'), overseas: pick('overseas'), contactless: pick('contactless'),
+        dailyLimit: b.dailyLimit === undefined ? undefined : Number(b.dailyLimit),
+      })
+      return c.json({ cards: await listCards(sql, c.get('customer').id) })
+    } catch (e) { return fail(c, e) }
+  })
+
+  app.post('/cards/:id/details', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try { return c.json(await cardDetails(sql, c.get('customer').id, c.req.param('id'), String(b.pin ?? ''))) } catch (e) { return fail(c, e) }
+  })
+
+  app.get('/cards/:id/transactions', async c => {
+    const me = c.get('customer')
+    const [card] = await sql`select id, account_id from cards where id = ${c.req.param('id')} and customer_id = ${me.id}`
+    if (!card) return c.json({ error: 'not_found', message: "We couldn't find that card." }, 404)
+    // This card's purchases and bill payments only (a debit card shares its account with everything else).
+    const rows = await sql`
+      select ${txColumns(sql)} from postings p join journal_entries j on j.id = p.journal_id
+      where p.account_id = ${card.account_id} and j.memo->>'cardId' = ${card.id}::text
+      order by j.created_at desc, j.id desc limit 50`
+    return c.json({ items: rows.map(toTransaction) })
+  })
+
+  app.post('/cards/:id/pay', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try {
+      const j = await payCardBill(sql, c.get('customer').id, c.req.param('id'), Math.floor(Number(b.amount)), String(b.pin ?? ''), String(b.idempotencyKey ?? crypto.randomUUID()))
+      return c.json({ reference: j.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
     } catch (e) { return fail(c, e) }
   })
 

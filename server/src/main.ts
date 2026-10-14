@@ -6,10 +6,13 @@ import { seedSuperAdmin } from './auth.ts'
 import { checkLedger } from './ledger.ts'
 import { adminRoutes } from './admin.ts'
 import { apiRoutes } from './api.ts'
+import { backfillDebitCards } from './cards.ts'
 
 const sql = connect()
 await migrate(sql)
 await seedSuperAdmin(sql, process.env.ADMIN_EMAIL, process.env.ADMIN_PASSWORD)
+const issued = await backfillDebitCards(sql)
+if (issued) console.log(`Issued debit cards to ${issued} existing customers`)
 
 const app = new Hono()
 app.get('/health', async c => (await sql`select 1`, c.text('ok')))

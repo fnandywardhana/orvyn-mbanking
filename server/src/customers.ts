@@ -2,6 +2,7 @@ import { randomBytes, randomInt } from 'node:crypto'
 import type { TransactionSql } from 'postgres'
 import type { Sql } from './db.ts'
 import { hashPassword, verifyPassword } from './auth.ts'
+import { issueCard } from './cards.ts'
 
 const MAX_ATTEMPTS = 5
 export const CUSTOMER_IDLE_MINUTES = 5 // story S1.6: signed out after 5 idle minutes
@@ -48,6 +49,7 @@ export async function createCustomer(tx: TransactionSql, c: NewCustomer) {
     values (${c.fullName.trim()}, ${phone}, ${await hashPassword(c.password)}, ${c.tier ?? 'everyday'}, ${c.persona ?? null})
     returning *`
   const savings = await openSavings(tx, customer.id)
+  await issueCard(tx, customer.id, 'debit', { savingsId: savings.id }) // story S1.4: every customer gets a Debit Card
   return { customer, savings }
 }
 

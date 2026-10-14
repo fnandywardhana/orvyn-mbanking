@@ -1,5 +1,6 @@
 import type { TransactionSql } from 'postgres'
 import { postJournal, houseAccount, LedgerError } from './ledger.ts'
+import { issueCard, spendOnCard } from './cards.ts'
 
 // Persona Templates (CONTEXT.md): ready-made customers with six months of history, modelled on
 // OCBC Indonesia segments (PRD §5). Merchant names are made up; billers use real Indonesian names.
@@ -19,6 +20,7 @@ type Persona = {
   tier: 'everyday' | 'prestige'
   opening: number
   summary: string
+  credit?: { product: 'cashback' | 'voyage'; limit: number; shops: string[]; spend: [number, number] }
   day: (d: Date, r: () => number) => Spec[]
 }
 
@@ -36,6 +38,7 @@ export const PERSONAS: Persona[] = [
   {
     key: 'raka', fullName: 'Raka Pratama', tier: 'everyday', opening: 8_500_000,
     summary: 'Everyday · 28, office worker in Jakarta, salary Rp12M, pays almost everything by QRIS',
+    credit: { product: 'cashback', limit: 15_000_000, shops: ['Toko Online Nusantara', 'Tiket Pesawat Kita', 'Elektronik Mangga Dua', 'Bioskop Layar Lebar'], spend: [80_000, 900_000] },
     day: (d, r) => {
       const s: Spec[] = []
       const date = d.getUTCDate(), dow = d.getUTCDay()
@@ -54,6 +57,7 @@ export const PERSONAS: Persona[] = [
   {
     key: 'sinta', fullName: 'Sinta Maharani', tier: 'everyday', opening: 25_000_000,
     summary: 'Everyday · 34, runs a catering business in Surabaya, pays suppliers twice a week',
+    credit: { product: 'cashback', limit: 25_000_000, shops: ['Grosir Peralatan Dapur', 'Toko Online Nusantara', 'SPBU Rungkut'], spend: [150_000, 1_500_000] },
     day: (d, r) => {
       const s: Spec[] = []
       const date = d.getUTCDate(), dow = d.getUTCDay()
@@ -70,6 +74,7 @@ export const PERSONAS: Persona[] = [
   {
     key: 'hendra', fullName: 'Hendra Wijaya', tier: 'prestige', opening: 1_250_000_000, // stays above the Rp1B Prestige line
     summary: 'Prestige · 47, company director in Jakarta, large transfers and RTGS',
+    credit: { product: 'voyage', limit: 150_000_000, shops: ['Maskapai Garuda Nusa', 'Hotel Bintang Singapura', 'Butik Plaza Senayan', 'Restoran Marina Bay'], spend: [1_000_000, 12_000_000] },
     day: (d, r) => {
       const s: Spec[] = []
       const date = d.getUTCDate(), dow = d.getUTCDay(), month = d.getUTCMonth()
@@ -110,8 +115,20 @@ export async function generateHistory(tx: TransactionSql, personaKey: string, sa
   await postJournal(tx, { kind: 'opening', at: new Date(first + 8 * 3_600_000), memo: { from: { name: 'ORVYN Bank' }, channel: 'Opening balance', category: 'income' } satisfies Memo,
     postings: [{ accountId: house.DEMO_EQUITY, amount: -persona.opening }, { accountId: savingsId, amount: persona.opening }] })
 
+  const card = persona.credit && await issueCard(tx, customerId, persona.credit.product, { savingsId, creditLimit: persona.credit.limit })
+
   for (let day = first; day < today; day += DAY) {
     const wibDate = new Date(day + WIB) // its UTC fields are the WIB calendar date
+    if (card && persona.credit) {
+      // About two card purchases a week, and the full bill paid from savings on the 20th.
+      if (r() < 0.28) await spendOnCard(tx, { cardId: card.id, merchant: pick(r, persona.credit.shops), amount: between(r, ...persona.credit.spend), channel: r() < 0.5 ? 'online' : 'in_store', at: new Date(day + (9 + r() * 12) * 3_600_000) })
+      if (wibDate.getUTCDate() === 20) {
+        const [{ balance }] = await tx`select balance from accounts where id = ${card.account_id}`
+        if (Number(balance) < 0) await postJournal(tx, { kind: 'card_payment', at: new Date(day + 10 * 3_600_000),
+          memo: { from: { name: 'Your savings' }, to: { name: 'Credit card bill' }, channel: 'Credit card payment', category: 'transfer', cardId: card.id },
+          postings: [{ accountId: savingsId, amount: Number(balance) }, { accountId: card.account_id, amount: -Number(balance) }] }).catch(e => { if (!(e instanceof LedgerError)) throw e })
+      }
+    }
     for (const spec of persona.day(wibDate, r)) {
       const at = new Date(day + (7 + r() * 14) * 3_600_000) // 07:00–21:00 WIB
       try {

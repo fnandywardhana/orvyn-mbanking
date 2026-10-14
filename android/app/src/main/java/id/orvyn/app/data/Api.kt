@@ -74,6 +74,13 @@ data class Inquiry(
     val biller: String, val billerName: String, val kind: String, val number: String, val name: String?, val details: String?,
     val fee: Long, val billPeriod: String?, val billAmount: Long?, val products: List<Product>, val minAmount: Long?,
 )
+data class Credit(val limit: Long, val owed: Long, val available: Long, val minimum: Long, val dueDate: String)
+data class Card(
+    val id: String, val kind: String, val product: String, val name: String, val last4: String,
+    val frozen: Boolean, val online: Boolean, val overseas: Boolean, val contactless: Boolean, val dailyLimit: Long, val credit: Credit?,
+)
+data class CardSecret(val number: String, val cvv: String, val expiry: String)
+
 data class BillPaid(val reference: String, val token: String?, val amount: Long, val fee: Long, val label: String)
 
 /**
@@ -217,6 +224,25 @@ object Api {
             .put("amount", amount ?: JSONObject.NULL).put("pin", pin).put("idempotencyKey", idempotencyKey))
         return BillPaid(r.getString("reference"), if (r.isNull("token")) null else r.getString("token"), r.getLong("amount"), r.getLong("fee"), r.getString("label"))
     }
+
+    private fun parseCards(r: JSONObject) = r.getJSONArray("cards").map { c ->
+        Card(c.getString("id"), c.getString("kind"), c.getString("product"), c.getString("name"), c.getString("last4"),
+            c.getBoolean("frozen"), c.getBoolean("online"), c.getBoolean("overseas"), c.getBoolean("contactless"), c.getLong("dailyLimit"),
+            c.optJSONObject("credit")?.let { Credit(it.getLong("limit"), it.getLong("owed"), it.getLong("available"), it.getLong("minimum"), it.getString("dueDate")) })
+    }
+
+    suspend fun cards(): List<Card> = parseCards(call("GET", "/cards"))
+
+    /** Change switches or the daily limit; returns the updated list. */
+    suspend fun updateCard(id: String, patch: JSONObject): List<Card> = parseCards(call("POST", "/cards/$id/settings", patch))
+
+    suspend fun cardDetails(id: String, pin: String): CardSecret =
+        call("POST", "/cards/$id/details", JSONObject().put("pin", pin)).let { CardSecret(it.getString("number"), it.getString("cvv"), it.getString("expiry")) }
+
+    suspend fun cardTransactions(id: String): List<Transaction> = call("GET", "/cards/$id/transactions").getJSONArray("items").map(::parseTransaction)
+
+    suspend fun payCard(id: String, amount: Long, pin: String, idempotencyKey: String): String =
+        call("POST", "/cards/$id/pay", JSONObject().put("amount", amount).put("pin", pin).put("idempotencyKey", idempotencyKey)).getString("reference")
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 }

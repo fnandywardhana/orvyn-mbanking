@@ -6,6 +6,7 @@ import { shell, audit, requireRole, type Officer } from './admin.ts'
 import { createCustomer, CustomerError } from './customers.ts'
 import { hashPassword } from './auth.ts'
 import { PERSONAS, generateHistory } from './personas.ts'
+import { PRODUCTS, spendOnCard } from './cards.ts'
 
 type Env = { Variables: { officer: Officer } }
 
@@ -99,6 +100,7 @@ ORVYN Bank is a demo. All money in it is pretend.`
     const [cu] = await sql`select * from customers where id = ${c.req.param('id')}`
     if (!cu) return c.notFound()
     const accounts = await sql`select * from accounts where customer_id = ${cu.id} order by created_at`
+    const cards = await sql`select id, product, number, frozen from cards where customer_id = ${cu.id} order by kind desc, created_at`
     const [device] = await sql`select created_at from registered_devices where customer_id = ${cu.id}`
     const flash = c.req.query('done')
     return c.html(shell(c.get('officer'), '/admin/customers', cu.full_name, html`<div class="formgrid" style="max-width:720px">
@@ -121,7 +123,17 @@ ${cu.locked ? html`<form method="post" action="/admin/customers/${cu.id}/unlock"
 <form method="post" action="/admin/customers/${cu.id}/reset-pin"><button class="btn secondary">Reset PIN</button></form>
 <form method="post" action="/admin/customers/${cu.id}/reset-password"><button class="btn danger">Reset password</button></form>
 </div>
-<p class="hint">Resetting the PIN or password signs the customer out of their phone.</p></div>`))
+<p class="hint">Resetting the PIN or password signs the customer out of their phone.</p>
+<form method="post" action="/admin/customers/${cu.id}/card-purchase" class="card" style="gap:12px">
+<span class="eyebrow">Simulate a card purchase</span>
+<label>Card<select name="cardId" style="height:44px;border-radius:10px;padding:0 10px;font:inherit">
+${cards.map(k => html`<option value="${k.id}">${PRODUCTS[k.product as keyof typeof PRODUCTS].name} ··${k.number.slice(-4)}${k.frozen ? ' (frozen)' : ''}</option>`)}</select></label>
+<label>Merchant<input name="merchant" required value="Toko Online Nusantara"></label>
+<label>Amount<input name="amount" type="number" min="1000" required value="250000"></label>
+<label>How<select name="channel" style="height:44px;border-radius:10px;padding:0 10px;font:inherit">
+<option value="in_store">In store</option><option value="online">Online</option><option value="contactless">Contactless</option><option value="overseas">Overseas</option></select></label>
+<button class="btn" style="width:max-content">Run purchase</button>
+<p class="hint">It follows the card's freeze, switches, daily limit and available credit, just like a real purchase.</p></form></div>`))
   })
 
   const action = (path: string, run: (id: string, o: Officer) => Promise<string>) =>
@@ -164,6 +176,17 @@ ${cu.locked ? html`<form method="post" action="/admin/customers/${cu.id}/unlock"
 <span class="hint">Send it to the customer. This is the only time it's shown.</span></div>
 <div class="actions"><a class="btn secondary" href="/admin/customers/${id}">Back to customer</a></div></div>`))
   })
+  app.post('/:id/card-purchase', async c => {
+    const id = c.req.param('id')
+    const f = await c.req.parseBody()
+    const [card] = await sql`select id from cards where id = ${String(f.cardId)} and customer_id = ${id}`
+    if (!card) return c.text('Unknown card', 400)
+    const r = await spendOnCard(sql, { cardId: card.id, merchant: String(f.merchant).slice(0, 40), amount: Math.floor(Number(f.amount)), channel: String(f.channel) as any })
+    await audit(sql, c.get('officer').id, 'card.simulate_purchase', card.id, null, { merchant: f.merchant, amount: Number(f.amount), channel: f.channel, ...r })
+    const done = r.approved ? `Approved: Rp${Number(f.amount).toLocaleString('en-US')} at ${f.merchant}.` : `Declined: ${r.reason}.`
+    return c.redirect(`/admin/customers/${id}?done=${encodeURIComponent(done)}`)
+  })
+
   app.post('/:id/tier', async c => {
     const id = c.req.param('id')
     const tier = String((await c.req.parseBody()).tier)
