@@ -263,7 +263,7 @@ Wireframe dan desain final dibuat dengan skill ui-ux-pro-max sebelum tiap fase d
 | Bagian | Pilihan |
 |---|---|
 | Aplikasi | Kotlin + Jetpack Compose (Material 3, tema ORVYN), CameraX + ML Kit untuk scan QR, BiometricPrompt, Credential Manager (passkey), Glance (widget) |
-| Server | TypeScript (Hono) di Node.js. Satu server melayani API aplikasi dan website admin (React). |
+| Server | TypeScript (Hono) di Node.js. Satu server melayani API aplikasi dan website admin. Halaman admin dirender di server (tanpa React), jadi tidak ada build terpisah. |
 | Database | PostgreSQL. Buku besar double-entry: setiap transaksi punya baris debit dan kredit, dan saldo dihitung di dalam satu transaksi database. |
 | AI | Claude Haiku 5.5, dipanggil dari server dengan tool-use. API key hanya ada di server. |
 | Push | Firebase Cloud Messaging (gratis). Hanya token acak untuk mengirim notifikasi. Tanpa Firebase Analytics dan Crashlytics. |
