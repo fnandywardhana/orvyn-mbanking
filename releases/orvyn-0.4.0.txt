@@ -1,0 +1,19 @@
+ORVYN 0.4.0
+
+What's new
+- Open an account from the app: confirm your phone with a code, tell us about yourself, take a KTP photo and a selfie (they never leave your phone), choose a password and PIN, then wait for the ORVYN team to approve.
+- Inbox: the bell on the home screen shows money in and out, card payments (and why one was declined), and messages from the ORVYN team.
+- Banners on the home screen, and announcements when the team has news.
+- Profile: change your PIN or password, pick light, dark or match-your-phone, read questions and answers, and see exactly what ORVYN can and can't access in Privacy.
+- Share a receipt as a picture from any transaction.
+- Rename or remove people in your saved recipients.
+
+Permissions this app asks for
+- INTERNET: to talk to the ORVYN server.
+- CAMERA: only while scanning a QR code or taking the sign-up photos. Nothing is uploaded.
+- POST_NOTIFICATIONS: to show your sign-up code (Android 13 and newer ask first).
+- USE_BIOMETRIC / USE_FINGERPRINT: only if you turn on fingerprint sign-in.
+No contacts, location, SMS, storage, device IDs, analytics or ads.
+
+How to update
+Open the download link on your phone, download, tap the file, then Update.
