@@ -44,7 +44,7 @@ export async function postJournal(sql: Sql | TransactionSql, input: JournalInput
           ? new LedgerError('ALREADY_REVERSED', `journal ${input.reversesId} was already reversed`) : e
       })
     // Same key seen before (e.g. a double tap): hand back the original instead of moving money again.
-    if (!j) return (await tx`select * from journal_entries where idempotency_key = ${input.idempotencyKey!}`)[0]
+    if (!j) return { ...(await tx`select * from journal_entries where idempotency_key = ${input.idempotencyKey!}`)[0], replayed: true }
     for (const p of input.postings) {
       await tx`insert into postings (journal_id, account_id, amount) values (${j.id}, ${p.accountId}, ${p.amount})`
       // The accounts.floor check constraint is what actually guards balances.

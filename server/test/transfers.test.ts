@@ -83,3 +83,11 @@ test('a double tap with the same key sends once', async () => {
   assert.equal(await balanceOf(sql, raka.savings.id), before - 20_000)
   assert.deepEqual(await checkLedger(sql), { ok: true, problems: [] })
 })
+
+test('both sides of an internal transfer get one inbox message each, even after a double tap', async () => {
+  const input = { bank: 'ORVYN', accountNumber: sinta.savings.number, amount: 15_000, method: 'internal', idempotencyKey: 'inbox-1' }
+  await Promise.all([send(raka, input), send(raka, input)])
+  const msgs = await sql`select customer_id, title, body from inbox_messages where link like 'tx:%' and body like 'Rp15,000%'`
+  assert.deepEqual(msgs.map(m => m.title).sort(), ['Money in', 'Money out'])
+  assert.match(msgs.find(m => m.title === 'Money in')!.body, /from Raka Pratama/)
+})

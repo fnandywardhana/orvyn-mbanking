@@ -2,7 +2,8 @@ import { randomInt } from 'node:crypto'
 import type { TransactionSql } from 'postgres'
 import type { Sql } from './db.ts'
 import { postJournal, houseAccount, LedgerError } from './ledger.ts'
-import { TransferError } from './transfers.ts'
+import { TransferError, withNotice } from './transfers.ts'
+import { notify, notifyJournal } from './inbox.ts'
 import { verifyPassword } from './auth.ts'
 
 // Cards (stories S1.23–S1.26). A credit card is a Card on a Credit Account whose floor is minus the credit limit.
@@ -80,28 +81,35 @@ export async function cardDetails(sql: Sql, customerId: string, cardId: string, 
 
 export type CardSpend = { cardId: string; merchant: string; amount: number; channel: 'in_store' | 'online' | 'overseas' | 'contactless'; at?: Date }
 
+/** Story S1.26 AC3: declined purchases still tell the customer why. */
+async function declined(sql: Sql, card: any, s: CardSpend, reason: string) {
+  if (!s.at) await notify(sql, card.customer_id, 'Card payment declined', `Rp${s.amount.toLocaleString('en-US')} at ${s.merchant} was declined: ${reason.toLowerCase()}.`)
+  return { approved: false as const, reason }
+}
+
 /** Story S1.26: a card purchase, approved or declined by the card's own switches and limits. */
 export async function spendOnCard(sql: Sql | TransactionSql, s: CardSpend): Promise<{ approved: true; journalId: string } | { approved: false; reason: string }> {
   const [c] = await sql`select * from cards where id = ${s.cardId}`
   if (!c) return { approved: false, reason: 'Unknown card' }
-  if (c.frozen) return { approved: false, reason: 'Card is frozen' }
-  if (s.channel === 'online' && !c.online) return { approved: false, reason: 'Online payments are off' }
-  if (s.channel === 'overseas' && !c.overseas) return { approved: false, reason: 'Overseas payments are off' }
-  if (s.channel === 'contactless' && !c.contactless) return { approved: false, reason: 'Contactless is off' }
+  if (c.frozen) return declined(sql as Sql, c, s, 'Card is frozen')
+  if (s.channel === 'online' && !c.online) return declined(sql as Sql, c, s, 'Online payments are off')
+  if (s.channel === 'overseas' && !c.overseas) return declined(sql as Sql, c, s, 'Overseas payments are off')
+  if (s.channel === 'contactless' && !c.contactless) return declined(sql as Sql, c, s, 'Contactless is off')
   const [{ spent }] = await sql`
     select coalesce(sum((j.memo->>'amount')::bigint), 0)::bigint as spent from journal_entries j
     where j.kind = 'card_spend' and j.memo->>'cardId' = ${c.id}
       and j.created_at >= (date_trunc('day', now() at time zone 'Asia/Jakarta') at time zone 'Asia/Jakarta')`
-  if (!s.at && Number(spent) + s.amount > Number(c.daily_limit)) return { approved: false, reason: "Over the card's daily limit" }
+  if (!s.at && Number(spent) + s.amount > Number(c.daily_limit)) return declined(sql as Sql, c, s, "Over the card's daily limit")
   try {
     const j = await postJournal(sql, {
       kind: 'card_spend', at: s.at,
       memo: { to: { name: s.merchant }, channel: `${PRODUCTS[c.product as Product].name} ·••• ${c.number.slice(-4)}`, category: 'shopping', cardId: c.id, amount: s.amount, cardChannel: s.channel },
       postings: [{ accountId: c.account_id, amount: -s.amount }, { accountId: await houseAccount(sql as Sql, 'MERCHANT_SETTLEMENT'), amount: s.amount }],
     })
+    if (!s.at) await notifyJournal(sql as Sql, j.id)
     return { approved: true, journalId: j.id }
   } catch (e) {
-    if (e instanceof LedgerError && e.code === 'INSUFFICIENT_FUNDS') return { approved: false, reason: c.kind === 'credit' ? 'Not enough credit left' : 'Not enough money in the account' }
+    if (e instanceof LedgerError && e.code === 'INSUFFICIENT_FUNDS') return declined(sql as Sql, c, s, c.kind === 'credit' ? 'Not enough credit left' : 'Not enough money in the account')
     throw e
   }
 }
@@ -117,11 +125,11 @@ export async function payCardBill(sql: Sql, customerId: string, cardId: string, 
   if (!(amount >= 10_000 && amount <= owed)) throw new TransferError('BAD_AMOUNT', owed === 0 ? 'Nothing to pay right now.' : `Pay between Rp10,000 and Rp${owed.toLocaleString('en-US')}.`)
   const [savings] = await sql`select id from accounts where customer_id = ${customerId} and kind = 'savings'`
   try {
-    return await postJournal(sql, {
+    return await withNotice(sql, postJournal(sql, {
       kind: 'card_payment', idempotencyKey: `${customerId}:${idempotencyKey}`,
       memo: { from: { name: 'Your savings' }, to: { name: `${PRODUCTS[c.product as Product].name} bill` }, channel: 'Credit card payment', category: 'transfer', cardId: c.id },
       postings: [{ accountId: savings.id, amount: -amount }, { accountId: c.account_id, amount }],
-    })
+    }))
   } catch (e) {
     if (e instanceof LedgerError && e.code === 'INSUFFICIENT_FUNDS') throw new TransferError('INSUFFICIENT_FUNDS', "You don't have enough in your savings for this payment.")
     throw e

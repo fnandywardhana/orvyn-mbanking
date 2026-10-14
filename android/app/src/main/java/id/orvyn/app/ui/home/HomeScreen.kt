@@ -103,6 +103,7 @@ fun HomeScreen(
     onOpenTransaction: (String) -> Unit,
     onQuickAction: (String) -> Unit,
     onCopied: (String) -> Unit,
+    onInbox: () -> Unit = {},
 ) {
     var home by remember { mutableStateOf(store.lastHome?.second?.let { runCatching { parseHome(JSONObject(it)) }.getOrNull() }) }
     var updatedAt by remember { mutableStateOf(store.lastHome?.first) }
@@ -124,13 +125,24 @@ fun HomeScreen(
         }
     }
     LaunchedEffect(DataVersion.count) { load() } // reloads after money moves
+    var announcement by remember { mutableStateOf<id.orvyn.app.data.Announcement?>(null) }
+    LaunchedEffect(Unit) { runCatching { announcement = Api.announcement() } }
+    announcement?.let { a ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = {},
+            title = { Text(a.title, style = MaterialTheme.typography.titleLarge) },
+            text = { Text(a.body, style = MaterialTheme.typography.bodyLarge) },
+            confirmButton = { OrvynTextButton("Got it", onClick = { scope.launch { runCatching { Api.announcementSeen(a.id) } }; announcement = null }) },
+            containerColor = MaterialTheme.colorScheme.surface,
+        )
+    }
 
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { scope.launch { refreshing = true; load(); refreshing = false } },
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val h = home
         LazyColumn(Modifier.fillMaxSize()) {
             item {
-                Hero(h, hidden, onToggle = { hidden = !hidden; store.balanceHidden = hidden })
+                Hero(h, hidden, onToggle = { hidden = !hidden; store.balanceHidden = hidden }, onInbox = onInbox)
                 QuickActions(enabled = !offline, onAction = onQuickAction)
             }
             if (offline) item {
@@ -187,7 +199,7 @@ private fun Eyebrow(text: String) = Text(
 )
 
 @Composable
-private fun Hero(h: Home?, hidden: Boolean, onToggle: () -> Unit) {
+private fun Hero(h: Home?, hidden: Boolean, onToggle: () -> Unit, onInbox: () -> Unit) {
     // Count the balance up only when it actually changes (design system: balance motion).
     val reduced = rememberReducedMotion()
     val shown = remember { Animatable(h?.totalBalance?.toFloat() ?: 0f) }
@@ -205,7 +217,12 @@ private fun Hero(h: Home?, hidden: Boolean, onToggle: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(h?.let { "${greeting()}, ${it.firstName}" } ?: greeting(), style = MaterialTheme.typography.titleMedium, color = Color.White, modifier = Modifier.weight(1f))
             if (h != null) TierBadge(Tier.valueOf(h.tier.replaceFirstChar(Char::uppercase)))
-            Spacer(Modifier.width(4.dp))
+            IconButton(onClick = onInbox) {
+                Box {
+                    Icon(painterResource(R.drawable.ph_bell), contentDescription = if ((h?.unread ?: 0) > 0) "Inbox, ${h!!.unread} unread" else "Inbox", tint = Color.White)
+                    if ((h?.unread ?: 0) > 0) Box(Modifier.align(Alignment.TopEnd).size(10.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Brand.Giallo))
+                }
+            }
         }
         Spacer(Modifier.height(12.dp))
         Text("Total balance", style = MaterialTheme.typography.bodyMedium, color = Brand.HeroTextMuted)

@@ -68,6 +68,7 @@ import id.orvyn.app.ui.qris.QrisFlow
 import id.orvyn.app.ui.bills.BillsFlow
 import id.orvyn.app.ui.cards.CardPayFlow
 import id.orvyn.app.ui.cards.CardsScreen
+import id.orvyn.app.ui.inbox.InboxScreen
 import id.orvyn.app.ui.welcome.WelcomeScreen
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -105,6 +106,7 @@ fun OrvynApp(store: DeviceStore) {
         }
         composable("transfer") { TransferFlow(onExit = { nav.popBackStack() }) }
         composable("bills") { BillsFlow(onExit = { nav.popBackStack() }) }
+        composable("inbox") { InboxScreen(onBack = { nav.popBackStack() }, onOpenTransaction = { nav.navigate("tx/$it") }) }
         composable("cardpay") { pendingCard?.let { CardPayFlow(it, onExit = { nav.popBackStack() }) } }
         composable("topup") { BillsFlow(onExit = { nav.popBackStack() }, ewalletsOnly = true) }
         composable("qris") {
@@ -150,7 +152,8 @@ private fun MainShell(store: DeviceStore, onOpenTransaction: (String) -> Unit, o
     ) { pad ->
         Box(Modifier.padding(pad)) {
             when (tab) {
-                Tab.Home -> HomeScreen(store, onSeeAll = { tab = Tab.History }, onOpenTransaction = onOpenTransaction, onQuickAction = { when (it) { "Transfer" -> onTransfer(); "QRIS" -> onQris(); "Pay" -> onRoute("bills"); else -> onRoute("topup") } }, onCopied = say)
+                Tab.Home -> HomeScreen(store, onSeeAll = { tab = Tab.History }, onOpenTransaction = onOpenTransaction, onQuickAction = { when (it) { "Transfer" -> onTransfer(); "QRIS" -> onQris(); "Pay" -> onRoute("bills"); else -> onRoute("topup") } }, onCopied = say,
+                    onInbox = { onRoute("inbox") })
                 Tab.History -> HistoryScreen(store.lastHome?.second?.let { runCatching { parseHome(JSONObject(it)).accounts.firstOrNull()?.id }.getOrNull() }, onOpenTransaction)
                 Tab.Profile -> ProfileScreen(store, onSignedOut)
                 Tab.Cards -> CardsScreen(onPayBill = onPayCard, say = say)

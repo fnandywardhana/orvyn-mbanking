@@ -2,6 +2,7 @@ import type { Sql } from './db.ts'
 import { verifyPassword } from './auth.ts'
 import { postJournal, houseAccount, LedgerError } from './ledger.ts'
 import type { Memo } from './personas.ts'
+import { notifyJournal } from './inbox.ts'
 
 // Banks a customer can send to. 'ORVYN' is an Internal Transfer; the rest are External Transfers.
 export const BANKS = [
@@ -12,6 +13,13 @@ export const BANKS = [
   { code: 'PANIN', name: 'Panin' }, { code: 'MEGA', name: 'Bank Mega' }, { code: 'JAGO', name: 'Bank Jago' }, { code: 'SEABANK', name: 'SeaBank' },
 ]
 const bankName = (code: string) => BANKS.find(b => b.code === code)?.name ?? code
+
+/** Posts, then drops a message in each customer's inbox. A replayed (idempotent) entry doesn't notify twice. */
+export async function withNotice<T extends { id: string; replayed?: boolean }>(sql: Sql, posting: Promise<T>) {
+  const j = await posting
+  if (!j.replayed) await notifyJournal(sql, j.id)
+  return j
+}
 
 export class TransferError extends Error {
   code: 'NOT_FOUND' | 'OWN_ACCOUNT' | 'BAD_NUMBER' | 'BAD_AMOUNT' | 'OVER_LIMIT' | 'INSUFFICIENT_FUNDS' | 'WRONG_PIN' | 'LOCKED' | 'BAD_METHOD' | 'ALREADY_PAID'
@@ -116,11 +124,11 @@ export async function payMerchant(sql: Sql, customer: { id: string; tier: string
   await authorizePayout(sql, customer, amount, input.pin)
   const [from] = await sql`select id from accounts where customer_id = ${customer.id} and kind = 'savings'`
   try {
-    return await postJournal(sql, {
+    return await withNotice(sql, postJournal(sql, {
       kind: 'qris_payment', idempotencyKey: `${customer.id}:${input.idempotencyKey}`,
       memo: { to: { name: m.name }, channel: 'QRIS', category: m.category, merchantId: m.id } as Memo,
       postings: [{ accountId: from.id, amount: -amount }, { accountId: await houseAccount(sql, 'MERCHANT_SETTLEMENT'), amount }],
-    })
+    }))
   } catch (e) {
     if (e instanceof LedgerError && e.code === 'INSUFFICIENT_FUNDS') throw new TransferError('INSUFFICIENT_FUNDS', "You don't have enough money for this payment.")
     throw e
@@ -153,14 +161,14 @@ export async function sendTransfer(sql: Sql, customer: { id: string; tier: strin
   try {
     if (to.internal) {
       const [dest] = await sql`select id from accounts where number = ${to.accountNumber}`
-      return await postJournal(sql, {
+      return await withNotice(sql, postJournal(sql, {
         kind: 'internal_transfer', idempotencyKey: `${customer.id}:${input.idempotencyKey}`,
         memo: { from: sender, to: { name: to.name, bank: 'ORVYN', account: to.accountNumber }, channel: 'ORVYN transfer', category: 'transfer', note } satisfies Memo,
         postings: [{ accountId: from.id, amount: -amount }, { accountId: dest.id, amount }],
-      })
+      }))
     }
     const fee = method.fee
-    return await postJournal(sql, {
+    return await withNotice(sql, postJournal(sql, {
       kind: 'external_transfer', idempotencyKey: `${customer.id}:${input.idempotencyKey}`,
       memo: { from: sender, to: { name: to.name, bank: to.bankName, account: to.accountNumber }, channel: `${method.label} · ${to.bankName}`, category: 'transfer', fee, note } satisfies Memo,
       postings: [
@@ -168,7 +176,7 @@ export async function sendTransfer(sql: Sql, customer: { id: string; tier: strin
         { accountId: await houseAccount(sql, 'EXTERNAL_CLEARING'), amount },
         { accountId: await houseAccount(sql, 'FEE_INCOME'), amount: fee },
       ],
-    })
+    }))
   } catch (e) {
     if (e instanceof LedgerError && e.code === 'INSUFFICIENT_FUNDS') throw new TransferError('INSUFFICIENT_FUNDS', "You don't have enough money for this transfer and its fee.")
     throw e

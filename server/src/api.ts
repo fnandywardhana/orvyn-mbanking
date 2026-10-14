@@ -106,6 +106,7 @@ export function apiRoutes(sql: Sql) {
       where p.account_id in ${sql(ids)} order by j.created_at desc, j.id desc limit 5` : []
     return c.json({
       customer: { name: me.full_name, firstName: me.full_name.split(' ')[0], tier: me.tier },
+      unread: (await sql`select count(*)::int as n from inbox_messages where customer_id = ${me.id} and read_at is null`)[0].n,
       totalBalance: accounts.reduce((s, a) => s + Number(a.balance), 0),
       accounts: accounts.map(a => ({ id: a.id, kind: a.kind, name: a.name, number: a.number, balance: Number(a.balance) })),
       recent: recent.map(toTransaction),
@@ -314,6 +315,30 @@ export function apiRoutes(sql: Sql) {
       const j = await payCardBill(sql, c.get('customer').id, c.req.param('id'), Math.floor(Number(b.amount)), String(b.pin ?? ''), String(b.idempotencyKey ?? crypto.randomUUID()))
       return c.json({ reference: j.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
     } catch (e) { return fail(c, e) }
+  })
+
+  // Inbox and announcements (stories S1.27, S1.28)
+  app.get('/inbox', async c => {
+    const rows = await sql`select id, title, body, link, read_at, created_at from inbox_messages where customer_id = ${c.get('customer').id} order by id desc limit 100`
+    return c.json({ items: rows.map(r => ({ id: String(r.id), title: r.title, body: r.body, link: r.link, read: !!r.read_at, at: r.created_at })) })
+  })
+
+  app.post('/inbox/read', async c => {
+    await sql`update inbox_messages set read_at = now() where customer_id = ${c.get('customer').id} and read_at is null`
+    return c.json({ ok: true })
+  })
+
+  app.get('/announcement', async c => {
+    const [a] = await sql`
+      select id, title, body from announcements a where ends_at > now()
+        and not exists (select 1 from announcement_seen s where s.announcement_id = a.id and s.customer_id = ${c.get('customer').id})
+      order by id desc limit 1`
+    return c.json({ announcement: a ? { id: String(a.id), title: a.title, body: a.body } : null })
+  })
+
+  app.post('/announcement/:id/seen', async c => {
+    await sql`insert into announcement_seen (announcement_id, customer_id) values (${c.req.param('id')}, ${c.get('customer').id}) on conflict do nothing`
+    return c.json({ ok: true })
   })
 
   return app

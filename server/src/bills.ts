@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { Sql } from './db.ts'
 import { postJournal, houseAccount, LedgerError } from './ledger.ts'
-import { authorizePayout, TransferError, generatedName } from './transfers.ts'
+import { authorizePayout, TransferError, generatedName, withNotice } from './transfers.ts'
 
 // Bill Payments (stories S1.18–S1.21). All customer numbers, names and bills are made up.
 
@@ -99,10 +99,10 @@ export async function payBill(sql: Sql, customer: { id: string; tier: string },
   const category = q.kind === 'ewallet' ? 'transport' : q.kind === 'bpjs' ? 'health' : 'bills'
   let j
   try {
-    j = await postJournal(sql, {
+    j = await withNotice(sql, postJournal(sql, {
       kind: 'bill_payment', idempotencyKey: `${customer.id}:${input.idempotencyKey}`, postings,
       memo: { to: { name: q.billerName }, channel: label, category, fee: q.fee, customerNumber: q.number, customerName: q.name, token },
-    })
+    }))
   } catch (e) {
     if (e instanceof LedgerError && e.code === 'INSUFFICIENT_FUNDS') throw new TransferError('INSUFFICIENT_FUNDS', "You don't have enough money for this payment and its fee.")
     throw e

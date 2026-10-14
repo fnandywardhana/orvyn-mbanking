@@ -34,6 +34,7 @@ data class Transaction(
 )
 
 data class Home(
+    val unread: Int,
     val firstName: String,
     val fullName: String,
     val tier: String,
@@ -80,6 +81,9 @@ data class Card(
     val frozen: Boolean, val online: Boolean, val overseas: Boolean, val contactless: Boolean, val dailyLimit: Long, val credit: Credit?,
 )
 data class CardSecret(val number: String, val cvv: String, val expiry: String)
+
+data class InboxItem(val id: String, val title: String, val body: String, val link: String?, val read: Boolean, val at: Instant)
+data class Announcement(val id: String, val title: String, val body: String)
 
 data class BillPaid(val reference: String, val token: String?, val amount: Long, val fee: Long, val label: String)
 
@@ -244,12 +248,25 @@ object Api {
     suspend fun payCard(id: String, amount: Long, pin: String, idempotencyKey: String): String =
         call("POST", "/cards/$id/pay", JSONObject().put("amount", amount).put("pin", pin).put("idempotencyKey", idempotencyKey)).getString("reference")
 
+    suspend fun inbox(): List<InboxItem> = call("GET", "/inbox").getJSONArray("items").map {
+        InboxItem(it.getString("id"), it.getString("title"), it.getString("body"), if (it.isNull("link")) null else it.getString("link"),
+            it.getBoolean("read"), Instant.parse(it.getString("at")))
+    }
+
+    suspend fun markInboxRead() { call("POST", "/inbox/read") }
+
+    suspend fun announcement(): Announcement? = call("GET", "/announcement").optJSONObject("announcement")
+        ?.let { Announcement(it.getString("id"), it.getString("title"), it.getString("body")) }
+
+    suspend fun announcementSeen(id: String) { call("POST", "/announcement/$id/seen") }
+
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 }
 
 fun parseHome(j: JSONObject): Home {
     val c = j.getJSONObject("customer")
     return Home(
+        unread = j.optInt("unread"),
         firstName = c.getString("firstName"),
         fullName = c.getString("name"),
         tier = c.getString("tier"),

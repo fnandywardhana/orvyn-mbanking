@@ -3,6 +3,7 @@ import type { TransactionSql } from 'postgres'
 import type { Sql } from './db.ts'
 import { hashPassword, verifyPassword } from './auth.ts'
 import { issueCard } from './cards.ts'
+import { notify } from './inbox.ts'
 
 const MAX_ATTEMPTS = 5
 export const CUSTOMER_IDLE_MINUTES = 5 // story S1.6: signed out after 5 idle minutes
@@ -91,6 +92,8 @@ export async function signInWithPassword(sql: Sql, phoneInput: string, password:
   if (!(await verifyPassword(password, c.password_hash))) return failAttempt(sql, c.id)
 
   const deviceToken = randomBytes(32).toString('base64url')
+  const [previous] = await sql`select 1 from registered_devices where customer_id = ${c.id}`
+  if (previous) await notify(sql, c.id, 'Signed in on a new phone', 'ORVYN is now set up on another phone, so your previous phone was signed out. If this wasn\'t you, contact the ORVYN team.')
   await sql`delete from customer_sessions where customer_id = ${c.id}`
   await sql`
     insert into registered_devices (customer_id, device_token) values (${c.id}, ${deviceToken})
