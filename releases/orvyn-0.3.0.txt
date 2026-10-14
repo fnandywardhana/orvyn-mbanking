@@ -1,0 +1,16 @@
+ORVYN 0.3.0
+
+What's new
+- Transfer: send to other ORVYN customers instantly and free, or to other banks by BI-FAST (Rp2,500) or RTGS for amounts above Rp100,000,000 (Rp25,000). You see the account holder's name before sending. Save people you pay often.
+- QRIS: scan a merchant's QRIS with your camera or pick a QR picture from your gallery, then pay with your PIN. "My QR" lets other ORVYN customers scan you to send money.
+- Pay and buy: PLN tokens and bills, BPJS Kesehatan, mobile credit and data, and GoPay, OVO, DANA and ShopeePay top-ups. Numbers you paid before are one tap away.
+- Cards: your debit card and, for some testers, an ORVYN credit card. Freeze a card, turn online, overseas and contactless payments on or off, set a daily limit, see the full card number after your PIN, and pay your credit card bill.
+
+Permissions this app asks for
+- INTERNET: to talk to the ORVYN server.
+- CAMERA: only while the QRIS scanner is open. The QR code is read on your phone; no pictures are taken or sent.
+- USE_BIOMETRIC / USE_FINGERPRINT: only if you turn on fingerprint sign-in.
+No contacts, location, SMS, storage, device IDs, analytics or ads. Pictures you pick from the gallery stay on your phone.
+
+How to update
+Open the download link on your phone, download, tap the file, then Update.

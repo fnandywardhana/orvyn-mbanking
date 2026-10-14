@@ -13,3 +13,4 @@ captures/
 backups/
 signing.properties
 releases/*.apk
+secrets/
