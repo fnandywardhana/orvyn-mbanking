@@ -1,0 +1,21 @@
+ORVYN 0.2.0
+
+What's new
+- Sign in with the phone number and password from the ORVYN team.
+- Create your own 6-digit PIN. Next time, open ORVYN with your PIN or fingerprint.
+- Home: total balance (tap the eye to hide it), your account, and recent transactions.
+- History: six months of transactions, grouped by day. Search by name, note or amount, and filter money in or out.
+- Tap any transaction for its details and reference number.
+- ORVYN signs you out after 5 minutes without use.
+
+Coming next: transfers, QRIS, bill payments and cards.
+
+Permissions this app asks for
+- INTERNET: to talk to the ORVYN server.
+- USE_BIOMETRIC / USE_FINGERPRINT: only if you turn on fingerprint sign-in. Android checks your fingerprint; ORVYN only learns whether it matched.
+No contacts, location, SMS, files, device IDs, analytics or ads.
+
+How to install
+1. Open the download link on your Android phone and download the APK.
+2. Tap the downloaded file. If Android asks, allow your browser to install apps.
+3. Tap Install (or Update), then Open.
