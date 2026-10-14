@@ -11,6 +11,7 @@ import { messageRoutes } from './admin-messages.ts'
 import { contentRoutes } from './admin-content.ts'
 import { transactionRoutes } from './admin-transactions.ts'
 import { registrationRoutes } from './admin-registrations.ts'
+import { systemRoutes } from './admin-system.ts'
 
 export type Officer = { id: string; email: string; name: string; role: 'super_admin' | 'operator' | 'content'; must_change_password: boolean }
 type Env = { Variables: { officer: Officer } }
@@ -27,6 +28,10 @@ const MENU: { href: string; label: string; roles: Officer['role'][] }[] = [
   { href: '/admin/merchants', label: 'Merchants', roles: ['super_admin', 'operator'] },
   { href: '/admin/messages', label: 'Messages', roles: ['super_admin', 'content'] },
   { href: '/admin/content', label: 'Content', roles: ['super_admin', 'content'] },
+  { href: '/admin/settings', label: 'Settings', roles: ['super_admin'] },
+  { href: '/admin/officers', label: 'Officers', roles: ['super_admin'] },
+  { href: '/admin/audit', label: 'Audit log', roles: ['super_admin'] },
+  { href: '/admin/reset', label: 'Reset demo', roles: ['super_admin'] },
 ]
 
 /** Records one officer change (story S1.38). */
@@ -205,6 +210,7 @@ ${ledger.ok ? html`<span class="chip ok">✓ Balanced</span><p class="hint">Ever
   app.route('/content', contentRoutes(sql))
   app.route('/transactions', transactionRoutes(sql))
   app.route('/applications', registrationRoutes(sql))
+  app.route('/', systemRoutes(sql))
 
   return app
 }

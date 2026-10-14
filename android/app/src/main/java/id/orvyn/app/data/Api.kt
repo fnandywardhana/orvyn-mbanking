@@ -293,6 +293,14 @@ object Api {
     suspend fun registerStatus(token: String): Triple<String, String?, String> =
         call("GET", "/register/status?token=${enc(token)}").let { Triple(it.getString("status"), if (it.isNull("reason")) null else it.getString("reason"), it.getString("phone")) }
 
+    suspend fun loadConfig() {
+        val r = call("GET", "/config")
+        val f = r.getJSONObject("features")
+        AppConfig.features = f.keys().asSequence().associateWith { f.getBoolean(it) }
+        val m = r.getJSONObject("maintenance")
+        AppConfig.maintenance = if (m.getBoolean("on")) m.getString("message") else null
+    }
+
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 }
 
@@ -315,6 +323,13 @@ fun parseRecipient(r: JSONObject) = Recipient(
     bank = r.getString("bank"), bankName = r.getString("bankName"), accountNumber = r.getString("accountNumber"),
     name = r.getString("name"), nickname = r.optStringOrNull("nickname"), id = r.optStringOrNull("id"),
 )
+
+/** Switches from the admin (story S1.37). Defaults keep everything on if the server can't be reached. */
+object AppConfig {
+    var features by androidx.compose.runtime.mutableStateOf(mapOf<String, Boolean>())
+    var maintenance by androidx.compose.runtime.mutableStateOf<String?>(null)
+    fun on(feature: String) = features[feature] != false
+}
 
 /** Bumped after money moves so screens that show balances reload. */
 object DataVersion { var count by androidx.compose.runtime.mutableIntStateOf(0) }

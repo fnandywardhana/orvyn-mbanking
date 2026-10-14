@@ -22,7 +22,7 @@ export async function withNotice<T extends { id: string; replayed?: boolean }>(s
 }
 
 export class TransferError extends Error {
-  code: 'NOT_FOUND' | 'OWN_ACCOUNT' | 'BAD_NUMBER' | 'BAD_AMOUNT' | 'OVER_LIMIT' | 'INSUFFICIENT_FUNDS' | 'WRONG_PIN' | 'LOCKED' | 'BAD_METHOD' | 'ALREADY_PAID'
+  code: 'NOT_FOUND' | 'OWN_ACCOUNT' | 'BAD_NUMBER' | 'BAD_AMOUNT' | 'OVER_LIMIT' | 'INSUFFICIENT_FUNDS' | 'WRONG_PIN' | 'LOCKED' | 'BAD_METHOD' | 'ALREADY_PAID' | 'MAINTENANCE'
   extra: object
   constructor(code: TransferError['code'], message: string, extra: object = {}) {
     super(message)
@@ -108,6 +108,8 @@ async function checkPin(sql: Sql, customerId: string, pin: string) {
 
 /** Daily Limit then PIN: the two checks every payout passes before money moves. */
 export async function authorizePayout(sql: Sql, customer: { id: string; tier: string }, amount: number, pin: string, remainingToday?: number) {
+  const [m] = await sql`select value from settings where key = 'maintenance'`
+  if (m?.value?.on) throw new TransferError('MAINTENANCE', m.value.message) // story S1.37 AC4: no money moves during maintenance
   const remaining = remainingToday ?? (await transferOptions(sql, customer, true, amount)).remainingToday
   if (amount > remaining) {
     throw new TransferError('OVER_LIMIT', `That's over your daily limit. You can still pay out Rp${remaining.toLocaleString('en-US')} today.`, { remainingToday: remaining })

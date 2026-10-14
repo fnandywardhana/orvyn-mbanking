@@ -73,6 +73,13 @@ export function apiRoutes(sql: Sql) {
     return c.json({ sessionToken: r.sessionToken })
   })
 
+  // App switches, read before sign-in too (story S1.37)
+  app.get('/config', async c => {
+    const rows = await sql`select key, value from settings where key in ('features', 'maintenance')`
+    const v = Object.fromEntries(rows.map(r => [r.key, r.value]))
+    return c.json({ features: v.features, maintenance: v.maintenance })
+  })
+
   // Opening an account (stories S1.1–S1.3) happens before there is a customer.
   const regFail = (c: any, e: unknown) => {
     if (e instanceof RegistrationError) return c.json({ error: e.code, message: e.message }, 400)

@@ -50,6 +50,8 @@ import androidx.navigation.compose.rememberNavController
 import id.orvyn.app.BuildConfig
 import id.orvyn.app.R
 import id.orvyn.app.data.Api
+import id.orvyn.app.data.AppConfig
+import id.orvyn.app.data.DataVersion
 import id.orvyn.app.data.DeviceStore
 import id.orvyn.app.data.parseHome
 import id.orvyn.app.ui.auth.BiometricOfferScreen
@@ -102,6 +104,18 @@ fun OrvynApp(store: DeviceStore) {
     val cached = remember { store.lastHome?.second?.let { runCatching { parseHome(JSONObject(it)) }.getOrNull() } }
     val start = if (store.deviceToken != null) "unlock" else "welcome"
 
+    LaunchedEffect(DataVersion.count) { runCatching { Api.loadConfig() } }
+    AppConfig.maintenance?.let { message ->
+        // Story S1.37 AC4: during maintenance the app explains and waits.
+        val scope = rememberCoroutineScope()
+        id.orvyn.app.ui.auth.FlowScreen("Back soon", message, null) {
+            Spacer(Modifier.weight(1f))
+            id.orvyn.app.ui.components.MessageState(R.drawable.ph_clock_counter_clockwise, "ORVYN is being updated", "Your money is safe. Try again in a few minutes.")
+            Spacer(Modifier.weight(1f))
+            id.orvyn.app.ui.components.OrvynButton("Try again", onClick = { scope.launch { runCatching { Api.loadConfig() } } }, modifier = Modifier.padding(vertical = 16.dp))
+        }
+        return
+    }
     LaunchedEffect(SignOutSignal.count) {
         if (SignOutSignal.count > 0) nav.navigate(if (store.deviceToken != null) "unlock" else "welcome") { popUpTo(0) }
     }
@@ -110,7 +124,7 @@ fun OrvynApp(store: DeviceStore) {
     var pendingQrTransfer by remember { mutableStateOf<Pair<id.orvyn.app.data.Recipient, Long?>?>(null) }
 
     NavHost(nav, startDestination = start) {
-        composable("welcome") { WelcomeScreen(onSignIn = { nav.navigate("signin") }, onRegister = { nav.navigate("register") }) }
+        composable("welcome") { WelcomeScreen(onSignIn = { nav.navigate("signin") }, onRegister = if (AppConfig.on("register")) ({ nav.navigate("register") }) else null) }
         composable("register") { RegisterFlow(store, onExit = { nav.popBackStack() }, onSignIn = { nav.navigate("signin") { popUpTo("welcome") } }) }
         composable("signin") {
             SignInScreen(store, onBack = { nav.popBackStack() }) { needsPin -> if (needsPin) nav.navigate("pin/create") { popUpTo(0) } else toMain() }
@@ -172,12 +186,23 @@ private fun MainShell(store: DeviceStore, onOpenTransaction: (String) -> Unit, o
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snack) },
-        bottomBar = { BottomBar(tab) { t -> if (t == Tab.Qris) onQris() else tab = t } },
+        bottomBar = { BottomBar(tab) { t ->
+            when {
+                t == Tab.Qris && !AppConfig.on("qris") -> say("QRIS is switched off for now. Try again later.")
+                t == Tab.Cards && !AppConfig.on("cards") -> say("Cards are switched off for now. Try again later.")
+                t == Tab.Qris -> onQris()
+                else -> tab = t
+            }
+        } },
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
     ) { pad ->
         Box(Modifier.padding(pad)) {
             when (tab) {
-                Tab.Home -> HomeScreen(store, onSeeAll = { tab = Tab.History }, onOpenTransaction = onOpenTransaction, onQuickAction = { when (it) { "Transfer" -> onTransfer(); "QRIS" -> onQris(); "Pay" -> onRoute("bills"); else -> onRoute("topup") } }, onCopied = say,
+                Tab.Home -> HomeScreen(store, onSeeAll = { tab = Tab.History }, onOpenTransaction = onOpenTransaction, onQuickAction = { action ->
+                    val feature = mapOf("Transfer" to "transfer", "QRIS" to "qris", "Pay" to "bills", "Top up" to "bills")[action]!!
+                    if (!AppConfig.on(feature)) say("$action is switched off for now. Try again later.")
+                    else when (action) { "Transfer" -> onTransfer(); "QRIS" -> onQris(); "Pay" -> onRoute("bills"); else -> onRoute("topup") }
+                }, onCopied = say,
                     onInbox = { onRoute("inbox") })
                 Tab.History -> HistoryScreen(store.lastHome?.second?.let { runCatching { parseHome(JSONObject(it)).accounts.firstOrNull()?.id }.getOrNull() }, onOpenTransaction)
                 Tab.Profile -> ProfileScreen(store, onSignedOut, onRoute)

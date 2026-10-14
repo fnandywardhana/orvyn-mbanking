@@ -41,7 +41,7 @@ import id.orvyn.app.ui.theme.Brand
 
 /** First screen after the splash. Same look in light and dark: it is a brand moment on the hero gradient. */
 @Composable
-fun WelcomeScreen(onSignIn: () -> Unit, onRegister: () -> Unit) {
+fun WelcomeScreen(onSignIn: () -> Unit, onRegister: (() -> Unit)?) {
     id.orvyn.app.ui.DarkTopBar()
     Box(
         Modifier
@@ -111,7 +111,7 @@ fun WelcomeScreen(onSignIn: () -> Unit, onRegister: () -> Unit) {
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Brand.Nerazzurro),
                 ) { Text(stringResource(R.string.welcome_sign_in), style = MaterialTheme.typography.labelLarge) }
-                TextButton(
+                if (onRegister != null) TextButton(
                     onClick = onRegister,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                     colors = ButtonDefaults.textButtonColors(contentColor = Color.White),
