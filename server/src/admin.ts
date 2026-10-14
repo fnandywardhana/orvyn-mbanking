@@ -8,6 +8,7 @@ import { checkLedger } from './ledger.ts'
 import { customerRoutes } from './admin-customers.ts'
 import { merchantRoutes } from './admin-merchants.ts'
 import { messageRoutes } from './admin-messages.ts'
+import { contentRoutes } from './admin-content.ts'
 
 export type Officer = { id: string; email: string; name: string; role: 'super_admin' | 'operator' | 'content'; must_change_password: boolean }
 type Env = { Variables: { officer: Officer } }
@@ -21,6 +22,7 @@ const MENU: { href: string; label: string; roles: Officer['role'][] }[] = [
   { href: '/admin/customers', label: 'Customers', roles: ['super_admin', 'operator'] },
   { href: '/admin/merchants', label: 'Merchants', roles: ['super_admin', 'operator'] },
   { href: '/admin/messages', label: 'Messages', roles: ['super_admin', 'content'] },
+  { href: '/admin/content', label: 'Content', roles: ['super_admin', 'content'] },
 ]
 
 /** Records one officer change (story S1.38). */
@@ -191,6 +193,7 @@ ${ledger.ok ? html`<span class="chip ok">✓ Balanced</span><p class="hint">Ever
   app.route('/customers', customerRoutes(sql))
   app.route('/merchants', merchantRoutes(sql))
   app.route('/messages', messageRoutes(sql))
+  app.route('/content', contentRoutes(sql))
 
   return app
 }

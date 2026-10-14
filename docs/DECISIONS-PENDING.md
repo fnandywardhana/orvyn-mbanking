@@ -6,6 +6,7 @@ Claude's working notes for things that need your answer. None of them blocks the
 |---|---|---|---|
 | 1 | Vyna is shown in English. If a customer writes in Indonesian, should Vyna reply in Indonesian, or always in English? | Replies in the customer's language | 14 Oct |
 | 2 | Fingerprint sign-in hasn't been tested because the Note10+ on the server has no fingerprint enrolled. Can you enrol one finger on it? | Fingerprint code is built but untested | 14 Oct |
+| 4 | Home banners use ORVYN's own card art (blue, black or gold, with the jersey stripes) instead of uploaded pictures. Uploading pictures needs an image library on the server and more work for little gain in a demo. Want real picture uploads? | Brand-styled banners, three looks | 14 Oct |
 | 3 | Push notifications need a Firebase project on your Google account (free). Steps: console.firebase.google.com → Add project "ORVYN" → Add Android app with package `id.orvyn.app` → download `google-services.json`; then Project settings → Service accounts → Generate new private key. Put both files in `/home/fnandywardhana/mbanking_apps/secrets/`. | In-app Inbox works without it; push is switched off until the files exist | 14 Oct |
 
 # For your information

@@ -25,6 +25,11 @@ class DeviceStore(context: Context) {
         get() = prefs.getBoolean("biometric", false)
         set(v) = prefs.edit().putBoolean("biometric", v).apply()
 
+    /** "system", "light" or "dark" (story S1.29). */
+    var themeMode: String
+        get() = prefs.getString("theme", "system")!!
+        set(v) = prefs.edit().putString("theme", v).apply()
+
     var balanceHidden: Boolean
         get() = prefs.getBoolean("balance_hidden", false)
         set(v) = prefs.edit().putBoolean("balance_hidden", v).apply()
@@ -37,7 +42,8 @@ class DeviceStore(context: Context) {
         }.apply()
 
     fun forgetDevice() {
-        prefs.edit().clear().apply()
+        val theme = themeMode
+        prefs.edit().clear().putString("theme", theme).apply()
     }
 
     private fun key(): SecretKey {

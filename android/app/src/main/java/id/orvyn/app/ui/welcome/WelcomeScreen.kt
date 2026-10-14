@@ -42,6 +42,7 @@ import id.orvyn.app.ui.theme.Brand
 /** First screen after the splash. Same look in light and dark: it is a brand moment on the hero gradient. */
 @Composable
 fun WelcomeScreen(onSignIn: () -> Unit, onRegister: () -> Unit) {
+    id.orvyn.app.ui.DarkTopBar()
     Box(
         Modifier
             .fillMaxSize()

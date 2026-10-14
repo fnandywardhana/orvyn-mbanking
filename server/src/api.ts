@@ -7,6 +7,8 @@ import { BANKS, lookupRecipient, transferOptions, sendTransfer, payMerchant, Tra
 import { parseQris, buildQris } from './qris.ts'
 import { inquire, payBill } from './bills.ts'
 import { listCards, updateCard, cardDetails, payCardBill } from './cards.ts'
+import { hashPassword, verifyPassword, isStrongPassword } from './auth.ts'
+import { isAcceptablePin } from './customers.ts'
 
 type Customer = { id: string; full_name: string; tier: string; pin_hash: string | null }
 type Env = { Variables: { customer: Customer; token: string } }
@@ -338,6 +340,31 @@ export function apiRoutes(sql: Sql) {
 
   app.post('/announcement/:id/seen', async c => {
     await sql`insert into announcement_seen (announcement_id, customer_id) values (${c.req.param('id')}, ${c.get('customer').id}) on conflict do nothing`
+    return c.json({ ok: true })
+  })
+
+  // Content and profile (stories S1.8, S1.30, S1.31)
+  app.get('/content', async c => {
+    const banners = await sql`select id, title, body, detail, style from banners where starts_at <= now() and ends_at > now() order by sort, id`
+    const faqs = await sql`select id, category, question, answer from faqs order by sort, id`
+    return c.json({ banners: banners.map(b => ({ ...b, id: String(b.id) })), faqs: faqs.map(f => ({ ...f, id: String(f.id) })) })
+  })
+
+  app.post('/me/pin', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    const [me] = await sql`select pin_hash from customers where id = ${c.get('customer').id}`
+    if (!me.pin_hash || !(await verifyPassword(String(b.oldPin ?? ''), me.pin_hash))) return c.json({ error: 'WRONG_PIN', message: "That's not your current PIN." }, 400)
+    if (!isAcceptablePin(String(b.newPin ?? ''))) return c.json({ error: 'WEAK_PIN', message: "Choose 6 digits that aren't all the same or in a row." }, 400)
+    await sql`update customers set pin_hash = ${await hashPassword(String(b.newPin))} where id = ${c.get('customer').id}`
+    return c.json({ ok: true })
+  })
+
+  app.post('/me/password', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    const [me] = await sql`select password_hash from customers where id = ${c.get('customer').id}`
+    if (!(await verifyPassword(String(b.oldPassword ?? ''), me.password_hash))) return c.json({ error: 'WRONG_PASSWORD', message: "That's not your current password." }, 400)
+    if (!isStrongPassword(String(b.newPassword ?? ''))) return c.json({ error: 'WEAK_PASSWORD', message: 'Use at least 8 characters, with both letters and numbers.' }, 400)
+    await sql`update customers set password_hash = ${await hashPassword(String(b.newPassword))} where id = ${c.get('customer').id}`
     return c.json({ ok: true })
   })
 

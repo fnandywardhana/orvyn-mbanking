@@ -71,6 +71,7 @@ fun SuccessScreen(
     onPrimary: () -> Unit,
     secondary: (@Composable () -> Unit)? = null,
 ) {
+    id.orvyn.app.ui.DarkTopBar()
     val reduced = rememberReducedMotion()
     val progress = remember { Animatable(if (reduced) 1f else 0f) }
     val haptics = LocalHapticFeedback.current

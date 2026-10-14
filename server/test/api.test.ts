@@ -118,3 +118,14 @@ test('scanning a merchant QR and paying it; scanning a friend\'s My QR starts a 
   assert.equal((await call('POST', '/qris/scan', { payload: mine.body.payload })).body.error, 'OWN_ACCOUNT')
   assert.equal((await call('POST', '/qris/scan', { payload: 'hello' })).body.error, 'NOT_QRIS')
 })
+
+test('content lists live banners and FAQs; PIN and password changes need the current ones', async () => {
+  const content = await call('GET', '/content')
+  assert.equal(content.body.banners.length, 2)
+  assert.ok(content.body.faqs.length >= 8)
+  assert.equal((await call('POST', '/me/pin', { oldPin: '000000', newPin: '135791' })).body.error, 'WRONG_PIN')
+  assert.equal((await call('POST', '/me/pin', { oldPin: '482915', newPin: '111111' })).body.error, 'WEAK_PIN')
+  assert.equal((await call('POST', '/me/pin', { oldPin: '482915', newPin: '135791' })).status, 200)
+  assert.equal((await call('POST', '/me/password', { oldPassword: 'rahasia123', newPassword: 'short' })).body.error, 'WEAK_PASSWORD')
+  assert.equal((await call('POST', '/me/password', { oldPassword: 'rahasia123', newPassword: 'baru12345' })).status, 200)
+})

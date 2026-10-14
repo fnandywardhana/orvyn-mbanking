@@ -144,6 +144,7 @@ fun HomeScreen(
             item {
                 Hero(h, hidden, onToggle = { hidden = !hidden; store.balanceHidden = hidden }, onInbox = onInbox)
                 QuickActions(enabled = !offline, onAction = onQuickAction)
+                Banners()
             }
             if (offline) item {
                 Text(
@@ -200,6 +201,7 @@ private fun Eyebrow(text: String) = Text(
 
 @Composable
 private fun Hero(h: Home?, hidden: Boolean, onToggle: () -> Unit, onInbox: () -> Unit) {
+    id.orvyn.app.ui.DarkTopBar()
     // Count the balance up only when it actually changes (design system: balance motion).
     val reduced = rememberReducedMotion()
     val shown = remember { Animatable(h?.totalBalance?.toFloat() ?: 0f) }
@@ -234,6 +236,40 @@ private fun Hero(h: Home?, hidden: Boolean, onToggle: () -> Unit, onInbox: () ->
             IconButton(onClick = onToggle) {
                 Icon(painterResource(if (hidden) R.drawable.ph_eye else R.drawable.ph_eye_slash),
                     contentDescription = if (hidden) "Show balances" else "Hide balances", tint = Brand.HeroTextMuted)
+            }
+        }
+    }
+}
+
+/** Story S1.8: banners from the admin, swipeable, tap for details. Nothing at all when there are none. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun Banners() {
+    var banners by remember { mutableStateOf<List<id.orvyn.app.data.Banner>>(emptyList()) }
+    var open by remember { mutableStateOf<id.orvyn.app.data.Banner?>(null) }
+    LaunchedEffect(Unit) { runCatching { banners = Api.content().banners } }
+    if (banners.isEmpty()) return
+    val pager = androidx.compose.foundation.pager.rememberPagerState { banners.size }
+    androidx.compose.foundation.pager.HorizontalPager(pager, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp), pageSpacing = 12.dp,
+        modifier = Modifier.padding(top = 8.dp)) { i ->
+        val b = banners[i]
+        val bg = when (b.style) { "gold" -> androidx.compose.ui.graphics.Brush.linearGradient(listOf(Brand.Giallo, Color(0xFFE0A800))); "black" -> androidx.compose.ui.graphics.Brush.linearGradient(listOf(Brand.Nero, Color(0xFF1A1B22))); else -> Brand.Hero }
+        val fg = if (b.style == "gold") Brand.Nero else Color.White
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(bg).clickable { open = b }
+                .drawBehind { val w = 16.dp.toPx(); var x = size.width * 0.7f; while (x < size.width) { drawRect(fg.copy(alpha = 0.08f), Offset(x, 0f), Size(w, size.height)); x += w * 2 } }
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(b.title, style = MaterialTheme.typography.titleMedium, color = fg)
+            Text(b.body, style = MaterialTheme.typography.bodyMedium, color = fg.copy(alpha = 0.85f), minLines = 2)
+        }
+    }
+    open?.let { b ->
+        id.orvyn.app.ui.components.OrvynBottomSheet(onDismiss = { open = null }) {
+            Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(b.title, style = MaterialTheme.typography.titleLarge)
+                Text(b.detail, style = MaterialTheme.typography.bodyLarge, color = OrvynTheme.colors.textSecondary)
             }
         }
     }

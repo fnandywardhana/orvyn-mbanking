@@ -69,9 +69,28 @@ import id.orvyn.app.ui.bills.BillsFlow
 import id.orvyn.app.ui.cards.CardPayFlow
 import id.orvyn.app.ui.cards.CardsScreen
 import id.orvyn.app.ui.inbox.InboxScreen
+import id.orvyn.app.ui.profile.ChangePasswordScreen
+import id.orvyn.app.ui.profile.ChangePinFlow
+import id.orvyn.app.ui.profile.HelpScreen
+import id.orvyn.app.ui.profile.PrivacyScreen
+import id.orvyn.app.ui.profile.ProfileScreen
 import id.orvyn.app.ui.welcome.WelcomeScreen
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+
+/** The theme the customer chose; changes apply immediately (story S1.29). */
+object ThemeMode { var value by mutableStateOf("system") }
+object ThemeIsDark { var value by mutableStateOf(false) }
+
+/** Call from screens whose top sits on the dark brand gradient: status bar icons turn white while it's shown. */
+@Composable
+fun DarkTopBar() {
+    val activity = androidx.compose.ui.platform.LocalContext.current as? id.orvyn.app.MainActivity ?: return
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        activity.setStatusBarIcons(light = true)
+        onDispose { activity.setStatusBarIcons(light = ThemeIsDark.value) }
+    }
+}
 
 /** Bumped by the activity when the session ends (5 idle minutes, or the server said so). */
 object SignOutSignal { var count by mutableIntStateOf(0) }
@@ -106,6 +125,10 @@ fun OrvynApp(store: DeviceStore) {
         }
         composable("transfer") { TransferFlow(onExit = { nav.popBackStack() }) }
         composable("bills") { BillsFlow(onExit = { nav.popBackStack() }) }
+        composable("profile/pin") { ChangePinFlow(onDone = { nav.popBackStack() }) }
+        composable("profile/password") { ChangePasswordScreen(onDone = { nav.popBackStack() }) }
+        composable("help") { HelpScreen(onBack = { nav.popBackStack() }) }
+        composable("privacy") { PrivacyScreen(onBack = { nav.popBackStack() }) }
         composable("inbox") { InboxScreen(onBack = { nav.popBackStack() }, onOpenTransaction = { nav.navigate("tx/$it") }) }
         composable("cardpay") { pendingCard?.let { CardPayFlow(it, onExit = { nav.popBackStack() }) } }
         composable("topup") { BillsFlow(onExit = { nav.popBackStack() }, ewalletsOnly = true) }
@@ -155,7 +178,7 @@ private fun MainShell(store: DeviceStore, onOpenTransaction: (String) -> Unit, o
                 Tab.Home -> HomeScreen(store, onSeeAll = { tab = Tab.History }, onOpenTransaction = onOpenTransaction, onQuickAction = { when (it) { "Transfer" -> onTransfer(); "QRIS" -> onQris(); "Pay" -> onRoute("bills"); else -> onRoute("topup") } }, onCopied = say,
                     onInbox = { onRoute("inbox") })
                 Tab.History -> HistoryScreen(store.lastHome?.second?.let { runCatching { parseHome(JSONObject(it)).accounts.firstOrNull()?.id }.getOrNull() }, onOpenTransaction)
-                Tab.Profile -> ProfileScreen(store, onSignedOut)
+                Tab.Profile -> ProfileScreen(store, onSignedOut, onRoute)
                 Tab.Cards -> CardsScreen(onPayBill = onPayCard, say = say)
                 else -> {}
             }
@@ -192,31 +215,3 @@ private fun BottomBar(current: Tab, onSelect: (Tab) -> Unit) {
     }
 }
 
-@Composable
-private fun ProfileScreen(store: DeviceStore, onSignedOut: () -> Unit) {
-    val home = remember { store.lastHome?.second?.let { runCatching { parseHome(JSONObject(it)) }.getOrNull() } }
-    var confirm by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
-        Text("Profile", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 16.dp).semantics { heading() })
-        if (home != null) Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(home.fullName, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            TierBadge(Tier.valueOf(home.tier.replaceFirstChar(Char::uppercase)))
-        }
-        Spacer(Modifier.height(24.dp))
-        Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
-            ListRow("Sign out", "You'll need your password to sign in again", R.drawable.ph_x, onClick = { confirm = true })
-        }
-        Spacer(Modifier.weight(1f))
-        Text("ORVYN ${BuildConfig.VERSION_NAME} · Demo. ORVYN Bank is a fictional bank.", style = MaterialTheme.typography.bodyMedium,
-            color = id.orvyn.app.ui.theme.OrvynTheme.colors.textTertiary, modifier = Modifier.padding(20.dp))
-    }
-    if (confirm) ConfirmDialog(
-        title = "Sign out of ORVYN?",
-        body = "This phone forgets your PIN and fingerprint sign-in. Next time you sign in with your phone number and password.",
-        confirmLabel = "Sign out",
-        destructive = true,
-        onDismiss = { confirm = false },
-        onConfirm = { scope.launch { Api.signOut(); store.forgetDevice(); onSignedOut() } },
-    )
-}

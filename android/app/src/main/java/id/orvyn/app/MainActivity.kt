@@ -11,6 +11,8 @@ import id.orvyn.app.data.Api
 import id.orvyn.app.data.DeviceStore
 import id.orvyn.app.ui.OrvynApp
 import id.orvyn.app.ui.SignOutSignal
+import id.orvyn.app.ui.ThemeMode
+import id.orvyn.app.ui.ThemeIsDark
 import id.orvyn.app.ui.theme.OrvynTheme
 
 // FragmentActivity because androidx.biometric's prompt needs one.
@@ -23,7 +25,18 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         Api.onSignedOut = { runOnUiThread { SignOutSignal.count++ } }
         val store = DeviceStore(this)
-        setContent { OrvynTheme { OrvynApp(store) } }
+        ThemeMode.value = store.themeMode
+        setContent {
+            val dark = when (ThemeMode.value) { "light" -> false; "dark" -> true; else -> androidx.compose.foundation.isSystemInDarkTheme() }
+            ThemeIsDark.value = dark
+            androidx.compose.runtime.SideEffect { setStatusBarIcons(light = dark) }
+            OrvynTheme(dark = dark) { OrvynApp(store) }
+        }
+    }
+
+    /** Light icons for dark backgrounds. Screens with a dark hero ask for them via [id.orvyn.app.ui.DarkTopBar]. */
+    fun setStatusBarIcons(light: Boolean) {
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = !light
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {

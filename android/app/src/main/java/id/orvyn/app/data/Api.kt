@@ -85,6 +85,10 @@ data class CardSecret(val number: String, val cvv: String, val expiry: String)
 data class InboxItem(val id: String, val title: String, val body: String, val link: String?, val read: Boolean, val at: Instant)
 data class Announcement(val id: String, val title: String, val body: String)
 
+data class Banner(val id: String, val title: String, val body: String, val detail: String, val style: String)
+data class Faq(val id: String, val category: String, val question: String, val answer: String)
+data class Content(val banners: List<Banner>, val faqs: List<Faq>)
+
 data class BillPaid(val reference: String, val token: String?, val amount: Long, val fee: Long, val label: String)
 
 /**
@@ -259,6 +263,18 @@ object Api {
         ?.let { Announcement(it.getString("id"), it.getString("title"), it.getString("body")) }
 
     suspend fun announcementSeen(id: String) { call("POST", "/announcement/$id/seen") }
+
+    suspend fun content(): Content {
+        val r = call("GET", "/content")
+        return Content(
+            r.getJSONArray("banners").map { Banner(it.getString("id"), it.getString("title"), it.getString("body"), it.getString("detail"), it.getString("style")) },
+            r.getJSONArray("faqs").map { Faq(it.getString("id"), it.getString("category"), it.getString("question"), it.getString("answer")) },
+        )
+    }
+
+    suspend fun changePin(oldPin: String, newPin: String) { call("POST", "/me/pin", JSONObject().put("oldPin", oldPin).put("newPin", newPin)) }
+
+    suspend fun changePassword(old: String, new: String) { call("POST", "/me/password", JSONObject().put("oldPassword", old).put("newPassword", new)) }
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 }
