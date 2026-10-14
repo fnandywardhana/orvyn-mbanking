@@ -9,6 +9,7 @@ import { PERSONAS, generateHistory } from './personas.ts'
 import { PRODUCTS, spendOnCard } from './cards.ts'
 import { postJournal, houseAccount, LedgerError } from './ledger.ts'
 import { notifyJournal } from './inbox.ts'
+import { generatedName } from './transfers.ts'
 
 type Env = { Variables: { officer: Officer } }
 
@@ -34,7 +35,10 @@ export function customerRoutes(sql: Sql) {
     return c.html(shell(c.get('officer'), '/admin/customers', 'Customers', html`
 <div class="toolbar">
   <form method="get"><input type="search" name="q" value="${q}" placeholder="Name, phone or account number" aria-label="Search customers"><button class="btn secondary">Search</button></form>
-  <a class="btn" href="/admin/customers/new">New customer</a>
+  <div class="actions"><form method="post" action="/admin/customers/dummies" class="actions" style="align-items:center">
+    <input name="count" type="number" min="1" max="20" value="5" style="width:80px;height:40px" aria-label="How many">
+    <button class="btn secondary" title="Made-up customers testers can send money to">Add made-up customers</button></form>
+  <a class="btn" href="/admin/customers/new">New customer</a></div>
 </div>
 ${rows.length === 0 ? html`<div class="card"><b>${q ? 'No customers match that search.' : 'No customers yet.'}</b>
   <p class="hint">${q ? 'Try a name, phone number or account number.' : 'Create one for each tester from a persona. It comes with six months of history.'}</p></div>`
@@ -61,6 +65,22 @@ ${PERSONAS.map((p, i) => html`<label class="persona"><input type="radio" name="p
 <button>Create customer</button></form>`)
 
   app.get('/new', c => c.html(newForm(c.get('officer'))))
+
+  // Story S1.32 AC5: made-up customers with a little money, so testers have people to send to.
+  app.post('/dummies', async c => {
+    const count = Math.min(20, Math.max(1, Math.floor(Number((await c.req.parseBody()).count) || 5)))
+    const equity = await houseAccount(sql, 'DEMO_EQUITY')
+    for (let i = 0; i < count; i++) {
+      const phone = '0899' + String(randomInt(0, 1e8)).padStart(8, '0')
+      await sql.begin(async tx => {
+        const { savings } = await createCustomer(tx, { fullName: generatedName('ORVYN', phone), phone, password: tempPassword() + tempPassword() })
+        const amount = randomInt(5, 50) * 100_000
+        await postJournal(tx, { kind: 'opening', memo: { from: { name: 'ORVYN Bank' }, channel: 'Opening balance', category: 'income' }, postings: [{ accountId: equity, amount: -amount }, { accountId: savings.id, amount }] })
+      }).catch(() => {}) // a rare phone clash just means one fewer
+    }
+    await audit(sql, c.get('officer').id, 'customer.dummies', null, null, { count })
+    return c.redirect('/admin/customers')
+  })
 
   app.post('/new', async c => {
     const o = c.get('officer')
@@ -103,6 +123,11 @@ ORVYN Bank is a demo. All money in it is pretend.`
     if (!cu) return c.notFound()
     const accounts = await sql`select * from accounts where customer_id = ${cu.id} order by created_at`
     const cards = await sql`select id, product, number, frozen from cards where customer_id = ${cu.id} order by kind desc, created_at`
+    // Story S1.33 AC4: what the customer sees, read-only.
+    const recent = await sql`
+      select j.created_at, j.kind, j.memo, p.amount, exists (select 1 from journal_entries r where r.reverses_id = j.id) as reversed
+      from postings p join journal_entries j on j.id = p.journal_id join accounts a on a.id = p.account_id
+      where a.customer_id = ${cu.id} and a.kind = 'savings' order by j.created_at desc limit 15`
     const [device] = await sql`select created_at from registered_devices where customer_id = ${cu.id}`
     const flash = c.req.query('done')
     return c.html(shell(c.get('officer'), '/admin/customers', cu.full_name, html`<div class="formgrid" style="max-width:720px">
@@ -115,6 +140,13 @@ ${cu.locked ? html`<span class="chip bad">Locked</span>` : html`<span class="chi
 <span class="hint">${cu.pin_hash ? 'PIN set' : 'No PIN yet'}</span></div></div>
 <div class="tablewrap"><table><thead><tr><th>Account</th><th>Number</th><th class="num">Balance</th></tr></thead>
 <tbody>${accounts.map(a => html`<tr><td>${a.name}</td><td class="mono">${a.number ? group4(a.number) : '—'}</td><td class="num">${rupiah(a.balance)}</td></tr>`)}</tbody></table></div>
+<div class="tablewrap"><table><thead><tr><th colspan="3">As ${cu.full_name.split(' ')[0]} sees it: latest in History</th></tr></thead><tbody>
+${recent.length === 0 ? html`<tr><td class="hint">No transactions yet.</td></tr>` : recent.map(t => {
+  const amount = Number(t.amount), party = amount < 0 ? t.memo?.to : t.memo?.from
+  return html`<tr><td class="mono">${t.created_at.toLocaleString('en-GB', { timeZone: 'Asia/Jakarta', dateStyle: 'short', timeStyle: 'short' })}</td>
+  <td>${t.kind === 'reversal' ? 'Reversed by ORVYN Bank' : party?.name ?? t.memo?.channel}<br><span class="hint">${t.memo?.channel ?? ''}</span></td>
+  <td class="num" style="${amount > 0 ? 'color:var(--success)' : ''};${t.reversed ? 'text-decoration:line-through' : ''}">${amount > 0 ? '+' : '−'}${rupiah(Math.abs(amount))}</td></tr>` })}
+</tbody></table></div>
 <form method="post" action="/admin/customers/${cu.id}/tier" class="actions" style="align-items:end">
 <label>Tier<select name="tier" style="height:40px;border-radius:10px;padding:0 10px;font:inherit">
 ${Object.entries(TIER).map(([k, l]) => html`<option value="${k}" ${k === cu.tier ? 'selected' : ''}>${l}</option>`)}</select></label>

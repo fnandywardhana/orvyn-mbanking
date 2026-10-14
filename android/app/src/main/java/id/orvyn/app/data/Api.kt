@@ -197,6 +197,8 @@ object Api {
 
     suspend fun deleteRecipient(id: String) { call("DELETE", "/recipients/$id") }
 
+    suspend fun renameRecipient(id: String, nickname: String) { call("POST", "/recipients/$id/nickname", JSONObject().put("nickname", nickname)) }
+
     suspend fun qrisScan(payload: String): Scan {
         val r = call("POST", "/qris/scan", JSONObject().put("payload", payload))
         val amount = if (r.isNull("amount")) null else r.getLong("amount")

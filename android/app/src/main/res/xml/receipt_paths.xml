@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Receipts are drawn into the app's cache and shared only when the customer chooses to. -->
+<paths><cache-path name="receipts" path="receipts/" /></paths>

@@ -53,6 +53,9 @@ import id.orvyn.app.data.Api
 import id.orvyn.app.data.ApiException
 import id.orvyn.app.data.Transaction
 import id.orvyn.app.ui.Money
+import id.orvyn.app.ui.shareReceipt
+import id.orvyn.app.ui.components.OrvynButton
+import id.orvyn.app.ui.components.ButtonKind
 import id.orvyn.app.ui.components.IconTile
 import id.orvyn.app.ui.components.MessageState
 import id.orvyn.app.ui.components.OrvynTextButton
@@ -163,6 +166,7 @@ fun TransactionDetailScreen(id: String, onBack: () -> Unit, onCopied: (String) -
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(id) { try { t = Api.transaction(id) } catch (e: ApiException) { error = e.message } }
     val clipboard = LocalClipboardManager.current
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         IconButton(onClick = onBack, modifier = Modifier.padding(start = 8.dp, top = 4.dp)) {
@@ -199,6 +203,8 @@ fun TransactionDetailScreen(id: String, onBack: () -> Unit, onCopied: (String) -
                         }
                     }
                 }
+                OrvynButton("Share receipt", kind = ButtonKind.Secondary,
+                    onClick = { shareReceipt(context, tx) })
                 Spacer(Modifier.height(24.dp))
             }
         }

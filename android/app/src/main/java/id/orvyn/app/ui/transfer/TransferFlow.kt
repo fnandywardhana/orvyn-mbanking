@@ -113,7 +113,24 @@ private fun PickRecipient(onBack: () -> Unit, onNew: () -> Unit, onPick: (Recipi
     var list by remember { mutableStateOf<Recipients?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
-    LaunchedEffect(Unit) { try { list = Api.recipients() } catch (e: ApiException) { error = e.message } }
+    var editing by remember { mutableStateOf<Recipient?>(null) }
+    var reload by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(reload) { try { list = Api.recipients() } catch (e: ApiException) { error = e.message } }
+
+    // Story S1.14 AC3: nickname or remove a saved recipient.
+    editing?.let { r ->
+        var nick by remember(r.id) { mutableStateOf(r.nickname ?: "") }
+        OrvynBottomSheet(onDismiss = { editing = null }) {
+            Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(r.name, style = MaterialTheme.typography.titleLarge)
+                Text("${r.bankName} · ${groupAccountNumber(r.accountNumber)}", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
+                OrvynTextField("Nickname", nick, { nick = it.take(30) }, helper = "Only you see this, for example \"Mom\" or \"Rent\".")
+                OrvynButton("Save", onClick = { scope.launch { runCatching { Api.renameRecipient(r.id!!, nick) }; editing = null; reload++ } })
+                OrvynButton("Remove from saved", kind = ButtonKind.Destructive, onClick = { scope.launch { runCatching { Api.deleteRecipient(r.id!!) }; editing = null; reload++ } })
+            }
+        }
+    }
 
     FlowScreen("Send money", null, onBack) {
         OrvynButton("New recipient", onClick = onNew, kind = ButtonKind.Secondary)
@@ -139,7 +156,7 @@ private fun PickRecipient(onBack: () -> Unit, onNew: () -> Unit, onPick: (Recipi
                         if (group.isEmpty()) continue
                         item { Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, color = OrvynTheme.colors.textSecondary, modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)) }
                         items(group, key = { title + it.bank + it.accountNumber }) { r ->
-                            RecipientRowFlush(r) { onPick(r) }
+                            RecipientRowFlush(r, onEdit = if (r.id != null) ({ editing = r }) else null) { onPick(r) }
                         }
                     }
                 }
@@ -150,7 +167,7 @@ private fun PickRecipient(onBack: () -> Unit, onNew: () -> Unit, onPick: (Recipi
 
 // Rows inside FlowScreen already have the 20dp gutter, so drop the row's own horizontal padding.
 @Composable
-private fun RecipientRowFlush(r: Recipient, onClick: () -> Unit) = Row(
+private fun RecipientRowFlush(r: Recipient, onEdit: (() -> Unit)? = null, onClick: () -> Unit) = Row(
     Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).heightIn(min = 64.dp).padding(vertical = 10.dp),
     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
 ) {
@@ -159,6 +176,9 @@ private fun RecipientRowFlush(r: Recipient, onClick: () -> Unit) = Row(
         Text(r.nickname ?: r.name, style = MaterialTheme.typography.titleMedium)
         Text(listOfNotNull(r.nickname?.let { r.name }, "${r.bankName} · ${groupAccountNumber(r.accountNumber)}").joinToString(" · "),
             style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
+    }
+    if (onEdit != null) androidx.compose.material3.IconButton(onClick = onEdit) {
+        Icon(painterResource(R.drawable.ph_pencil_simple), contentDescription = "Edit ${r.nickname ?: r.name}", tint = MaterialTheme.colorScheme.primary)
     }
 }
 

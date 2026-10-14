@@ -213,6 +213,8 @@ fun UnlockScreen(store: DeviceStore, firstName: String?, onUnlocked: () -> Unit,
         }
         OrvynTextButton("Not you? Sign in with a password", onClick = { store.forgetDevice(); onUsePassword() },
             modifier = Modifier.align(Alignment.CenterHorizontally).padding(vertical = 8.dp))
+        Text("Demo · ORVYN Bank is a fictional bank", style = MaterialTheme.typography.labelMedium, color = OrvynTheme.colors.textTertiary,
+            modifier = Modifier.align(Alignment.CenterHorizontally)) // story S1.6 AC5
         Spacer(Modifier.size(8.dp))
     }
 }
