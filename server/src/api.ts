@@ -31,7 +31,7 @@ function toTransaction(r: any) {
     id: r.id,
     at: r.at,
     amount,
-    title: r.kind === 'reversal' ? `Reversal: ${party?.name ?? m.channel}` : (party?.name ?? m.channel ?? 'Transaction'),
+    title: r.kind === 'reversal' ? 'Reversed by ORVYN Bank' : (party?.name ?? m.channel ?? 'Transaction'),
     subtitle: m.channel ?? null,
     category: m.category ?? null,
     note: m.note ?? null,

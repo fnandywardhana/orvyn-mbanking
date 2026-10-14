@@ -7,6 +7,8 @@ import { createCustomer, CustomerError } from './customers.ts'
 import { hashPassword } from './auth.ts'
 import { PERSONAS, generateHistory } from './personas.ts'
 import { PRODUCTS, spendOnCard } from './cards.ts'
+import { postJournal, houseAccount, LedgerError } from './ledger.ts'
+import { notifyJournal } from './inbox.ts'
 
 type Env = { Variables: { officer: Officer } }
 
@@ -124,6 +126,20 @@ ${cu.locked ? html`<form method="post" action="/admin/customers/${cu.id}/unlock"
 <form method="post" action="/admin/customers/${cu.id}/reset-password"><button class="btn danger">Reset password</button></form>
 </div>
 <p class="hint">Resetting the PIN or password signs the customer out of their phone.</p>
+<form method="post" action="/admin/customers/${cu.id}/money" class="card" style="gap:12px">
+<span class="eyebrow">Add or remove money</span>
+<label>What happens<select name="type" style="height:44px;border-radius:10px;padding:0 10px;font:inherit">
+<option value="inflow">Money arrives from someone (looks real to the customer)</option>
+<option value="add">Balance adjustment: add</option>
+<option value="remove">Balance adjustment: remove</option></select></label>
+<label>Amount<input name="amount" type="number" min="1000" required placeholder="5000000"></label>
+<label>From (for money arriving)<input name="from" list="senders" placeholder="PT Maju Jaya"><datalist id="senders">
+<option value="PT Maju Jaya"><option value="PT Nusantara Digital"><option value="Dimas Prakoso"><option value="Ibu Sri Wahyuni"></datalist></label>
+<label>Their bank (for money arriving)<input name="bank" list="banks" placeholder="BCA"><datalist id="banks"><option value="BCA"><option value="Mandiri"><option value="BRI"><option value="BNI"></datalist></label>
+<label>Kind of money (for money arriving)<select name="channel" style="height:44px;border-radius:10px;padding:0 10px;font:inherit">
+<option value="Salary">Salary</option><option value="BI-FAST">Transfer</option></select></label>
+<label>Reason (required for adjustments; the customer sees it)<input name="reason" maxlength="80" placeholder="Bonus for testing"></label>
+<button class="btn" style="width:max-content">Move money</button></form>
 <form method="post" action="/admin/customers/${cu.id}/card-purchase" class="card" style="gap:12px">
 <span class="eyebrow">Simulate a card purchase</span>
 <label>Card<select name="cardId" style="height:44px;border-radius:10px;padding:0 10px;font:inherit">
@@ -176,6 +192,36 @@ ${cards.map(k => html`<option value="${k.id}">${PRODUCTS[k.product as keyof type
 <span class="hint">Send it to the customer. This is the only time it's shown.</span></div>
 <div class="actions"><a class="btn secondary" href="/admin/customers/${id}">Back to customer</a></div></div>`))
   })
+  // Story S1.34: officer money moves, always through the ledger and always audited.
+  app.post('/:id/money', async c => {
+    const id = c.req.param('id')
+    const f = Object.fromEntries(Object.entries(await c.req.parseBody()).map(([k, v]) => [k, String(v).trim()]))
+    const amount = Math.floor(Number(f.amount))
+    const back = (msg: string) => c.redirect(`/admin/customers/${id}?done=${encodeURIComponent(msg)}`)
+    if (!(amount >= 1000)) return back('Enter an amount of at least Rp1,000.')
+    const [savings] = await sql`select id from accounts where customer_id = ${id} and kind = 'savings'`
+    let memo: object, postings
+    if (f.type === 'inflow') {
+      const from = f.from || 'PT Maju Jaya'
+      memo = { from: { name: from, bank: f.bank || 'BCA' }, channel: f.channel === 'Salary' ? 'Salary' : `BI-FAST · ${f.bank || 'BCA'}`, category: f.channel === 'Salary' ? 'income' : 'transfer' }
+      postings = [{ accountId: await houseAccount(sql, 'EXTERNAL_CLEARING'), amount: -amount }, { accountId: savings.id, amount }]
+    } else {
+      if (!f.reason) return back('Adjustments need a reason. The customer sees it in their history.')
+      const sign = f.type === 'remove' ? -1 : 1
+      memo = { from: { name: 'ORVYN Bank' }, to: { name: 'ORVYN Bank' }, channel: 'Balance adjustment', category: 'adjustment', note: f.reason }
+      postings = [{ accountId: await houseAccount(sql, 'DEMO_EQUITY'), amount: -sign * amount }, { accountId: savings.id, amount: sign * amount }]
+    }
+    try {
+      const j = await postJournal(sql, { kind: f.type === 'inflow' ? 'inflow' : 'adjustment', memo, postings })
+      await notifyJournal(sql, j.id)
+      await audit(sql, c.get('officer').id, `money.${f.type}`, id, null, { amount, ...memo })
+      return back(`Done: ${f.type === 'remove' ? 'removed' : 'added'} Rp${amount.toLocaleString('en-US')}.`)
+    } catch (e) {
+      if (e instanceof LedgerError && e.code === 'INSUFFICIENT_FUNDS') return back("Not done: that would take the balance below zero.")
+      throw e
+    }
+  })
+
   app.post('/:id/card-purchase', async c => {
     const id = c.req.param('id')
     const f = await c.req.parseBody()

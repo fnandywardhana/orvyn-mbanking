@@ -9,6 +9,7 @@ import { customerRoutes } from './admin-customers.ts'
 import { merchantRoutes } from './admin-merchants.ts'
 import { messageRoutes } from './admin-messages.ts'
 import { contentRoutes } from './admin-content.ts'
+import { transactionRoutes } from './admin-transactions.ts'
 
 export type Officer = { id: string; email: string; name: string; role: 'super_admin' | 'operator' | 'content'; must_change_password: boolean }
 type Env = { Variables: { officer: Officer } }
@@ -20,6 +21,7 @@ const ROLE_LABEL = { super_admin: 'Super Admin', operator: 'Operator', content: 
 const MENU: { href: string; label: string; roles: Officer['role'][] }[] = [
   { href: '/admin', label: 'Dashboard', roles: ['super_admin', 'operator', 'content'] },
   { href: '/admin/customers', label: 'Customers', roles: ['super_admin', 'operator'] },
+  { href: '/admin/transactions', label: 'Transactions', roles: ['super_admin', 'operator'] },
   { href: '/admin/merchants', label: 'Merchants', roles: ['super_admin', 'operator'] },
   { href: '/admin/messages', label: 'Messages', roles: ['super_admin', 'content'] },
   { href: '/admin/content', label: 'Content', roles: ['super_admin', 'content'] },
@@ -194,6 +196,7 @@ ${ledger.ok ? html`<span class="chip ok">✓ Balanced</span><p class="hint">Ever
   app.route('/merchants', merchantRoutes(sql))
   app.route('/messages', messageRoutes(sql))
   app.route('/content', contentRoutes(sql))
+  app.route('/transactions', transactionRoutes(sql))
 
   return app
 }
