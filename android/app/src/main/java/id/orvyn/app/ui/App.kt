@@ -65,6 +65,7 @@ import id.orvyn.app.ui.history.TransactionDetailScreen
 import id.orvyn.app.ui.home.HomeScreen
 import id.orvyn.app.ui.transfer.TransferFlow
 import id.orvyn.app.ui.qris.QrisFlow
+import id.orvyn.app.ui.bills.BillsFlow
 import id.orvyn.app.ui.welcome.WelcomeScreen
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -96,9 +97,11 @@ fun OrvynApp(store: DeviceStore) {
         }
         composable("main") {
             MainShell(store, onOpenTransaction = { nav.navigate("tx/$it") }, onSignedOut = { nav.navigate("welcome") { popUpTo(0) } },
-                onTransfer = { nav.navigate("transfer") }, onQris = { nav.navigate("qris") })
+                onTransfer = { nav.navigate("transfer") }, onQris = { nav.navigate("qris") }, onRoute = { nav.navigate(it) })
         }
         composable("transfer") { TransferFlow(onExit = { nav.popBackStack() }) }
+        composable("bills") { BillsFlow(onExit = { nav.popBackStack() }) }
+        composable("topup") { BillsFlow(onExit = { nav.popBackStack() }, ewalletsOnly = true) }
         composable("qris") {
             QrisFlow(onExit = { nav.popBackStack() }, onSendTo = { r, a -> pendingQrTransfer = r to a; nav.navigate("transfer/qr") { popUpTo("main") } })
         }
@@ -127,7 +130,7 @@ private enum class Tab(val label: String, val icon: Int, val iconActive: Int) {
 }
 
 @Composable
-private fun MainShell(store: DeviceStore, onOpenTransaction: (String) -> Unit, onSignedOut: () -> Unit, onTransfer: () -> Unit, onQris: () -> Unit) {
+private fun MainShell(store: DeviceStore, onOpenTransaction: (String) -> Unit, onSignedOut: () -> Unit, onTransfer: () -> Unit, onQris: () -> Unit, onRoute: (String) -> Unit) {
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
     val snack = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -142,7 +145,7 @@ private fun MainShell(store: DeviceStore, onOpenTransaction: (String) -> Unit, o
     ) { pad ->
         Box(Modifier.padding(pad)) {
             when (tab) {
-                Tab.Home -> HomeScreen(store, onSeeAll = { tab = Tab.History }, onOpenTransaction = onOpenTransaction, onQuickAction = { when (it) { "Transfer" -> onTransfer(); "QRIS" -> onQris(); else -> soon(it) } }, onCopied = say)
+                Tab.Home -> HomeScreen(store, onSeeAll = { tab = Tab.History }, onOpenTransaction = onOpenTransaction, onQuickAction = { when (it) { "Transfer" -> onTransfer(); "QRIS" -> onQris(); "Pay" -> onRoute("bills"); else -> onRoute("topup") } }, onCopied = say)
                 Tab.History -> HistoryScreen(store.lastHome?.second?.let { runCatching { parseHome(JSONObject(it)).accounts.firstOrNull()?.id }.getOrNull() }, onOpenTransaction)
                 Tab.Profile -> ProfileScreen(store, onSignedOut)
                 else -> {}

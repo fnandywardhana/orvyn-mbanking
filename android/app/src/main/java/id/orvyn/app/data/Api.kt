@@ -67,6 +67,15 @@ sealed interface Scan {
 }
 data class MyQr(val payload: String, val name: String, val accountNumber: String)
 
+data class SavedNumber(val number: String, val name: String)
+data class Biller(val code: String, val name: String, val kind: String, val fee: Long, val saved: List<SavedNumber>)
+data class Product(val id: String, val label: String, val price: Long)
+data class Inquiry(
+    val biller: String, val billerName: String, val kind: String, val number: String, val name: String?, val details: String?,
+    val fee: Long, val billPeriod: String?, val billAmount: Long?, val products: List<Product>, val minAmount: Long?,
+)
+data class BillPaid(val reference: String, val token: String?, val amount: Long, val fee: Long, val label: String)
+
 /**
  * Tiny JSON-over-HTTPS client on the platform's HttpURLConnection and org.json (no extra libraries).
  * [session] is held in memory only; it dies with the process, which also enforces sign-out.
@@ -184,6 +193,29 @@ object Api {
     suspend fun myQr(amount: Long?): MyQr {
         val r = call("GET", "/qris/mine" + (amount?.let { "?amount=$it" } ?: ""))
         return MyQr(r.getString("payload"), r.getString("name"), r.getString("accountNumber"))
+    }
+
+    suspend fun billers(): List<Biller> = call("GET", "/billers").getJSONArray("billers").map { b ->
+        Biller(b.getString("code"), b.getString("name"), b.getString("kind"), b.getLong("fee"),
+            b.getJSONArray("saved").map { SavedNumber(it.getString("number"), it.getString("name")) })
+    }
+
+    suspend fun inquire(biller: String, number: String): Inquiry {
+        val r = call("POST", "/bills/inquiry", JSONObject().put("biller", biller).put("number", number))
+        val bill = r.optJSONObject("bill")
+        return Inquiry(
+            r.getString("biller"), r.getString("billerName"), r.getString("kind"), r.getString("number"),
+            if (r.isNull("name")) null else r.getString("name"), if (r.isNull("details")) null else r.getString("details"),
+            r.getLong("fee"), bill?.getString("period"), bill?.getLong("amount"),
+            r.getJSONArray("products").map { Product(it.getString("id"), it.getString("label"), it.getLong("price")) },
+            if (r.isNull("minAmount")) null else r.getLong("minAmount"),
+        )
+    }
+
+    suspend fun payBill(biller: String, number: String, productId: String?, amount: Long?, pin: String, idempotencyKey: String): BillPaid {
+        val r = call("POST", "/bills/pay", JSONObject().put("biller", biller).put("number", number).put("productId", productId ?: JSONObject.NULL)
+            .put("amount", amount ?: JSONObject.NULL).put("pin", pin).put("idempotencyKey", idempotencyKey))
+        return BillPaid(r.getString("reference"), if (r.isNull("token")) null else r.getString("token"), r.getLong("amount"), r.getLong("fee"), r.getString("label"))
     }
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")

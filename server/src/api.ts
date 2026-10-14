@@ -5,6 +5,7 @@ import {
 } from './customers.ts'
 import { BANKS, lookupRecipient, transferOptions, sendTransfer, payMerchant, TransferError } from './transfers.ts'
 import { parseQris, buildQris } from './qris.ts'
+import { inquire, payBill } from './bills.ts'
 
 type Customer = { id: string; full_name: string; tier: string; pin_hash: string | null }
 type Env = { Variables: { customer: Customer; token: string } }
@@ -249,6 +250,29 @@ export function apiRoutes(sql: Sql) {
     const [a] = await sql`select number from accounts where customer_id = ${me.id} and kind = 'savings'`
     const amount = Math.floor(Number(c.req.query('amount') ?? 0)) || undefined
     return c.json({ payload: buildQris({ kind: 'p2p', account: a.number, name: me.full_name, amount }), name: me.full_name, accountNumber: a.number })
+  })
+
+  // Bill Payments (stories S1.18–S1.21)
+  app.get('/billers', async c => {
+    const billers = await sql`select code, name, kind, fee from billers order by sort`
+    const saved = await sql`select biller, number, name from saved_bill_numbers where customer_id = ${c.get('customer').id} order by last_used desc`
+    return c.json({ billers: billers.map(b => ({ ...b, fee: Number(b.fee), saved: saved.filter(s => s.biller === b.code).slice(0, 5) })) })
+  })
+
+  app.post('/bills/inquiry', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try { return c.json(await inquire(sql, String(b.biller ?? ''), String(b.number ?? ''))) } catch (e) { return fail(c, e) }
+  })
+
+  app.post('/bills/pay', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try {
+      const r = await payBill(sql, c.get('customer') as any, {
+        biller: String(b.biller ?? ''), number: String(b.number ?? ''), productId: b.productId, amount: b.amount,
+        pin: String(b.pin ?? ''), idempotencyKey: String(b.idempotencyKey ?? crypto.randomUUID()),
+      })
+      return c.json({ reference: r.journal.id.replace(/-/g, '').slice(0, 12).toUpperCase(), token: r.token, amount: r.amount, fee: r.fee, label: r.label })
+    } catch (e) { return fail(c, e) }
   })
 
   return app
