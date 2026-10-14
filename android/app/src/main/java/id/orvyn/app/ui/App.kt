@@ -64,6 +64,7 @@ import id.orvyn.app.ui.history.HistoryScreen
 import id.orvyn.app.ui.history.TransactionDetailScreen
 import id.orvyn.app.ui.home.HomeScreen
 import id.orvyn.app.ui.transfer.TransferFlow
+import id.orvyn.app.ui.qris.QrisFlow
 import id.orvyn.app.ui.welcome.WelcomeScreen
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -81,6 +82,7 @@ fun OrvynApp(store: DeviceStore) {
         if (SignOutSignal.count > 0) nav.navigate(if (store.deviceToken != null) "unlock" else "welcome") { popUpTo(0) }
     }
     val toMain = { nav.navigate("main") { popUpTo(0) } }
+    var pendingQrTransfer by remember { mutableStateOf<Pair<id.orvyn.app.data.Recipient, Long?>?>(null) }
 
     NavHost(nav, startDestination = start) {
         composable("welcome") { WelcomeScreen(onSignIn = { nav.navigate("signin") }, onRegister = { nav.navigate("signin") }) }
@@ -94,9 +96,16 @@ fun OrvynApp(store: DeviceStore) {
         }
         composable("main") {
             MainShell(store, onOpenTransaction = { nav.navigate("tx/$it") }, onSignedOut = { nav.navigate("welcome") { popUpTo(0) } },
-                onTransfer = { nav.navigate("transfer") })
+                onTransfer = { nav.navigate("transfer") }, onQris = { nav.navigate("qris") })
         }
         composable("transfer") { TransferFlow(onExit = { nav.popBackStack() }) }
+        composable("qris") {
+            QrisFlow(onExit = { nav.popBackStack() }, onSendTo = { r, a -> pendingQrTransfer = r to a; nav.navigate("transfer/qr") { popUpTo("main") } })
+        }
+        composable("transfer/qr") {
+            val (r, a) = pendingQrTransfer ?: return@composable
+            TransferFlow(onExit = { nav.popBackStack() }, startWith = r, startAmount = a)
+        }
         composable("tx/{id}") { entry ->
             val snack = remember { SnackbarHostState() }
             val scope = rememberCoroutineScope()
@@ -118,7 +127,7 @@ private enum class Tab(val label: String, val icon: Int, val iconActive: Int) {
 }
 
 @Composable
-private fun MainShell(store: DeviceStore, onOpenTransaction: (String) -> Unit, onSignedOut: () -> Unit, onTransfer: () -> Unit) {
+private fun MainShell(store: DeviceStore, onOpenTransaction: (String) -> Unit, onSignedOut: () -> Unit, onTransfer: () -> Unit, onQris: () -> Unit) {
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
     val snack = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -128,12 +137,12 @@ private fun MainShell(store: DeviceStore, onOpenTransaction: (String) -> Unit, o
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snack) },
-        bottomBar = { BottomBar(tab) { t -> if (t == Tab.Qris || t == Tab.Cards) soon(t.label) else tab = t } },
+        bottomBar = { BottomBar(tab) { t -> when (t) { Tab.Qris -> onQris(); Tab.Cards -> soon(t.label); else -> tab = t } } },
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
     ) { pad ->
         Box(Modifier.padding(pad)) {
             when (tab) {
-                Tab.Home -> HomeScreen(store, onSeeAll = { tab = Tab.History }, onOpenTransaction = onOpenTransaction, onQuickAction = { if (it == "Transfer") onTransfer() else soon(it) }, onCopied = say)
+                Tab.Home -> HomeScreen(store, onSeeAll = { tab = Tab.History }, onOpenTransaction = onOpenTransaction, onQuickAction = { when (it) { "Transfer" -> onTransfer(); "QRIS" -> onQris(); else -> soon(it) } }, onCopied = say)
                 Tab.History -> HistoryScreen(store.lastHome?.second?.let { runCatching { parseHome(JSONObject(it)).accounts.firstOrNull()?.id }.getOrNull() }, onOpenTransaction)
                 Tab.Profile -> ProfileScreen(store, onSignedOut)
                 else -> {}

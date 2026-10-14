@@ -3,7 +3,8 @@ import type { Sql } from './db.ts'
 import {
   signInWithPassword, signInWithPin, signInWithDevice, setPin, customerForSession, signOut, CustomerError,
 } from './customers.ts'
-import { BANKS, lookupRecipient, transferOptions, sendTransfer, TransferError } from './transfers.ts'
+import { BANKS, lookupRecipient, transferOptions, sendTransfer, payMerchant, TransferError } from './transfers.ts'
+import { parseQris, buildQris } from './qris.ts'
 
 type Customer = { id: string; full_name: string; tier: string; pin_hash: string | null }
 type Env = { Variables: { customer: Customer; token: string } }
@@ -218,6 +219,36 @@ export function apiRoutes(sql: Sql) {
   app.delete('/recipients/:id', async c => {
     await sql`delete from saved_recipients where id = ${c.req.param('id')} and customer_id = ${c.get('customer').id}`
     return c.json({ ok: true })
+  })
+
+  // QRIS (stories S1.15, S1.16)
+  app.post('/qris/scan', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    let q
+    try { q = parseQris(String(b.payload ?? '')) } catch (e) { return c.json({ error: 'NOT_QRIS', message: (e as Error).message }, 400) }
+    if (q.kind === 'p2p') {
+      try {
+        return c.json({ type: 'p2p', amount: q.amount, recipient: await lookupRecipient(sql, c.get('customer').id, 'ORVYN', q.account) })
+      } catch (e) { return fail(c, e) }
+    }
+    const [m] = await sql`select id, name, city, category from merchants where code = ${q.code} and active`
+    if (!m) return c.json({ error: 'NOT_FOUND', message: "This merchant isn't taking ORVYN payments right now." }, 404)
+    return c.json({ type: 'merchant', amount: q.amount, merchant: m })
+  })
+
+  app.post('/qris/pay', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try {
+      const j = await payMerchant(sql, c.get('customer') as any, { merchantId: String(b.merchantId ?? ''), amount: Number(b.amount), pin: String(b.pin ?? ''), idempotencyKey: String(b.idempotencyKey ?? crypto.randomUUID()) })
+      return c.json({ transactionId: j.id, reference: j.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
+    } catch (e) { return fail(c, e) }
+  })
+
+  app.get('/qris/mine', async c => {
+    const me = c.get('customer')
+    const [a] = await sql`select number from accounts where customer_id = ${me.id} and kind = 'savings'`
+    const amount = Math.floor(Number(c.req.query('amount') ?? 0)) || undefined
+    return c.json({ payload: buildQris({ kind: 'p2p', account: a.number, name: me.full_name, amount }), name: me.full_name, accountNumber: a.number })
   })
 
   return app

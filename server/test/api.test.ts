@@ -99,3 +99,22 @@ test('a tester saves a recipient, sends money, and the recipient shows up in the
   assert.equal(wrong.body.error, 'WRONG_PIN')
   assert.equal(wrong.body.attemptsLeft, 4)
 })
+
+test('scanning a merchant QR and paying it; scanning a friend\'s My QR starts a transfer', async () => {
+  const { buildQris } = await import('../src/qris.ts')
+  const scan = await call('POST', '/qris/scan', { payload: buildQris({ kind: 'merchant', code: 'KSC001', name: 'Kopi Senja Cipete', city: 'Jakarta', mcc: '5814', amount: 38_000 }) })
+  assert.equal(scan.body.type, 'merchant')
+  assert.equal(scan.body.merchant.name, 'Kopi Senja Cipete')
+  assert.equal(scan.body.amount, 38_000)
+  const paid = await call('POST', '/qris/pay', { merchantId: scan.body.merchant.id, amount: 38_000, pin: '482915' })
+  assert.equal(paid.status, 200)
+
+  const dimas = (await sql`select number from accounts a join customers c on c.id = a.customer_id where c.full_name = 'Dimas Prakoso'`)[0].number
+  const p2p = await call('POST', '/qris/scan', { payload: buildQris({ kind: 'p2p', account: dimas, name: 'Dimas Prakoso' }) })
+  assert.equal(p2p.body.type, 'p2p')
+  assert.equal(p2p.body.recipient.name, 'Dimas Prakoso')
+
+  const mine = await call('GET', '/qris/mine')
+  assert.equal((await call('POST', '/qris/scan', { payload: mine.body.payload })).body.error, 'OWN_ACCOUNT')
+  assert.equal((await call('POST', '/qris/scan', { payload: 'hello' })).body.error, 'NOT_QRIS')
+})

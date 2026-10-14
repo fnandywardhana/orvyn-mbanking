@@ -98,6 +98,35 @@ async function checkPin(sql: Sql, customerId: string, pin: string) {
   throw new TransferError('WRONG_PIN', `Wrong PIN. ${u.left} ${u.left === 1 ? 'try' : 'tries'} left.`, { attemptsLeft: u.left })
 }
 
+/** Daily Limit then PIN: the two checks every payout passes before money moves. */
+async function authorizePayout(sql: Sql, customer: { id: string; tier: string }, amount: number, pin: string, remainingToday?: number) {
+  const remaining = remainingToday ?? (await transferOptions(sql, customer, true, amount)).remainingToday
+  if (amount > remaining) {
+    throw new TransferError('OVER_LIMIT', `That's over your daily limit. You can still pay out Rp${remaining.toLocaleString('en-US')} today.`, { remainingToday: remaining })
+  }
+  await checkPin(sql, customer.id, pin)
+}
+
+/** Story S1.15: pay a QRIS merchant. Money lands in Merchant Settlement. */
+export async function payMerchant(sql: Sql, customer: { id: string; tier: string }, input: { merchantId: string; amount: number; pin: string; idempotencyKey: string }) {
+  const amount = Math.floor(Number(input.amount))
+  if (!Number.isFinite(amount) || amount < 1_000) throw new TransferError('BAD_AMOUNT', 'The smallest QRIS payment is Rp1,000.')
+  const [m] = await sql`select * from merchants where id = ${input.merchantId} and active`
+  if (!m) throw new TransferError('NOT_FOUND', "This merchant isn't taking ORVYN payments right now.")
+  await authorizePayout(sql, customer, amount, input.pin)
+  const [from] = await sql`select id from accounts where customer_id = ${customer.id} and kind = 'savings'`
+  try {
+    return await postJournal(sql, {
+      kind: 'qris_payment', idempotencyKey: `${customer.id}:${input.idempotencyKey}`,
+      memo: { to: { name: m.name }, channel: 'QRIS', category: m.category, merchantId: m.id } as Memo,
+      postings: [{ accountId: from.id, amount: -amount }, { accountId: await houseAccount(sql, 'MERCHANT_SETTLEMENT'), amount }],
+    })
+  } catch (e) {
+    if (e instanceof LedgerError && e.code === 'INSUFFICIENT_FUNDS') throw new TransferError('INSUFFICIENT_FUNDS', "You don't have enough money for this payment.")
+    throw e
+  }
+}
+
 export type TransferInput = {
   bank: string
   accountNumber: string
@@ -116,10 +145,7 @@ export async function sendTransfer(sql: Sql, customer: { id: string; tier: strin
   const opts = await transferOptions(sql, customer, to.internal, amount)
   const method = opts.methods.find(m => m.method === input.method)
   if (!method) throw new TransferError('BAD_METHOD', 'That transfer method is not available for this amount.')
-  if (amount > opts.remainingToday) {
-    throw new TransferError('OVER_LIMIT', `That's over your daily limit. You can still send Rp${opts.remainingToday.toLocaleString('en-US')} today.`, { remainingToday: opts.remainingToday })
-  }
-  await checkPin(sql, customer.id, input.pin)
+  await authorizePayout(sql, customer, amount, input.pin, opts.remainingToday)
 
   const [from] = await sql`select id, number from accounts where customer_id = ${customer.id} and kind = 'savings'`
   const note = input.note?.trim().slice(0, 50) || undefined

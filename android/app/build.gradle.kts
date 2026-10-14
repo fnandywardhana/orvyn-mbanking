@@ -21,8 +21,8 @@ android {
         applicationId = "id.orvyn.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     signingConfigs {
@@ -70,6 +70,13 @@ dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.navigation:navigation-compose:2.8.9")
     implementation("androidx.biometric:biometric:1.1.0")
+    // biometric 1.1.0 pulls an old fragment library that crashes the photo picker ("lower 16 bits for requestCode")
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
+    // QR: ZXing reads and draws codes fully on the phone (no Google services, no network; ADR 0002)
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("androidx.camera:camera-camera2:1.4.2")
+    implementation("androidx.camera:camera-lifecycle:1.4.2")
+    implementation("androidx.camera:camera-view:1.4.2")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation(composeBom)

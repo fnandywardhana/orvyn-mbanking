@@ -6,6 +6,7 @@ import type { Sql } from './db.ts'
 import { loginOfficer, officerForSession, logoutOfficer, changeOfficerPassword, isStrongPassword, IDLE_MINUTES } from './auth.ts'
 import { checkLedger } from './ledger.ts'
 import { customerRoutes } from './admin-customers.ts'
+import { merchantRoutes } from './admin-merchants.ts'
 
 export type Officer = { id: string; email: string; name: string; role: 'super_admin' | 'operator' | 'content'; must_change_password: boolean }
 type Env = { Variables: { officer: Officer } }
@@ -17,6 +18,7 @@ const ROLE_LABEL = { super_admin: 'Super Admin', operator: 'Operator', content: 
 const MENU: { href: string; label: string; roles: Officer['role'][] }[] = [
   { href: '/admin', label: 'Dashboard', roles: ['super_admin', 'operator', 'content'] },
   { href: '/admin/customers', label: 'Customers', roles: ['super_admin', 'operator'] },
+  { href: '/admin/merchants', label: 'Merchants', roles: ['super_admin', 'operator'] },
 ]
 
 /** Records one officer change (story S1.38). */
@@ -185,6 +187,7 @@ ${ledger.ok ? html`<span class="chip ok">✓ Balanced</span><p class="hint">Ever
   })
 
   app.route('/customers', customerRoutes(sql))
+  app.route('/merchants', merchantRoutes(sql))
 
   return app
 }

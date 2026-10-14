@@ -60,6 +60,13 @@ data class Method(val method: String, val label: String, val fee: Long, val note
 data class TransferOptions(val methods: List<Method>, val remainingToday: Long, val balance: Long)
 data class Recipients(val saved: List<Recipient>, val recent: List<Recipient>)
 
+data class Merchant(val id: String, val name: String, val city: String, val category: String)
+sealed interface Scan {
+    data class Pay(val merchant: Merchant, val amount: Long?) : Scan
+    data class Send(val recipient: Recipient, val amount: Long?) : Scan
+}
+data class MyQr(val payload: String, val name: String, val accountNumber: String)
+
 /**
  * Tiny JSON-over-HTTPS client on the platform's HttpURLConnection and org.json (no extra libraries).
  * [session] is held in memory only; it dies with the process, which also enforces sign-out.
@@ -163,6 +170,21 @@ object Api {
     }
 
     suspend fun deleteRecipient(id: String) { call("DELETE", "/recipients/$id") }
+
+    suspend fun qrisScan(payload: String): Scan {
+        val r = call("POST", "/qris/scan", JSONObject().put("payload", payload))
+        val amount = if (r.isNull("amount")) null else r.getLong("amount")
+        return if (r.getString("type") == "p2p") Scan.Send(parseRecipient(r.getJSONObject("recipient")), amount)
+        else r.getJSONObject("merchant").let { Scan.Pay(Merchant(it.getString("id"), it.getString("name"), it.getString("city"), it.getString("category")), amount) }
+    }
+
+    suspend fun qrisPay(merchantId: String, amount: Long, pin: String, idempotencyKey: String): String =
+        call("POST", "/qris/pay", JSONObject().put("merchantId", merchantId).put("amount", amount).put("pin", pin).put("idempotencyKey", idempotencyKey)).getString("reference")
+
+    suspend fun myQr(amount: Long?): MyQr {
+        val r = call("GET", "/qris/mine" + (amount?.let { "?amount=$it" } ?: ""))
+        return MyQr(r.getString("payload"), r.getString("name"), r.getString("accountNumber"))
+    }
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 }

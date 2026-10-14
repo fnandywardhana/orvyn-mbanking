@@ -74,10 +74,11 @@ private enum class Step { Pick, New, Amount, Review, Pin, Done }
 
 /** Stories S1.12–S1.14: recipient → amount → review → PIN → done, with back going one step at a time. */
 @Composable
-fun TransferFlow(onExit: () -> Unit) {
-    var step by remember { mutableStateOf(Step.Pick) }
-    var to by remember { mutableStateOf<Recipient?>(null) }
-    var amount by remember { mutableLongStateOf(0L) }
+fun TransferFlow(onExit: () -> Unit, startWith: Recipient? = null, startAmount: Long? = null) {
+    // Coming from a scanned My QR: skip straight to the amount (or review, if the QR carried one).
+    var step by remember { mutableStateOf(if (startWith == null) Step.Pick else if (startAmount != null) Step.Review else Step.Amount) }
+    var to by remember { mutableStateOf(startWith) }
+    var amount by remember { mutableLongStateOf(startAmount ?: 0L) }
     var note by remember { mutableStateOf("") }
     var method by remember { mutableStateOf<Method?>(null) }
     var reference by remember { mutableStateOf("") }
@@ -252,7 +253,7 @@ private fun EnterAmount(to: Recipient, initial: Long, onBack: () -> Unit, onCont
         Spacer(Modifier.weight(1f))
         AmountKeypad(amount, { amount = it })
         OrvynButton(
-            if (amount in 1 until MIN_TRANSFER) "Minimum ${Money.format(MIN_TRANSFER)}" else "Continue",
+            when { amount == 0L -> "Enter an amount"; amount < MIN_TRANSFER -> "Minimum ${Money.format(MIN_TRANSFER)}"; else -> "Continue" },
             enabled = amount >= MIN_TRANSFER && error == null && o != null,
             onClick = { onContinue(amount) }, modifier = Modifier.padding(vertical = 16.dp),
         )
