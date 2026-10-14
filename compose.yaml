@@ -8,15 +8,22 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       POSTGRES_DB: orvyn
     volumes: [db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "orvyn"]
+      interval: 3s
+      retries: 20
   server:
     build: ./server
     restart: unless-stopped
-    depends_on: [db]
+    depends_on: { db: { condition: service_healthy } }
     environment:
       DATABASE_URL: postgres://orvyn:${DB_PASSWORD}@db:5432/orvyn
       ADMIN_EMAIL: ${ADMIN_EMAIL:?set ADMIN_EMAIL in .env}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
-    ports: ["127.0.0.1:8790:8790"]
+    # Reached only through the Cloudflare Tunnel, which lives on the coolify network.
+    networks:
+      default: {}
+      coolify: { aliases: [orvyn-server] }
   backup:
     # Daily dump at 02:00 WIB, keeps the last 7 (story S0.1)
     image: postgres:17-alpine
@@ -27,3 +34,6 @@ services:
     entrypoint: ["/bin/sh", "-c", "while true; do sleep $$(( ($$(date -d '02:00' +%s) - $$(date +%s) + 86400) % 86400 )); pg_dump -h db -U orvyn orvyn | gzip > /backups/orvyn-$$(date +%F).sql.gz; ls -1t /backups/*.sql.gz | tail -n +8 | xargs -r rm; sleep 60; done"]
 volumes:
   db:
+networks:
+  coolify:
+    external: true
