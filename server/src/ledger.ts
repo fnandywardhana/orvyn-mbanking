@@ -1,7 +1,15 @@
 import type { Sql } from './db.ts'
+import type { TransactionSql } from 'postgres'
 
 export type Posting = { accountId: string; amount: number }
-export type JournalInput = { kind: string; postings: Posting[]; memo?: object; idempotencyKey?: string; reversesId?: string }
+export type JournalInput = {
+  kind: string
+  postings: Posting[]
+  memo?: object
+  idempotencyKey?: string
+  reversesId?: string
+  at?: Date // backdating, for generated persona history only
+}
 
 export class LedgerError extends Error {
   code: 'UNBALANCED' | 'INSUFFICIENT_FUNDS' | 'ALREADY_REVERSED' | 'DRIFT'
@@ -12,8 +20,10 @@ export class LedgerError extends Error {
 }
 
 // The only way money moves (docs/adr/0001-double-entry-ledger.md).
-export async function postJournal(sql: Sql, input: JournalInput) {
-  return sql.begin(async tx => {
+// Pass a transaction to make the entry part of a larger unit of work (it then runs in a savepoint).
+export async function postJournal(sql: Sql | TransactionSql, input: JournalInput) {
+  const run = 'savepoint' in sql ? sql.savepoint.bind(sql) : (sql as Sql).begin.bind(sql)
+  return run(async (tx: TransactionSql) => {
     if (input.postings.length < 2) throw new LedgerError('UNBALANCED', 'a journal entry needs at least two postings')
     const ids = [...new Set(input.postings.map(p => p.accountId))]
     // Lock in a fixed order so concurrent entries touching the same accounts can't deadlock.
@@ -27,8 +37,8 @@ export async function postJournal(sql: Sql, input: JournalInput) {
     for (const [c, s] of sums) if (s !== 0) throw new LedgerError('UNBALANCED', `${c} postings sum to ${s}`)
 
     const [j] = await tx`
-      insert into journal_entries (kind, memo, idempotency_key, reverses_id)
-      values (${input.kind}, ${tx.json(input.memo ?? {})}, ${input.idempotencyKey ?? null}, ${input.reversesId ?? null})
+      insert into journal_entries (kind, memo, idempotency_key, reverses_id, created_at)
+      values (${input.kind}, ${tx.json(input.memo ?? {})}, ${input.idempotencyKey ?? null}, ${input.reversesId ?? null}, ${input.at ?? new Date()})
       on conflict (idempotency_key) do nothing returning *`.catch(e => {
         throw e.code === '23505' && e.constraint_name === 'journal_entries_reverses_id_key'
           ? new LedgerError('ALREADY_REVERSED', `journal ${input.reversesId} was already reversed`) : e

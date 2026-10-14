@@ -34,3 +34,32 @@ fun pressAmountKey(current: Long, key: AmountKey): Long {
     }
     return if (next.length > Money.MAX_DIGITS) current else next.toLong()
 }
+
+private val WIB = java.time.ZoneId.of("Asia/Jakarta")
+private val DATE_TIME = java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm 'WIB'", Locale.US) // US, not UK: CLDR spells September "Sept" in UK English
+private val TIME = java.time.format.DateTimeFormatter.ofPattern("HH:mm", Locale.US) // US, not UK: CLDR spells September "Sept" in UK English
+private val DAY = java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM", Locale.US) // US, not UK: CLDR spells September "Sept" in UK English
+
+/** "14 Oct 2026, 19:27 WIB" */
+fun formatDateTime(at: java.time.Instant): String = DATE_TIME.format(at.atZone(WIB))
+
+/** "19:27" */
+fun formatTime(at: java.time.Instant): String = TIME.format(at.atZone(WIB))
+
+/** Group header for a day in Western Indonesia Time: "Today", "Yesterday" or "Mon, 12 Oct". */
+fun dayLabel(at: java.time.Instant, now: java.time.Instant = java.time.Instant.now()): String {
+    val d = at.atZone(WIB).toLocalDate()
+    val today = now.atZone(WIB).toLocalDate()
+    return when (d) {
+        today -> "Today"
+        today.minusDays(1) -> "Yesterday"
+        else -> DAY.format(d)
+    }
+}
+
+/** Greeting by the hour in WIB. */
+fun greeting(now: java.time.Instant = java.time.Instant.now()) = when (now.atZone(WIB).hour) {
+    in 4..10 -> "Good morning"
+    in 11..16 -> "Good afternoon"
+    else -> "Good evening"
+}

@@ -21,8 +21,8 @@ android {
         applicationId = "id.orvyn.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     signingConfigs {
@@ -37,7 +37,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Reaches the local dev server through `adb reverse tcp:8790 tcp:8790`.
+            buildConfigField("String", "API_URL", "\"http://localhost:8790/api\"")
+        }
         release {
+            buildConfigField("String", "API_URL", "\"https://orvyn.delvault.uk/api\"")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
@@ -49,7 +54,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
     testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
@@ -63,6 +68,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("androidx.navigation:navigation-compose:2.8.9")
+    implementation("androidx.biometric:biometric:1.1.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation(composeBom)
@@ -80,6 +87,7 @@ val allowedPermissions = setOf(
     "android.permission.CAMERA",
     "android.permission.POST_NOTIFICATIONS",
     "android.permission.USE_BIOMETRIC",
+    "android.permission.USE_FINGERPRINT", // added by androidx.biometric for Android 8–8.1 phones
     "id.orvyn.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION", // AndroidX-internal, app-private
 )
 

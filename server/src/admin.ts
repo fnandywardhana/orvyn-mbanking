@@ -5,17 +5,31 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 import type { Sql } from './db.ts'
 import { loginOfficer, officerForSession, logoutOfficer, changeOfficerPassword, isStrongPassword, IDLE_MINUTES } from './auth.ts'
 import { checkLedger } from './ledger.ts'
+import { customerRoutes } from './admin-customers.ts'
 
-type Officer = { id: string; email: string; name: string; role: 'super_admin' | 'operator' | 'content'; must_change_password: boolean }
+export type Officer = { id: string; email: string; name: string; role: 'super_admin' | 'operator' | 'content'; must_change_password: boolean }
 type Env = { Variables: { officer: Officer } }
-type Html = HtmlEscapedString | Promise<HtmlEscapedString>
+export type Html = HtmlEscapedString | Promise<HtmlEscapedString>
 
 const COOKIE = 'orvyn_admin'
 const ROLE_LABEL = { super_admin: 'Super Admin', operator: 'Operator', content: 'Content' }
 // Menu entries per role; later phases add Customers, Transactions, Content, Settings here.
 const MENU: { href: string; label: string; roles: Officer['role'][] }[] = [
   { href: '/admin', label: 'Dashboard', roles: ['super_admin', 'operator', 'content'] },
+  { href: '/admin/customers', label: 'Customers', roles: ['super_admin', 'operator'] },
 ]
+
+/** Records one officer change (story S1.38). */
+export async function audit(sql: Sql, officerId: string, action: string, target: string | null, before: object | null, after: object | null) {
+  await sql`insert into audit_entries (officer_id, action, target, before, after)
+    values (${officerId}, ${action}, ${target}, ${before ? sql.json(before) : null}, ${after ? sql.json(after) : null})`
+}
+
+/** Blocks officers whose role isn't allowed here (menus hide it too, story S0.2). */
+export const requireRole = (...roles: Officer['role'][]) => async (c: any, next: () => Promise<void>) => {
+  if (!roles.includes(c.get('officer').role)) return c.text('Your role does not have access to this page.', 403)
+  await next()
+}
 
 // Tokens mirror design-system/MASTER.md.
 const css = html`<style>
@@ -55,6 +69,29 @@ button{font:inherit;font-weight:600;font-size:15px;height:48px;border:0;border-r
 button.link{background:none;color:#C9D4F5;height:auto;padding:0;text-align:left;text-decoration:underline}
 .err{background:var(--error-c);color:var(--error);border-radius:10px;padding:10px 12px}
 .hint{color:var(--text2);font-size:13px;margin:0}
+.toolbar{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap}
+.toolbar form{display:flex;gap:8px}
+.toolbar input{height:40px;min-width:260px}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 16px;border-radius:12px;font-weight:600;text-decoration:none;background:var(--primary);color:var(--on-primary);border:0;font-size:14px;cursor:pointer}
+.btn.secondary{background:var(--primary-container);color:var(--text)}
+.btn.danger{background:var(--error);color:#fff}
+.tablewrap{background:var(--surface);border:1px solid var(--outline);border-radius:14px;overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:720px}
+th,td{text-align:left;padding:0 16px;height:44px;border-bottom:1px solid var(--outline);white-space:nowrap}
+th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text2);position:sticky;top:0;background:var(--surface)}
+tr:last-child td{border-bottom:0}
+td.num{text-align:right}
+.mono{font-family:ui-monospace,Menlo,monospace}
+.formgrid{display:grid;gap:16px;max-width:560px}
+.personas{display:grid;gap:10px}
+.persona{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--outline-strong);border-radius:14px;padding:14px;cursor:pointer;font-weight:400}
+.persona:has(input:checked){border:2px solid var(--primary);padding:13px}
+.persona input{height:auto;margin-top:3px}
+.persona b{display:block}
+.ok-box{background:var(--success-c);border-radius:14px;padding:16px 20px;display:grid;gap:6px;max-width:560px}
+.ok-box pre{margin:0;font:13px/1.6 ui-monospace,Menlo,monospace;white-space:pre-wrap;color:var(--text)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.chip.tier{background:var(--primary-container);color:var(--text)}
 :focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 @media (max-width:720px){.shell{grid-template-columns:1fr}.side{flex-direction:row;align-items:center;flex-wrap:wrap}.side .me{margin:0 0 0 auto}}
 </style>`
@@ -68,7 +105,7 @@ const brand = (onDark: boolean) => html`<div class="brand"><picture>
 ${onDark ? '' : html`<source srcset="/mark-dark-bg.svg" media="(prefers-color-scheme: dark)">`}
 <img src="/${onDark ? 'mark-dark-bg' : 'mark-light-bg'}.svg" alt=""></picture>ORVYN</div>`
 
-function shell(o: Officer, current: string, title: string, body: Html) {
+export function shell(o: Officer, current: string, title: string, body: Html) {
   return page(title, html`<div class="shell">
 <aside class="side">${brand(true)}
 <nav aria-label="Main menu">${MENU.filter(m => m.roles.includes(o.role)).map(m =>
@@ -146,6 +183,8 @@ ${error ? html`<div class="err" role="alert">${error}</div>` : ''}
 ${ledger.ok ? html`<span class="chip ok">✓ Balanced</span><p class="hint">Every balance matches its transaction history.</p>`
   : html`<span class="chip bad">✕ Out of balance</span><p class="hint">${ledger.problems.join(' · ')}</p>`}</div></div>`))
   })
+
+  app.route('/customers', customerRoutes(sql))
 
   return app
 }

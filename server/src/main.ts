@@ -5,6 +5,7 @@ import { connect, migrate } from './db.ts'
 import { seedSuperAdmin } from './auth.ts'
 import { checkLedger } from './ledger.ts'
 import { adminRoutes } from './admin.ts'
+import { apiRoutes } from './api.ts'
 
 const sql = connect()
 await migrate(sql)
@@ -21,6 +22,7 @@ app.use('/download/*', async (c, next) => {
 })
 app.use('/download/*', serveStatic({ root: './', rewriteRequestPath: p => p.replace(/^\/download/, '/releases') }))
 app.route('/admin', adminRoutes(sql))
+app.route('/api', apiRoutes(sql))
 app.get('/', c => c.redirect('/admin'))
 
 // ponytail: in-process daily timer; a missed run after a restart just waits for the next one.

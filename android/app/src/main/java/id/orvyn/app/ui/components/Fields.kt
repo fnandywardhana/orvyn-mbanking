@@ -30,6 +30,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -207,6 +210,7 @@ fun PinPad(
     modifier: Modifier = Modifier,
 ) {
     var pin by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
     val shake = remember { Animatable(0f) }
     val haptics = LocalHapticFeedback.current
     LaunchedEffect(errorCount) {
@@ -239,8 +243,11 @@ fun PinPad(
         }
         Keypad(
             onDigit = {
-                if (pin.length < 6) pin += it
-                if (pin.length == 6) onComplete(pin)
+                if (pin.length < 6) {
+                    pin += it
+                    // Let the sixth dot show briefly, then hand the PIN over and start fresh for the next entry.
+                    if (pin.length == 6) scope.launch { delay(150); val entered = pin; pin = ""; onComplete(entered) }
+                }
             },
             onDelete = { pin = pin.dropLast(1) },
             leftKey = onBiometric?.let { bio ->

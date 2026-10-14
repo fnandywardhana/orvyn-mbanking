@@ -281,7 +281,7 @@ Wireframe dan desain final dibuat dengan skill ui-ux-pro-max sebelum tiap fase d
 | Mikrofon | Ya, hanya saat tombol mikrofon Vyna ditekan (Fase 2) | Diproses di dalam HP, rekaman tidak dikirim |
 | Galeri | Tidak ada izin | Memakai Photo Picker bawaan Android: pengguna memilih satu gambar QR, aplikasi tidak bisa melihat foto lain |
 | Notifikasi | Ya | Untuk push notification |
-| Biometrik | Ya | Ditangani sistem Android. Aplikasi hanya menerima hasil "cocok / tidak cocok", tidak pernah menerima sidik jari atau wajah. |
+| Biometrik (USE_BIOMETRIC, dan USE_FINGERPRINT untuk Android 8) | Ya | Ditangani sistem Android. Aplikasi hanya menerima hasil "cocok / tidak cocok", tidak pernah menerima sidik jari atau wajah. |
 | Kontak, lokasi, SMS, telepon, file, daftar aplikasi | **Tidak** | Izinnya tidak dideklarasikan sama sekali, jadi tidak bisa diminta |
 | ID perangkat (IMEI, nomor seri, Android ID, ID iklan) | **Tidak** | Pengenal "HP terdaftar" memakai kode acak yang dibuat aplikasi saat pertama dipasang |
 | Analytics, pelacak, crash reporter, SDK iklan | **Tidak** | Tidak ada library pihak ketiga yang mengirim data perangkat |
