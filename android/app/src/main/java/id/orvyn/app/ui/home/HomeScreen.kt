@@ -152,7 +152,8 @@ fun HomeScreen(
         val list = androidx.compose.foundation.lazy.rememberLazyListState()
         LazyColumn(Modifier.fillMaxSize(), state = list) {
             item {
-                Hero(h, hidden, onToggle = { hidden = !hidden; store.balanceHidden = hidden }, onInbox = onInbox)
+                Hero(h, hidden, onToggle = { hidden = !hidden; store.balanceHidden = hidden }, onInbox = onInbox,
+                    onVyna = if (id.orvyn.app.data.AppConfig.on("vyna")) ({ onRoute("vyna") }) else null)
                 QuickActions(enabled = !offline, onAction = onQuickAction)
                 Banners(onAction = onQuickAction)
                 if (id.orvyn.app.data.AppConfig.on("insights")) id.orvyn.app.ui.insights.InsightCard(store, onOpen = { onRoute("insights") })
@@ -218,7 +219,7 @@ private fun Eyebrow(text: String) = Text(
 )
 
 @Composable
-private fun Hero(h: Home?, hidden: Boolean, onToggle: () -> Unit, onInbox: () -> Unit) {
+private fun Hero(h: Home?, hidden: Boolean, onToggle: () -> Unit, onInbox: () -> Unit, onVyna: (() -> Unit)? = null) {
     id.orvyn.app.ui.DarkTopBar()
     // Count the balance up only when it actually changes (design system: balance motion).
     val reduced = rememberReducedMotion()
@@ -237,6 +238,9 @@ private fun Hero(h: Home?, hidden: Boolean, onToggle: () -> Unit, onInbox: () ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(h?.let { "${greeting()}, ${it.firstName}" } ?: greeting(), style = MaterialTheme.typography.titleMedium, color = Color.White, modifier = Modifier.weight(1f))
             if (h != null) TierBadge(Tier.valueOf(h.tier.replaceFirstChar(Char::uppercase)))
+            if (onVyna != null) IconButton(onClick = onVyna) {
+                Icon(painterResource(R.drawable.ph_sparkle), contentDescription = "Ask Vyna", tint = Color.White)
+            }
             IconButton(onClick = onInbox) {
                 Box {
                     Icon(painterResource(R.drawable.ph_bell), contentDescription = if ((h?.unread ?: 0) > 0) "Inbox, ${h!!.unread} unread" else "Inbox", tint = Color.White)

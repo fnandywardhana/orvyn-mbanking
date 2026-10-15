@@ -56,6 +56,11 @@ class DeviceStore(context: Context) {
         get() = prefs.getString("insight_week", null)
         set(v) = prefs.edit().putString("insight_week", v).apply()
 
+    /** S2.15 AC3: Vyna reads her replies aloud. */
+    var vynaSpeaks: Boolean
+        get() = prefs.getBoolean("vyna_speaks", false)
+        set(v) = prefs.edit().putBoolean("vyna_speaks", v).apply()
+
     fun forgetDevice() {
         val theme = themeMode
         prefs.edit().clear().putString("theme", theme).apply()

@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node src/main.ts",
     "test": "DATABASE_URL=postgres://orvyn:orvyn@127.0.0.1:55432/orvyn_test node --test --test-concurrency=1 test/*.test.ts",
-    "pretest": "docker exec orvyn-dev-db-1 psql -U orvyn -tAc \"select 1 from pg_database where datname = 'orvyn_test'\" | grep -q 1 || docker exec orvyn-dev-db-1 createdb -U orvyn orvyn_test"
+    "pretest": "docker exec orvyn-dev-db-1 psql -U orvyn -tAc \"select 1 from pg_database where datname = 'orvyn_test'\" | grep -q 1 || docker exec orvyn-dev-db-1 createdb -U orvyn orvyn_test",
+    "eval:vyna": "DATABASE_URL=postgres://orvyn:orvyn@127.0.0.1:55432/orvyn_test node eval/vyna-eval.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.131.0",

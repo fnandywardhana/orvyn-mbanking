@@ -3,6 +3,7 @@ package id.orvyn.app.data
 import id.orvyn.app.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.flowOn
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -239,6 +240,43 @@ object Api {
     suspend fun updateSchedule(id: String, paused: Boolean? = null, delete: Boolean = false) {
         call("POST", "/scheduled/$id", JSONObject().apply { paused?.let { put("paused", it) }; if (delete) put("delete", true) })
     }
+
+    // Vyna (stories S2.12–S2.16)
+    /** Questions allowed today and already asked; null when Vyna isn't available on the server. */
+    suspend fun vyna(): Pair<Int, Int>? = call("GET", "/vyna").let { if (it.optBoolean("available")) it.getInt("limit") to it.getInt("used") else null }
+
+    /**
+     * Vyna's answer as it is written, from server-sent events: ("text", {text}), ("action", {...}), ("error", {message}), ("done", {}).
+     * [history] is (role, text) pairs, the newest question last.
+     */
+    fun vynaChat(history: List<Pair<String, String>>): kotlinx.coroutines.flow.Flow<Pair<String, JSONObject>> = kotlinx.coroutines.flow.flow {
+        val conn = (URL(BuildConfig.API_URL + "/vyna/chat").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; connectTimeout = 10_000; readTimeout = 60_000
+            setRequestProperty("Accept", "text/event-stream"); setRequestProperty("Content-Type", "application/json")
+            session?.let { setRequestProperty("Authorization", "Bearer $it") }
+            doOutput = true
+        }
+        try {
+            conn.outputStream.use { out ->
+                out.write(JSONObject().put("messages", JSONArray(history.map { (r, c) -> JSONObject().put("role", r).put("content", c) })).toString().toByteArray())
+            }
+            if (conn.responseCode >= 400) {
+                val json = runCatching { JSONObject(conn.errorStream.bufferedReader().use { it.readText() }) }.getOrElse { JSONObject() }
+                if (json.optString("error") == "signed_out") { session = null; onSignedOut() }
+                emit("error" to JSONObject().put("message", json.optString("message", "Vyna couldn't answer just now. Try again in a moment.")))
+                return@flow
+            }
+            var event = "message"
+            conn.inputStream.bufferedReader().useLines { lines ->
+                for (line in lines) when {
+                    line.startsWith("event:") -> event = line.removePrefix("event:").trim()
+                    line.startsWith("data:") -> emit(event to runCatching { JSONObject(line.removePrefix("data:").trim()) }.getOrElse { JSONObject() })
+                }
+            }
+        } catch (e: IOException) {
+            emit("error" to JSONObject().put("message", "You're offline, or the connection dropped. Check it and try again."))
+        } finally { conn.disconnect() }
+    }.flowOn(Dispatchers.IO)
 
     // Insights and budgets (stories S2.8–S2.11)
     suspend fun insights(): Insights {

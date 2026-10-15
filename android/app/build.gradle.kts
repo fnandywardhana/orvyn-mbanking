@@ -114,6 +114,7 @@ val allowedPermissions = setOf(
     "android.permission.POST_NOTIFICATIONS",
     "android.permission.USE_BIOMETRIC",
     "android.permission.USE_FINGERPRINT", // added by androidx.biometric for Android 8–8.1 phones
+    "android.permission.RECORD_AUDIO", // Vyna's microphone, on-device recognition only (PRD 7.4)
     "id.orvyn.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION", // AndroidX-internal, app-private
     // Added by Firebase Cloud Messaging (story S2.0). None of them reads anything about the person or the phone.
     "com.google.android.c2dm.permission.RECEIVE", // receive pushes

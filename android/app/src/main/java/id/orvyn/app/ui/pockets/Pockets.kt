@@ -381,10 +381,10 @@ fun PocketEditor(id: String?, onBack: () -> Unit, onSaved: (String) -> Unit, onC
 
 /** S2.2: no PIN and no fee, because the money stays the customer's own. */
 @Composable
-fun PocketMoveFlow(id: String, intoPocket: Boolean, onExit: () -> Unit) {
+fun PocketMoveFlow(id: String, intoPocket: Boolean, onExit: () -> Unit, startAmount: Long = 0L) {
     var pocket by remember { mutableStateOf<Pocket?>(null) }
     var savings by remember { mutableLongStateOf(0L) }
-    var amount by remember { mutableLongStateOf(0L) }
+    var amount by remember { mutableLongStateOf(startAmount) }
     var error by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
     var done by remember { mutableStateOf<Boolean?>(null) } // true when the goal was just reached

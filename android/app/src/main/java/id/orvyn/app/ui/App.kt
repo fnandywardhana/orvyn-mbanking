@@ -54,8 +54,10 @@ import id.orvyn.app.BuildConfig
 import id.orvyn.app.R
 import id.orvyn.app.data.Api
 import id.orvyn.app.data.Push
+import id.orvyn.app.data.Recipient
 import id.orvyn.app.ui.pockets.PocketEditor
 import id.orvyn.app.ui.transfer.ScheduledScreen
+import id.orvyn.app.ui.vyna.VynaScreen
 import id.orvyn.app.ui.requests.AskFlow
 import id.orvyn.app.ui.requests.RequestScreen
 import id.orvyn.app.ui.requests.RequestsScreen
@@ -210,8 +212,21 @@ fun OrvynApp(store: DeviceStore) {
         composable("pocket/{id}/edit") { entry ->
             PocketEditor(entry.arguments!!.getString("id"), onBack = { nav.popBackStack() }, onSaved = { nav.popBackStack() }, onClosed = { nav.popBackStack("main", false) })
         }
-        composable("pocket/{id}/move/{dir}") { entry ->
-            PocketMoveFlow(entry.arguments!!.getString("id")!!, entry.arguments!!.getString("dir") == "in", onExit = { nav.popBackStack() })
+        composable("pocket/{id}/move/{dir}?amount={amount}", arguments = listOf(androidx.navigation.navArgument("amount") { nullable = true; defaultValue = null })) { entry ->
+            PocketMoveFlow(entry.arguments!!.getString("id")!!, entry.arguments!!.getString("dir") == "in", onExit = { nav.popBackStack() },
+                startAmount = entry.arguments?.getString("amount")?.toLongOrNull() ?: 0L)
+        }
+        composable("vyna") {
+            VynaScreen(store, onBack = { nav.popBackStack() }, onAction = { a ->
+                when (a.optString("type")) {
+                    "transfer" -> {
+                        pendingQrTransfer = Recipient(a.getString("bank"), a.getString("bankName"), a.getString("accountNumber"), a.getString("name")) to a.getLong("amount")
+                        nav.navigate("transfer/qr")
+                    }
+                    "pocket" -> nav.navigate("pocket/${a.getString("pocketId")}/move/${a.getString("direction")}?amount=${a.getLong("amount")}")
+                    else -> nav.navigate("bills")
+                }
+            })
         }
         composable("tx/{id}?account={account}", arguments = listOf(androidx.navigation.navArgument("account") { nullable = true; defaultValue = null })) { entry ->
             val snack = remember { SnackbarHostState() }
