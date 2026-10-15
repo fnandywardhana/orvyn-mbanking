@@ -38,6 +38,11 @@ data class Pocket(val id: String, val name: String, val balance: Long, val image
     val progress get() = target?.let { (balance.toFloat() / it).coerceIn(0f, 1f) }
 }
 
+/** Story S2.6. [status]: open, paid, declined, cancelled or expired. [mine]: I asked; otherwise I'm asked to pay. */
+data class MoneyRequest(val id: String, val amount: Long, val note: String?, val status: String, val mine: Boolean, val from: String, val to: String, val splitId: String?, val at: Instant)
+data class SplitPerson(val requestId: String, val name: String, val amount: Long, val status: String)
+data class Split(val id: String, val total: Long, val note: String?, val people: List<SplitPerson>)
+
 data class Scheduled(val id: String, val name: String, val bank: String, val accountNumber: String, val amount: Long,
     val repeat: String, val nextRun: String?, val paused: Boolean, val lastOk: Boolean?, val lastMessage: String?)
 
@@ -226,6 +231,29 @@ object Api {
     suspend fun updateSchedule(id: String, paused: Boolean? = null, delete: Boolean = false) {
         call("POST", "/scheduled/$id", JSONObject().apply { paused?.let { put("paused", it) }; if (delete) put("delete", true) })
     }
+
+    // Money Requests and Split Bills (stories S2.6–S2.7)
+    private fun parseRequest(r: JSONObject) = MoneyRequest(r.getString("id"), r.getLong("amount"), r.optStringOrNull("note"), r.getString("status"),
+        r.getBoolean("mine"), r.getString("from"), r.getString("to"), r.optStringOrNull("splitId"), Instant.parse(r.getString("createdAt")))
+    suspend fun requests(): Pair<List<MoneyRequest>, List<Split>> {
+        val r = call("GET", "/requests")
+        return r.getJSONArray("requests").map(::parseRequest) to r.getJSONArray("splits").map { s ->
+            Split(s.getString("id"), s.getLong("total"), s.optStringOrNull("note"), s.getJSONArray("people").map {
+                SplitPerson(it.getString("requestId"), it.getString("name"), it.getLong("amount"), it.getString("status"))
+            })
+        }
+    }
+    suspend fun request(id: String): MoneyRequest = parseRequest(call("GET", "/requests/$id"))
+    suspend fun askForMoney(accountNumber: String, amount: Long, note: String) {
+        call("POST", "/requests", JSONObject().put("accountNumber", accountNumber).put("amount", amount).put("note", note))
+    }
+    suspend fun splitBill(total: Long, note: String, shares: List<Pair<String, Long>>) {
+        call("POST", "/splits", JSONObject().put("total", total).put("note", note).put("shares",
+            org.json.JSONArray(shares.map { (number, amount) -> JSONObject().put("accountNumber", number).put("amount", amount) })))
+    }
+    suspend fun payRequest(id: String, pin: String): String = call("POST", "/requests/$id/pay", JSONObject().put("pin", pin)).getString("reference")
+    suspend fun declineRequest(id: String) { call("POST", "/requests/$id/decline") }
+    suspend fun cancelRequest(id: String) { call("POST", "/requests/$id/cancel") }
 
     suspend fun recipients(): Recipients {
         val r = call("GET", "/recipients")

@@ -350,7 +350,9 @@ private fun QuickActions(enabled: Boolean, onAction: (String) -> Unit) {
             .shadow(8.dp, RoundedCornerShape(18.dp), ambientColor = Color(0xFF002080), spotColor = Color(0xFF002080))
             .clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface).padding(vertical = 12.dp),
     ) {
-        for ((label, icon) in listOf("Transfer" to R.drawable.ph_arrows_left_right, "QRIS" to R.drawable.ph_qr_code, "Pay" to R.drawable.ph_lightning, "Top up" to R.drawable.ph_plus)) {
+        val actions = listOf("Transfer" to R.drawable.ph_arrows_left_right, "QRIS" to R.drawable.ph_qr_code, "Pay" to R.drawable.ph_lightning, "Top up" to R.drawable.ph_plus) +
+            (if (id.orvyn.app.data.AppConfig.on("requests")) listOf("Request" to R.drawable.ph_hand_coins) else emptyList())
+        for ((label, icon) in actions) {
             Column(
                 Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable(enabled = enabled, role = Role.Button) { onAction(label) }
                     .padding(vertical = 6.dp).semantics { contentDescription = label },

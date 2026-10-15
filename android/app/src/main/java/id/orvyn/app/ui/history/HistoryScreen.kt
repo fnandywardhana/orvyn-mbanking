@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import id.orvyn.app.R
 import id.orvyn.app.data.Api
+import id.orvyn.app.data.AppConfig
 import id.orvyn.app.data.ApiException
 import id.orvyn.app.data.Transaction
 import id.orvyn.app.ui.Money
@@ -161,7 +162,7 @@ private fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
 
 /** Story S1.11. */
 @Composable
-fun TransactionDetailScreen(id: String, account: String? = null, onBack: () -> Unit, onCopied: (String) -> Unit) {
+fun TransactionDetailScreen(id: String, account: String? = null, onBack: () -> Unit, onSplit: ((Long) -> Unit)? = null, onCopied: (String) -> Unit) {
     var t by remember { mutableStateOf<Transaction?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(id) { try { t = Api.transaction(id, account) } catch (e: ApiException) { error = e.message } }
@@ -205,6 +206,9 @@ fun TransactionDetailScreen(id: String, account: String? = null, onBack: () -> U
                 }
                 OrvynButton("Share receipt", kind = ButtonKind.Secondary,
                     onClick = { shareReceipt(context, tx) })
+                // S2.7 AC5: a purchase can be split straight from its receipt.
+                if (onSplit != null && tx.amount < 0 && tx.kind in setOf("qris_payment", "bill_payment", "card_spend") && AppConfig.on("requests"))
+                    OrvynButton("Split this bill", kind = ButtonKind.Secondary, onClick = { onSplit(-tx.amount) }, modifier = Modifier.padding(top = 10.dp))
                 Spacer(Modifier.height(24.dp))
             }
         }

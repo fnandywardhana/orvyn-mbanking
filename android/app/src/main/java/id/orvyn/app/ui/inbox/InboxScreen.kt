@@ -42,7 +42,7 @@ import id.orvyn.app.ui.theme.OrvynTheme
 
 /** Story S1.27: every notification, kept in the app. Opening it marks everything read. */
 @Composable
-fun InboxScreen(onBack: () -> Unit, onOpenTransaction: (String) -> Unit) {
+fun InboxScreen(onBack: () -> Unit, onOpenTransaction: (String) -> Unit, onOpenRequest: (String) -> Unit = {}) {
     var items by remember { mutableStateOf<List<InboxItem>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
@@ -57,7 +57,9 @@ fun InboxScreen(onBack: () -> Unit, onOpenTransaction: (String) -> Unit) {
             else -> LazyColumn {
                 items(list, key = { it.id }) { m ->
                     Row(
-                        Modifier.fillMaxWidth().clickable(enabled = m.link?.startsWith("tx:") == true) { onOpenTransaction(m.link!!.removePrefix("tx:")) }
+                        Modifier.fillMaxWidth().clickable(enabled = m.link?.startsWith("tx:") == true || m.link?.startsWith("request:") == true) {
+                            if (m.link!!.startsWith("tx:")) onOpenTransaction(m.link.removePrefix("tx:")) else onOpenRequest(m.link.removePrefix("request:"))
+                        }
                             .padding(vertical = 14.dp).semantics { if (!m.read) stateDescription = "Unread" },
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {

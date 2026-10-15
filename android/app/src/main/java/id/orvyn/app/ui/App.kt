@@ -54,6 +54,10 @@ import id.orvyn.app.data.Api
 import id.orvyn.app.data.Push
 import id.orvyn.app.ui.pockets.PocketEditor
 import id.orvyn.app.ui.transfer.ScheduledScreen
+import id.orvyn.app.ui.requests.AskFlow
+import id.orvyn.app.ui.requests.RequestScreen
+import id.orvyn.app.ui.requests.RequestsScreen
+import id.orvyn.app.ui.requests.SplitFlow
 import id.orvyn.app.ui.pockets.PocketMoveFlow
 import id.orvyn.app.ui.pockets.PocketScreen
 import id.orvyn.app.data.AppConfig
@@ -133,7 +137,11 @@ fun OrvynApp(store: DeviceStore) {
         val route = entry?.destination?.route ?: return@LaunchedEffect
         if (route in setOf("welcome", "unlock", "signin", "register", "pin/create", "biometric")) return@LaunchedEffect
         Push.pendingLink = null
-        nav.navigate(if (link.startsWith("tx:")) "tx/${link.removePrefix("tx:")}" else "inbox")
+        nav.navigate(when {
+            link.startsWith("tx:") -> "tx/${link.removePrefix("tx:")}"
+            link.startsWith("request:") -> "request/${link.removePrefix("request:")}"
+            else -> "inbox"
+        })
     }
     var pendingCard by remember { mutableStateOf<id.orvyn.app.data.Card?>(null) }
     var pendingQrTransfer by remember { mutableStateOf<Pair<id.orvyn.app.data.Recipient, Long?>?>(null) }
@@ -170,7 +178,13 @@ fun OrvynApp(store: DeviceStore) {
         composable("profile/password") { ChangePasswordScreen(onDone = { nav.popBackStack() }) }
         composable("help") { HelpScreen(onBack = { nav.popBackStack() }) }
         composable("privacy") { PrivacyScreen(onBack = { nav.popBackStack() }) }
-        composable("inbox") { InboxScreen(onBack = { nav.popBackStack() }, onOpenTransaction = { nav.navigate("tx/$it") }) }
+        composable("inbox") { InboxScreen(onBack = { nav.popBackStack() }, onOpenTransaction = { nav.navigate("tx/$it") }, onOpenRequest = { nav.navigate("request/$it") }) }
+        composable("requests") { RequestsScreen(onBack = { nav.popBackStack() }, onAsk = { nav.navigate("request/new") }, onSplit = { nav.navigate("split/new") }, onOpen = { nav.navigate("request/$it") }) }
+        composable("request/new") { AskFlow(onExit = { nav.popBackStack() }) }
+        composable("request/{id}") { entry -> RequestScreen(entry.arguments!!.getString("id")!!, onBack = { nav.popBackStack() }) }
+        composable("split/new?total={total}", arguments = listOf(androidx.navigation.navArgument("total") { nullable = true; defaultValue = null })) { entry ->
+            SplitFlow(entry.arguments?.getString("total")?.toLongOrNull(), onExit = { nav.popBackStack() })
+        }
         composable("cardpay") { pendingCard?.let { CardPayFlow(it, onExit = { nav.popBackStack() }) } }
         composable("topup") { BillsFlow(onExit = { nav.popBackStack() }, ewalletsOnly = true) }
         composable("qris") {
@@ -197,7 +211,7 @@ fun OrvynApp(store: DeviceStore) {
             val scope = rememberCoroutineScope()
             Scaffold(snackbarHost = { SnackbarHost(snack) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
                 Box(Modifier.padding(pad)) {
-                    TransactionDetailScreen(entry.arguments!!.getString("id")!!, entry.arguments?.getString("account"), onBack = { nav.popBackStack() }) { msg -> scope.launch { snack.showSnackbar(msg) } }
+                    TransactionDetailScreen(entry.arguments!!.getString("id")!!, entry.arguments?.getString("account"), onBack = { nav.popBackStack() }, onSplit = { nav.navigate("split/new?total=$it") }) { msg -> scope.launch { snack.showSnackbar(msg) } }
                 }
             }
         }
@@ -237,6 +251,7 @@ private fun MainShell(store: DeviceStore, onOpenTransaction: (String) -> Unit, o
             when (tab) {
                 Tab.Home -> HomeScreen(store, onSeeAll = { tab = Tab.History }, onOpenTransaction = onOpenTransaction, onQuickAction = { action ->
                     if (action == "Cards") { tab = Tab.Cards; return@HomeScreen }
+                    if (action == "Request") { onRoute("requests"); return@HomeScreen }
                     val feature = mapOf("Transfer" to "transfer", "QRIS" to "qris", "Pay" to "bills", "Top up" to "bills")[action]!!
                     if (!AppConfig.on(feature)) say("$action is switched off for now. Try again later.")
                     else when (action) { "Transfer" -> onTransfer(); "QRIS" -> onQris(); "Pay" -> onRoute("bills"); else -> onRoute("topup") }
