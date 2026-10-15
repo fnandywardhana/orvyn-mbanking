@@ -1,0 +1,20 @@
+ORVYN 0.6.0
+
+What's new
+- Pockets: put money aside for a trip, a laptop or a rainy day. Set a target and a date, move money in and out for free, and see your progress on the home screen.
+- Auto-save: a pocket can fill itself with a share of every salary, a set amount every week, or the change from each payment rounded up to Rp10,000.
+- Scheduled transfers: on the review screen, pick Schedule to send later, every week or every month. Your PIN covers every send. See, pause or delete them under Transfer, Scheduled.
+- Request money: ask anyone on ORVYN to pay you back. They get a notification and pay with one tap and their PIN.
+- Split a bill: share a bill with up to 9 friends, evenly or your way, and see who has paid. Open any QRIS, bill or card payment and tap Split this bill.
+- Fixed: paying someone from your recent list again now shows their real name.
+
+Permissions this app asks for
+- INTERNET: to talk to the ORVYN server.
+- CAMERA: only while scanning a QR code or taking the sign-up photos. Nothing is uploaded.
+- POST_NOTIFICATIONS: to show your sign-up code and account activity (Android 13 and newer ask first).
+- RECEIVE (Firebase), WAKE_LOCK, ACCESS_NETWORK_STATE: added by Firebase so push notifications arrive. None of them reads anything about you or your phone.
+- USE_BIOMETRIC / USE_FINGERPRINT: only if you turn on fingerprint sign-in.
+No contacts, location, SMS, storage, device IDs, analytics or ads.
+
+How to update
+Open the download link on your phone, download, tap the file, then Update.
