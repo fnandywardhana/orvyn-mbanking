@@ -27,7 +27,7 @@ export function systemRoutes(sql: Sql) {
   const flash = (c: any, path: string, msg: string) => c.redirect(`${path}?done=${encodeURIComponent(msg)}`)
 
   app.get('/settings', async c => {
-    const limits = await setting('daily_limit'), fees = await setting('transfer_fees'), features = await setting('features'), maint = await setting('maintenance')
+    const limits = await setting('daily_limit'), fees = await setting('transfer_fees'), features = await setting('features'), maint = await setting('maintenance'), vyna = await setting('vyna')
     const directory = await sql`select * from external_directory order by bank, account_number`
     const done = c.req.query('done')
     return c.html(shell(c.get('officer'), '/admin/settings', 'Settings', html`<div class="formgrid" style="max-width:760px">
@@ -54,6 +54,12 @@ ${['everyday', 'prestige', 'private'].map(t => html`<label>${t[0].toUpperCase() 
 <label>RTGS fee<input name="rtgs" type="number" min="0" value="${fees.rtgs}"></label>
 <label>RTGS smallest amount<input name="rtgs_min" type="number" min="1" value="${fees.rtgs_min}"></label>
 <button class="btn" style="width:max-content">Save limits and fees</button></form>
+
+<form method="post" action="/admin/settings/vyna" class="card" style="gap:10px">
+<span class="eyebrow">Vyna</span>
+<label>Questions per customer per day<input name="daily_limit" type="number" min="0" max="500" value="${vyna?.daily_limit ?? 30}"></label>
+<p class="hint">Keeps the Claude API bill small. Usage and cost are on the dashboard. Switch Vyna off entirely under Features.</p>
+<button class="btn" style="width:max-content">Save Vyna limit</button></form>
 
 <div class="card" style="gap:10px"><span class="eyebrow">Accounts at other banks</span>
 <p class="hint">Any number gets a made-up name automatically. Add one here to choose the name a tester sees.</p>
@@ -83,6 +89,11 @@ ${directory.map(d => html`<form method="post" action="/admin/settings/directory/
     await save(c, 'daily_limit', { everyday: n('everyday'), prestige: n('prestige'), private: n('private') })
     await save(c, 'transfer_fees', { bifast: n('bifast'), bifast_max: n('bifast_max'), rtgs: n('rtgs'), rtgs_min: n('rtgs_min') })
     return flash(c, '/admin/settings', 'Limits and fees saved.')
+  })
+  app.post('/settings/vyna', async c => {
+    const v = await form(c)
+    await save(c, 'vyna', { daily_limit: Math.min(500, Math.max(0, Math.floor(Number(v.daily_limit) || 0))) })
+    return flash(c, '/admin/settings', 'Vyna limit saved.')
   })
   app.post('/settings/directory', async c => {
     const v = await form(c)

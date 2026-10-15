@@ -5,6 +5,7 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 import type { Sql } from './db.ts'
 import { loginOfficer, officerForSession, logoutOfficer, changeOfficerPassword, isStrongPassword, IDLE_MINUTES } from './auth.ts'
 import { checkLedger } from './ledger.ts'
+import { vynaStats } from './vyna.ts'
 import { customerRoutes } from './admin-customers.ts'
 import { merchantRoutes } from './admin-merchants.ts'
 import { messageRoutes } from './admin-messages.ts'
@@ -196,13 +197,18 @@ ${error ? html`<div class="err" role="alert">${error}</div>` : ''}
       from journal_entries j join postings p on p.journal_id = j.id
       where j.created_at >= date_trunc('day', now() at time zone 'Asia/Jakarta') at time zone 'Asia/Jakarta'`
     const [{ pending }] = await sql`select count(*)::int as pending from registrations where status = 'pending'`
+    const vyna = await vynaStats(sql)
+    const usd = (n: number) => '$' + n.toFixed(n < 1 ? 3 : 2)
     return c.html(shell(c.get('officer'), '/admin', 'Dashboard', html`<div class="cards">
 <div class="card"><span class="eyebrow">Customers</span><span class="big">${customers}</span></div>
 <div class="card"><span class="eyebrow">Transactions today</span><span class="big">${today}</span><span class="hint">Rp${Number(moved).toLocaleString('en-US')} moved</span></div>
 <div class="card"><span class="eyebrow">Applications waiting</span><span class="big">${pending}</span>${pending ? html`<a href="/admin/applications">Review them</a>` : ''}</div>
 <div class="card"><span class="eyebrow">Ledger</span>
 ${ledger.ok ? html`<span class="chip ok">✓ Balanced</span><p class="hint">Every balance matches its transaction history.</p>`
-  : html`<span class="chip bad">✕ Out of balance</span><p class="hint">${ledger.problems.join(' · ')}</p>`}</div></div>`))
+  : html`<span class="chip bad">✕ Out of balance</span><p class="hint">${ledger.problems.join(' · ')}</p>`}</div>
+<div class="card"><span class="eyebrow">Vyna today</span><span class="big">${vyna.today.messages}</span>
+<span class="hint">questions · ${vyna.today.tokens.toLocaleString('en-US')} tokens · about ${usd(vyna.today.cost)}</span>
+<span class="hint">Last 30 days: ${vyna.month.messages} questions, about ${usd(vyna.month.cost)}</span></div></div>`))
   })
 
   app.route('/customers', customerRoutes(sql))

@@ -1,10 +1,12 @@
 import { Hono } from 'hono'
+import { streamSSE } from 'hono/streaming'
 import type { Sql } from './db.ts'
 import {
   signInWithPassword, signInWithPin, signInWithDevice, setPin, customerForSession, signOut, CustomerError,
 } from './customers.ts'
 import { BANKS, lookupRecipient, transferOptions, sendTransfer, payMerchant, TransferError } from './transfers.ts'
 import { parseQris, buildQris } from './qris.ts'
+import { askVyna, vynaAllowance, vynaAvailable } from './vyna.ts'
 import { insights, insightCard, setBudget, setCategory, categoryOf, SPEND_KINDS, CATEGORIES } from './insights.ts'
 import { createRequest, createSplit, listRequests, listSplits, getRequest, payRequest, declineRequest, cancelRequest } from './requests.ts'
 import { createSchedule, listSchedules, updateSchedule } from './scheduled.ts'
@@ -197,6 +199,19 @@ export function apiRoutes(sql: Sql) {
       order by a.kind = 'savings' desc limit 1`
     if (!r) return c.json({ error: 'not_found', message: "We couldn't find that transaction." }, 404)
     return c.json({ ...toTransaction(r), accountNumber: r.account_number, reference: r.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
+  })
+
+  // Vyna (stories S2.12–S2.16). Answers stream as server-sent events: text, action, error, done.
+  app.get('/vyna', async c => c.json({ available: vynaAvailable(), ...(await vynaAllowance(sql, c.get('customer').id)) }))
+  app.post('/vyna/chat', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    const me = c.get('customer') as any
+    return streamSSE(c, async stream => {
+      await askVyna(sql, me, Array.isArray(b.messages) ? b.messages : [], async e => {
+        await stream.writeSSE({ event: e.type, data: JSON.stringify(e.type === 'text' ? { text: e.text } : e.type === 'action' ? e.action : { message: e.message }) })
+      })
+      await stream.writeSSE({ event: 'done', data: '{}' })
+    })
   })
 
   // Insights and budgets (stories S2.8–S2.11)

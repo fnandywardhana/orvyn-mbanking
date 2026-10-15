@@ -20,6 +20,7 @@ services:
       DATABASE_URL: postgres://orvyn:${DB_PASSWORD}@db:5432/orvyn
       ADMIN_EMAIL: ${ADMIN_EMAIL:?set ADMIN_EMAIL in .env}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-} # Vyna (story S2.12); empty means she says she's unavailable
     volumes:
       - ./releases:/app/releases:ro
       - ./secrets/firebase-service-account.json:/app/secrets/firebase-service-account.json:ro # push (story S2.0)

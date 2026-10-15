@@ -25,7 +25,7 @@ export function monthKey(now: Date, delta = 0) {
 const monthStart = (key: string) => new Date(`${key}-01T00:00:00+07:00`)
 
 /** Spending per month and category from `from` (inclusive) up to `to` (exclusive). */
-async function spending(sql: Sql, customerId: string, from: Date, to: Date) {
+export async function spending(sql: Sql, customerId: string, from: Date, to: Date) {
   const rows = await sql`
     select to_char(j.created_at at time zone 'Asia/Jakarta', 'YYYY-MM') as month, ${categoryOf(sql)} as category, sum(-p.amount)::bigint as total
     from postings p join journal_entries j on j.id = p.journal_id join accounts a on a.id = p.account_id
