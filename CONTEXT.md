@@ -88,6 +88,58 @@ _Avoid_: quota, cap
 A calendar day in Western Indonesia Time (WIB). Daily Limits reset at midnight WIB.
 _Avoid_: business day, day (unqualified)
 
+**FX Account**:
+An Account in one foreign currency (USD, SGD, JPY, AUD or EUR) owned by a Customer. It has no account number; money only moves between it and the Customer's Savings Account through an FX Exchange.
+_Avoid_: valas account, multicurrency wallet
+
+**Exchange Rate**:
+The Rupiah price of one unit of a foreign currency, set by an Officer as two numbers: the Buy Rate (what ORVYN pays when a Customer sells) and the Sell Rate (what a Customer pays when buying). Prestige and Private Customers get a narrower spread.
+_Avoid_: kurs (in code), price
+
+**FX Exchange**:
+One Journal Entry that takes money from one of a Customer's Accounts and puts the converted amount in another of their Accounts in a different currency, with an FX Position House Account on each side.
+_Avoid_: conversion, swap
+
+**Time Deposit**:
+An Account holding Rupiah for a fixed Tenor (1, 3, 6 or 12 months) at a fixed yearly rate. On the Maturity Date it either renews with the interest added (Automatic Rollover) or pays principal and interest into the Savings Account. Withdrawing early forfeits the interest.
+_Avoid_: deposito (in code), fixed deposit, term deposit
+
+### Investments
+
+**Product**:
+Something a Customer can invest in: a Fund, a Bond or Gold Savings. Each Product has a Risk Level from 1 (low) to 4 (high).
+_Avoid_: instrument, asset (for the product)
+
+**Fund**:
+A made-up mutual fund whose Net Asset Value per unit changes once a Bank Day. Customers buy and sell it in Rupiah and hold Units.
+_Avoid_: reksadana (in code), mutual fund (in UI copy is fine)
+
+**Bond**:
+A made-up Indonesian retail government bond with a fixed yearly coupon paid monthly into the Savings Account. It is bought in multiples of Rp1,000,000 and held to maturity.
+_Avoid_: SBN (in code), obligasi
+
+**Gold Savings**:
+Gold held in grams at a Buy Price and Sell Price per gram set by an Officer.
+_Avoid_: emas, gold account
+
+**Holding**:
+How much of one Product a Customer owns, in Units, face value or grams, with what they paid for it. Holdings are not Accounts: the Rupiah that bought them sits in the Investment Clearing House Account.
+_Avoid_: position, portfolio line
+
+**Risk Profile**:
+Conservative, Moderate or Aggressive, from a five-question quiz. A Customer can still buy a Product above their profile after confirming they understand.
+_Avoid_: risk appetite, investor type
+
+**Total Assets**:
+Everything a Customer owns valued in Rupiah today: Savings, Pockets, Time Deposits, FX Accounts at the Buy Rate, and Holdings at today's value. Money owed on Credit Cards is shown next to it, not subtracted.
+_Avoid_: net worth, wealth
+
+### People
+
+**Relationship Manager**:
+A named ORVYN employee assigned by an Officer to a Prestige or Private Customer, with a photo and phone number shown in the app.
+_Avoid_: RM (in UI copy), personal banker
+
 ### Ways to move money
 
 **Transfer**:
@@ -154,6 +206,7 @@ A notification kept in the app, whether or not a push notification was also sent
 - A **Transaction** is one **Journal Entry** seen from one **Customer**'s side. An **Internal Transfer** therefore shows up as two Transactions, one for each Customer.
 - A **Reversal** points to exactly one earlier **Journal Entry**, and a Journal Entry can be reversed at most once.
 - A **Registration** becomes at most one **Customer**.
+- A **Customer** has at most one **FX Account** per currency, any number of **Time Deposits**, at most one **Holding** per **Product**, and at most one **Relationship Manager**.
 
 ## Flagged ambiguities
 
