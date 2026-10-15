@@ -9,6 +9,7 @@ import { parseQris, buildQris } from './qris.ts'
 import { ratesFor, listFx, openFx, closeFx, quote, exchange } from './fx.ts'
 import { depositRates, depositQuote, listDeposits, openDeposit, breakDeposit, setInstruction } from './deposits.ts'
 import { QUIZ, setRiskProfile, listProducts, priceHistory, listHoldings, buy as buyProduct, sell as sellProduct, totalAssets } from './investments.ts'
+import { registrationOptions, finishRegistration, signInOptions, signInWithPasskey, listPasskeys, deletePasskey, PasskeyError } from './passkeys.ts'
 import { statement, statementMonths } from './statements.ts'
 import { askVyna, vynaAllowance, vynaAvailable } from './vyna.ts'
 import { insights, insightCard, setBudget, setCategory, categoryOf, SPEND_KINDS, CATEGORIES } from './insights.ts'
@@ -62,6 +63,20 @@ export function apiRoutes(sql: Sql) {
     const r = await signInWithPassword(sql, String(b.phone ?? ''), String(b.password ?? ''))
     if (!r.ok) return c.json({ error: r.reason, message: SIGN_IN_ERRORS[r.reason] }, 401)
     return c.json({ deviceToken: r.deviceToken, sessionToken: r.sessionToken, needsPin: r.needsPin })
+  })
+
+  // Story S3.12: passkey sign-in, before any session exists
+  app.post('/auth/passkey/options', async c => c.json(await signInOptions()))
+  app.post('/auth/passkey', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try {
+      const r = await signInWithPasskey(sql, b)
+      if (!r.ok) return c.json({ error: r.reason, message: SIGN_IN_ERRORS[r.reason] }, 401)
+      return c.json({ deviceToken: r.deviceToken, sessionToken: r.sessionToken, needsPin: r.needsPin })
+    } catch (e) {
+      if (e instanceof PasskeyError) return c.json({ error: 'PASSKEY', message: e.message }, 401)
+      throw e
+    }
   })
 
   app.post('/auth/pin', async c => {
@@ -220,6 +235,15 @@ export function apiRoutes(sql: Sql) {
       await stream.writeSSE({ event: 'done', data: '{}' })
     })
   })
+
+  // Passkeys (story S3.12)
+  app.get('/passkeys', async c => c.json({ passkeys: await listPasskeys(sql, c.get('customer').id) }))
+  app.post('/passkeys/options', async c => c.json(await registrationOptions(sql, c.get('customer') as any)))
+  app.post('/passkeys', async c => {
+    try { await finishRegistration(sql, c.get('customer').id, await c.req.json().catch(() => ({}))); return c.json({ ok: true }) }
+    catch (e) { if (e instanceof PasskeyError) return c.json({ error: 'PASSKEY', message: e.message }, 400); throw e }
+  })
+  app.post('/passkeys/:id/delete', async c => { await deletePasskey(sql, c.get('customer').id, c.req.param('id')); return c.json({ ok: true }) })
 
   // FX (stories S3.1–S3.2)
   app.get('/fx', async c => {

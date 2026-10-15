@@ -143,11 +143,14 @@ export async function generateHistory(tx: TransactionSql, personaKey: string, sa
   // Story S2.19 AC2: a pocket or two and some budgets, so pockets and insights have something to show in a demo.
   const goals = GOALS[personaKey] ?? { pockets: [], budgets: {} }
   for (const g of goals.pockets) {
+    // Never more than a quarter of what's in savings, so the persona can still pay its bills and card.
+    const [{ balance }] = await tx`select balance from accounts where id = ${savingsId}`
+    const saved = Math.min(g.saved, Math.floor(Number(balance) / 4 / 100_000) * 100_000)
     const [a] = await tx`insert into accounts (kind, customer_id, name, currency, floor) values ('pocket', ${customerId}, ${g.name}, 'IDR', 0) returning id`
     await tx`insert into pockets (account_id, customer_id, image, target, rule, rule_since)
       values (${a.id}, ${customerId}, ${g.image}, ${g.target}, ${g.rule ? tx.json(g.rule) : null}, ${g.rule ? now : null})`
     await postJournal(tx, { kind: 'pocket_move', at: new Date(today - 3 * DAY + 9 * 3_600_000), memo: { from: { name: 'ORVYN Everyday' }, to: { name: g.name }, channel: 'Pocket', category: 'pocket' },
-      postings: [{ accountId: savingsId, amount: -g.saved }, { accountId: a.id, amount: g.saved }] }).catch(e => { if (!(e instanceof LedgerError)) throw e })
+      postings: [{ accountId: savingsId, amount: -saved }, { accountId: a.id, amount: saved }] }).catch(e => { if (!(e instanceof LedgerError)) throw e })
   }
   for (const [category, limit] of Object.entries(goals.budgets))
     await tx`insert into budgets (customer_id, category, monthly_limit) values (${customerId}, ${category}, ${limit})`

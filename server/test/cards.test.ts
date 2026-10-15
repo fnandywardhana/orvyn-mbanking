@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { connect, migrate } from '../src/db.ts'
 import { createCustomer, setPin } from '../src/customers.ts'
 import { generateHistory } from '../src/personas.ts'
-import { checkLedger, balanceOf } from '../src/ledger.ts'
+import { checkLedger, balanceOf, postJournal, houseAccount } from '../src/ledger.ts'
 import { listCards, updateCard, cardDetails, spendOnCard, payCardBill } from '../src/cards.ts'
 
 const sql = connect()
@@ -53,6 +53,8 @@ test('a frozen card, a switched-off channel or the daily limit decline a purchas
 
 test('paying the credit card bill moves money from savings and frees up credit', async () => {
   const credit = (await listCards(sql, raka.id)).find(c => c.kind === 'credit')! as any
+  // The persona's history is random per customer; make sure there's enough to pay the whole bill.
+  await postJournal(sql, { kind: 'adjustment', postings: [{ accountId: await houseAccount(sql, 'DEMO_EQUITY'), amount: -credit.credit.owed }, { accountId: raka.savings.id, amount: credit.credit.owed }] })
   const savingsBefore = await balanceOf(sql, raka.savings.id)
   await payCardBill(sql, raka.id, credit.id, credit.credit.owed, '482915', crypto.randomUUID())
   const after = (await listCards(sql, raka.id)).find(c => c.kind === 'credit')! as any

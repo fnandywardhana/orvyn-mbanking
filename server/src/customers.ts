@@ -90,7 +90,11 @@ export async function signInWithPassword(sql: Sql, phoneInput: string, password:
   if (!c || !c.password_hash) return { ok: false, reason: 'invalid' }
   if (c.locked) return { ok: false, reason: 'locked' }
   if (!(await verifyPassword(password, c.password_hash))) return failAttempt(sql, c.id)
+  return registerDevice(sql, c)
+}
 
+/** After a password or passkey check: this phone becomes the Registered Device and the previous one is signed out. */
+export async function registerDevice(sql: Sql, c: { id: string, pin_hash: string | null }): Promise<SignIn> {
   const deviceToken = randomBytes(32).toString('base64url')
   const [previous] = await sql`select 1 from registered_devices where customer_id = ${c.id}`
   if (previous) await notify(sql, c.id, 'Signed in on a new phone', 'ORVYN is now set up on another phone, so your previous phone was signed out. If this wasn\'t you, contact the ORVYN team.')

@@ -11,6 +11,7 @@ import { runAutoSave } from './pockets.ts'
 import { runScheduledTransfers } from './scheduled.ts'
 import { runBudgetAlerts } from './insights.ts'
 import { runMaturities } from './deposits.ts'
+import { assetLinks } from './passkeys.ts'
 import { ensurePrices, runBonds } from './investments.ts'
 
 const sql = connect()
@@ -21,6 +22,7 @@ if (issued) console.log(`Issued debit cards to ${issued} existing customers`)
 
 const app = new Hono()
 app.get('/health', async c => (await sql`select 1`, c.text('ok')))
+app.get('/.well-known/assetlinks.json', c => c.json(assetLinks())) // passkeys: the app may sign in for this domain (S3.12)
 app.use('/fonts/*', serveStatic({ root: './public' }))
 app.use('/mark-*', serveStatic({ root: './public' }))
 app.use('/banners/*', async (c, next) => { await next(); c.res.headers.set('Cache-Control', 'public, max-age=86400') })
