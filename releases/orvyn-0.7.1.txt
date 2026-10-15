@@ -1,0 +1,18 @@
+ORVYN 0.7.1
+
+What's fixed
+- Signing in for the first time now asks you to create your PIN. Since 0.5.0 it wrongly asked for a PIN you didn't have yet.
+
+Everything else is the same as 0.7.0.
+
+Permissions this app asks for
+- INTERNET: to talk to the ORVYN server.
+- CAMERA: only while scanning a QR code or taking the sign-up photos. Nothing is uploaded.
+- POST_NOTIFICATIONS: to show your sign-up code and account activity (Android 13 and newer ask first).
+- RECEIVE (Firebase), WAKE_LOCK, ACCESS_NETWORK_STATE: added by Firebase so push notifications arrive. None of them reads anything about you or your phone.
+- USE_BIOMETRIC / USE_FINGERPRINT: only if you turn on fingerprint sign-in.
+- RECORD_AUDIO: only while you hold Vyna's microphone open, on phones that can recognise speech by themselves. Your voice never leaves the phone. Android asks the first time.
+No contacts, location, SMS, storage, device IDs, analytics or ads.
+
+How to update
+Open the download link on your phone, download, tap the file, then Update.
