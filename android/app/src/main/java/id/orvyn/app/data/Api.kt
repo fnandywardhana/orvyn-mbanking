@@ -50,6 +50,10 @@ data class CategorySpend(val key: String, val label: String, val total: Long, va
 data class Budget(val category: String, val label: String, val limit: Long, val spent: Long)
 data class Insights(val month: String, val months: List<Pair<String, Long>>, val categories: List<CategorySpend>, val budgets: List<Budget>)
 
+data class StatementLine(val at: Instant, val description: String, val channel: String?, val amount: Long, val balance: Long)
+data class Statement(val name: String, val accountName: String, val accountNumber: String, val month: String,
+    val opening: Long, val closing: Long, val moneyIn: Long, val moneyOut: Long, val lines: List<StatementLine>)
+
 data class Scheduled(val id: String, val name: String, val bank: String, val accountNumber: String, val amount: Long,
     val repeat: String, val nextRun: String?, val paused: Boolean, val lastOk: Boolean?, val lastMessage: String?)
 
@@ -277,6 +281,15 @@ object Api {
             emit("error" to JSONObject().put("message", "You're offline, or the connection dropped. Check it and try again."))
         } finally { conn.disconnect() }
     }.flowOn(Dispatchers.IO)
+
+    // E-statements (story S2.17)
+    suspend fun statementMonths(): List<String> = call("GET", "/statements").getJSONArray("months").let { a -> List(a.length()) { a.getString(it) } }
+    suspend fun statement(month: String): Statement {
+        val r = call("GET", "/statements/$month")
+        return Statement(r.getString("name"), r.getJSONObject("account").getString("name"), r.getJSONObject("account").getString("number"), month,
+            r.getLong("opening"), r.getLong("closing"), r.getLong("moneyIn"), r.getLong("moneyOut"),
+            r.getJSONArray("items").map { StatementLine(Instant.parse(it.getString("at")), it.getString("description"), it.optStringOrNull("channel"), it.getLong("amount"), it.getLong("balance")) })
+    }
 
     // Insights and budgets (stories S2.8–S2.11)
     suspend fun insights(): Insights {

@@ -126,6 +126,10 @@ fun ProfileScreen(store: DeviceStore, onSignedOut: () -> Unit, onRoute: (String)
             SettingRow("Privacy") { onRoute("privacy") }
         }
         Section("Account") {
+            if (id.orvyn.app.data.AppConfig.on("statements")) {
+                SettingRow("E-statements") { onRoute("statements") }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
             SettingRow("Sign out") { confirm = true }
         }
         Text("ORVYN ${BuildConfig.VERSION_NAME} · Demo. ORVYN Bank is a fictional bank, and all money in it is pretend.",

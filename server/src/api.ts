@@ -6,6 +6,7 @@ import {
 } from './customers.ts'
 import { BANKS, lookupRecipient, transferOptions, sendTransfer, payMerchant, TransferError } from './transfers.ts'
 import { parseQris, buildQris } from './qris.ts'
+import { statement, statementMonths } from './statements.ts'
 import { askVyna, vynaAllowance, vynaAvailable } from './vyna.ts'
 import { insights, insightCard, setBudget, setCategory, categoryOf, SPEND_KINDS, CATEGORIES } from './insights.ts'
 import { createRequest, createSplit, listRequests, listSplits, getRequest, payRequest, declineRequest, cancelRequest } from './requests.ts'
@@ -212,6 +213,13 @@ export function apiRoutes(sql: Sql) {
       })
       await stream.writeSSE({ event: 'done', data: '{}' })
     })
+  })
+
+  // E-statements (story S2.17)
+  app.get('/statements', async c => c.json({ months: await statementMonths(sql, c.get('customer').id) }))
+  app.get('/statements/:month', async c => {
+    const s = await statement(sql, c.get('customer').id, c.req.param('month'))
+    return s ? c.json(s) : c.json({ error: 'not_found', message: 'There is no statement for that month.' }, 404)
   })
 
   // Insights and budgets (stories S2.8–S2.11)

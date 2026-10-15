@@ -25,7 +25,7 @@ function cleanRule(r: any): Rule | null {
   if (r.type === 'weekly' && whole(r.day) >= 1 && whole(r.day) <= 7 && whole(r.amount) >= 10_000) return { type: 'weekly', day: whole(r.day), amount: whole(r.amount) }
   if (r.type === 'payday' && r.percent != null && whole(r.percent) >= 1 && whole(r.percent) <= 50) return { type: 'payday', percent: whole(r.percent) }
   if (r.type === 'payday' && whole(r.amount) >= 10_000) return { type: 'payday', amount: whole(r.amount) }
-  throw new PocketError('BAD_INPUT', 'Pick how much to save: 1–50% of pay, or at least Rp10,000.')
+  throw new PocketError('BAD_INPUT', 'Pick how much to save: between 1% and 50% of pay, or at least Rp10,000.')
 }
 
 function cleanDetails(input: { name?: any, image?: any, target?: any, targetDate?: any }) {

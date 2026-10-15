@@ -58,6 +58,7 @@ import id.orvyn.app.data.Recipient
 import id.orvyn.app.ui.pockets.PocketEditor
 import id.orvyn.app.ui.transfer.ScheduledScreen
 import id.orvyn.app.ui.vyna.VynaScreen
+import id.orvyn.app.ui.profile.StatementsScreen
 import id.orvyn.app.ui.requests.AskFlow
 import id.orvyn.app.ui.requests.RequestScreen
 import id.orvyn.app.ui.requests.RequestsScreen
@@ -216,6 +217,7 @@ fun OrvynApp(store: DeviceStore) {
             PocketMoveFlow(entry.arguments!!.getString("id")!!, entry.arguments!!.getString("dir") == "in", onExit = { nav.popBackStack() },
                 startAmount = entry.arguments?.getString("amount")?.toLongOrNull() ?: 0L)
         }
+        composable("statements") { StatementsScreen(onBack = { nav.popBackStack() }) }
         composable("vyna") {
             VynaScreen(store, onBack = { nav.popBackStack() }, onAction = { a ->
                 when (a.optString("type")) {
