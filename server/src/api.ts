@@ -5,6 +5,7 @@ import {
 } from './customers.ts'
 import { BANKS, lookupRecipient, transferOptions, sendTransfer, payMerchant, TransferError } from './transfers.ts'
 import { parseQris, buildQris } from './qris.ts'
+import { listPockets, createPocket, updatePocket, movePocket, closePocket, PocketError, POCKET_IMAGES } from './pockets.ts'
 import { inquire, payBill } from './bills.ts'
 import { listCards, updateCard, cardDetails, payCardBill } from './cards.ts'
 import { hashPassword, verifyPassword, isStrongPassword } from './auth.ts'
@@ -142,7 +143,7 @@ export function apiRoutes(sql: Sql) {
     const me = c.get('customer')
     const accounts = await sql`
       select id, kind, name, number, balance from accounts where customer_id = ${me.id} and kind in ('savings', 'pocket') order by created_at`
-    const ids = accounts.map(a => a.id)
+    const ids = accounts.filter(a => a.kind === 'savings').map(a => a.id) // a move to a pocket would otherwise show twice
     const recent = ids.length ? await sql`
       select ${txColumns(sql)} from postings p join journal_entries j on j.id = p.journal_id
       where p.account_id in ${sql(ids)} order by j.created_at desc, j.id desc limit 5` : []
@@ -150,7 +151,8 @@ export function apiRoutes(sql: Sql) {
       customer: { name: me.full_name, firstName: me.full_name.split(' ')[0], tier: me.tier },
       unread: (await sql`select count(*)::int as n from inbox_messages where customer_id = ${me.id} and read_at is null`)[0].n,
       totalBalance: accounts.reduce((s, a) => s + Number(a.balance), 0),
-      accounts: accounts.map(a => ({ id: a.id, kind: a.kind, name: a.name, number: a.number, balance: Number(a.balance) })),
+      accounts: accounts.filter(a => a.kind === 'savings').map(a => ({ id: a.id, kind: a.kind, name: a.name, number: a.number, balance: Number(a.balance) })),
+      pockets: await listPockets(sql, me.id),
       recent: recent.map(toTransaction),
     })
   })
@@ -185,9 +187,35 @@ export function apiRoutes(sql: Sql) {
     const [r] = await sql`
       select ${txColumns(sql)}, a.number as account_number from postings p
       join journal_entries j on j.id = p.journal_id join accounts a on a.id = p.account_id
-      where j.id = ${c.req.param('id')} and a.customer_id = ${me.id} limit 1`
+      where j.id = ${c.req.param('id')} and a.customer_id = ${me.id}
+        ${c.req.query('account') ? sql`and a.id = ${c.req.query('account')!}` : sql``}
+      order by a.kind = 'savings' desc limit 1`
     if (!r) return c.json({ error: 'not_found', message: "We couldn't find that transaction." }, 404)
     return c.json({ ...toTransaction(r), accountNumber: r.account_number, reference: r.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
+  })
+
+  // Pockets (stories S2.1–S2.3)
+  const pocketFail = (c: any, e: unknown) => {
+    if (e instanceof PocketError) return c.json({ error: e.code, message: e.message }, e.code === 'NOT_FOUND' ? 404 : 400)
+    throw e
+  }
+  app.get('/pockets', async c => c.json({ pockets: await listPockets(sql, c.get('customer').id), images: POCKET_IMAGES }))
+  app.post('/pockets', async c => {
+    try { return c.json({ id: await createPocket(sql, c.get('customer').id, await c.req.json().catch(() => ({}))) }) } catch (e) { return pocketFail(c, e) }
+  })
+  app.post('/pockets/:id', async c => {
+    try { await updatePocket(sql, c.get('customer').id, c.req.param('id'), await c.req.json().catch(() => ({}))); return c.json({ ok: true }) } catch (e) { return pocketFail(c, e) }
+  })
+  app.post('/pockets/:id/move', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try {
+      const r = await movePocket(sql, c.get('customer').id, c.req.param('id'), b.direction === 'out' ? 'out' : 'in', b.amount, String(b.idempotencyKey ?? crypto.randomUUID()))
+      return c.json(r)
+    } catch (e) { return pocketFail(c, e) }
+  })
+  app.post('/pockets/:id/close', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try { await closePocket(sql, c.get('customer').id, c.req.param('id'), String(b.idempotencyKey ?? crypto.randomUUID())); return c.json({ ok: true }) } catch (e) { return pocketFail(c, e) }
   })
 
   // Transfers (stories S1.12–S1.14)

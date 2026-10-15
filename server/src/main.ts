@@ -7,6 +7,7 @@ import { checkLedger } from './ledger.ts'
 import { adminRoutes } from './admin.ts'
 import { apiRoutes } from './api.ts'
 import { backfillDebitCards } from './cards.ts'
+import { runAutoSave } from './pockets.ts'
 
 const sql = connect()
 await migrate(sql)
@@ -35,6 +36,9 @@ setInterval(async () => {
   const r = await checkLedger(sql)
   if (!r.ok) console.error('LEDGER CHECK FAILED', r.problems)
 }, 24 * 60 * 60 * 1000)
+
+// Money that moves on its own (auto-save, later scheduled transfers). Each job is safe to run twice.
+setInterval(() => runAutoSave(sql).catch(e => console.error('auto-save failed', e)), 60_000)
 
 const port = Number(process.env.PORT ?? 8790)
 serve({ fetch: app.fetch, port }, () => console.log(`ORVYN server on :${port}`))

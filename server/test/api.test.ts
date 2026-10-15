@@ -148,3 +148,18 @@ test('the push token belongs to the phone: a new phone or a Profile sign-out sto
   assert.equal(await pushToken(), undefined)
   session = (await call('POST', '/auth/password', { phone: '081299990000', password: 'baru12345' })).body.sessionToken
 })
+
+test('pockets over the API: home lists them, a move shows once in recent, detail can pick the pocket side', async () => {
+  const made = await call('POST', '/pockets', { name: 'Laptop', image: 'gadget', target: 15_000_000 })
+  assert.equal(made.status, 200)
+  assert.equal((await call('POST', '/pockets', { name: '' })).body.error, 'BAD_INPUT')
+  const moved = await call('POST', `/pockets/${made.body.id}/move`, { direction: 'in', amount: 250_000, idempotencyKey: 'pk-1' })
+  assert.equal(moved.status, 200)
+  const home = await call('GET', '/home')
+  assert.equal(home.body.pockets[0].balance, 250_000)
+  assert.equal(home.body.accounts.length, 1)
+  assert.equal(home.body.recent.filter((t: any) => t.id === moved.body.journalId).length, 1)
+  assert.equal((await call('GET', `/transactions/${moved.body.journalId}`)).body.amount, -250_000)
+  assert.equal((await call('GET', `/transactions/${moved.body.journalId}?account=${made.body.id}`)).body.amount, 250_000)
+  assert.equal((await call('POST', `/pockets/${made.body.id}/move`, { direction: 'out', amount: 999_999_999 })).body.error, 'INSUFFICIENT_FUNDS')
+})

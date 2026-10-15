@@ -9,7 +9,8 @@ import { BANKS } from './transfers.ts'
 type Env = { Variables: { officer: Officer } }
 const sel = 'style="height:40px;border-radius:10px;padding:0 10px;font:inherit"'
 const form = async (c: any) => Object.fromEntries(Object.entries(await c.req.parseBody()).map(([k, x]) => [k, String(x).trim()])) as Record<string, string>
-const FEATURES: [string, string][] = [['transfer', 'Transfers'], ['qris', 'QRIS'], ['bills', 'Pay and buy'], ['cards', 'Cards'], ['register', 'Open an account']]
+const FEATURES: [string, string][] = [['transfer', 'Transfers'], ['qris', 'QRIS'], ['bills', 'Pay and buy'], ['cards', 'Cards'], ['register', 'Open an account'],
+  ['pockets', 'Pockets'], ['scheduled', 'Scheduled transfers'], ['requests', 'Request money and split bill'], ['insights', 'Insights and budgets'], ['vyna', 'Vyna, the assistant'], ['statements', 'E-statements']]
 const ROLES = { super_admin: 'Super Admin', operator: 'Operator', content: 'Content' } as Record<string, string>
 
 // Stories S1.37 (settings) and S1.38 (officers, audit log, reset demo). Super Admin only.
