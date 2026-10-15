@@ -56,7 +56,7 @@ Vyna butuh API key Anthropic di `.env` (lihat DECISIONS-PENDING #5). Fitur lain 
 | Profil risiko, reksadana (NAB harian simulasi), SBN (kupon bulanan), emas | S3.5–S3.8 | ✅ Diuji di HP |
 | Layar Wealth (total aset dan komposisi) | S3.9 | ✅ Diuji di HP, terang dan gelap |
 | Tampilan Prestige dan kartu RM (avatar monogram) | S3.10–S3.11 | ✅ Diuji di HP |
-| Passkey | S3.12 | ⚠️ Server teruji dengan authenticator software. Pembuatan passkey di HP belum diuji (menunggu izin pemilik) |
+| Passkey | S3.12 | ⚠️ Server teruji dengan authenticator software. Di HP: permintaan ORVYN diterima Google untuk orvyn.delvault.uk, tapi berhenti karena Note10+ tidak punya kunci layar (DECISIONS-PENDING #6) |
 | README dan cerita proyek | S3.13 | ✅ `README.md`, `docs/STORY.md`. Repo belum di GitHub (menunggu pemilik) |
 
 **Test otomatis:** 92 test server, test aplikasi, dan evaluasi Vyna 30/30.

@@ -4,7 +4,7 @@ Claude's working notes for things that need your answer. None of them blocks the
 
 | # | Question | Default in use | Since |
 |---|---|---|---|
-| 6 | Testing passkeys on the Note10+ saves one passkey for orvyn.delvault.uk in the Google Password Manager of the Google account on that phone. May Claude do that once (and remove it after)? | Passkeys are tested on the server with a software authenticator; the phone flow is built but not tried | 15 Oct |
+| 6 | Passkey test on the Note10+ (allowed by the owner on 15 Oct) stopped at Google's "Set up screen lock to create passkeys": the phone has no screen lock, and Claude won't change that. To finish: set a screen lock (PIN or pattern) on the Note10+, tell Claude, and remove it afterwards if you like. | Google accepted ORVYN's request for orvyn.delvault.uk and reached the screen-lock step; cancelling is handled in the app | 15 Oct |
 | 7 | KR7 asks for the project on GitHub. Create an empty repository (public or private) and say its name; Claude will add it as a remote. Pushing stays blocked for Claude by the git guardrail, so you push, or allow it once. | README and story are ready in the repo | 15 Oct |
 
 
