@@ -54,6 +54,18 @@ data class StatementLine(val at: Instant, val description: String, val channel: 
 data class Statement(val name: String, val accountName: String, val accountNumber: String, val month: String,
     val opening: Long, val closing: Long, val moneyIn: Long, val moneyOut: Long, val lines: List<StatementLine>)
 
+data class WealthPart(val key: String, val label: String, val value: Long)
+data class Wealth(val total: Long, val parts: List<WealthPart>, val creditOwed: Long)
+data class FxRate(val currency: String, val name: String, val decimals: Int, val buy: Double, val sell: Double, val special: Boolean)
+data class FxAccount(val currency: String, val name: String, val decimals: Int, val balance: Long, val idrValue: Long)
+data class Deposit(val id: String, val principal: Long, val rateBp: Int, val tenor: Int, val openedOn: String, val maturityDate: String, val instruction: String, val expectedInterest: Long)
+data class DepositQuote(val rateBp: Int, val maturityDate: String, val gross: Long, val tax: Long, val net: Long)
+data class InvestProduct(val id: String, val kind: String, val name: String, val subtype: String?, val riskLevel: Int, val manager: String?, val minBuy: Long,
+    val description: String, val suitable: Boolean?, val nav: Double?, val oneYear: Double?, val couponBp: Int?, val maturity: String?, val goldBuy: Long?, val goldSell: Long?)
+data class Holding(val productId: String, val kind: String, val name: String, val quantity: Double, val cost: Long, val value: Long, val gain: Long)
+data class Invest(val riskProfile: String?, val products: List<InvestProduct>, val holdings: List<Holding>, val quiz: List<Pair<String, List<String>>>)
+data class RelationshipManager(val name: String, val title: String, val phone: String, val email: String)
+
 data class Scheduled(val id: String, val name: String, val bank: String, val accountNumber: String, val amount: Long,
     val repeat: String, val nextRun: String?, val paused: Boolean, val lastOk: Boolean?, val lastMessage: String?)
 
@@ -66,6 +78,7 @@ data class Home(
     val accounts: List<Account>,
     val recent: List<Transaction>,
     val pockets: List<Pocket> = emptyList(),
+    val relationshipManager: RelationshipManager? = null,
 )
 
 data class Page(val items: List<Transaction>, val next: String?)
@@ -162,6 +175,17 @@ object Api {
         val r = call("POST", "/auth/password", JSONObject().put("phone", phone).put("password", password))
         return SignIn(r.getString("deviceToken"), r.getString("sessionToken"), r.getBoolean("needsPin")).also { session = it.sessionToken }
     }
+
+    // Passkeys (story S3.12): the server's WebAuthn options go to Credential Manager as JSON, and its answer comes back as JSON.
+    suspend fun passkeySignInOptions(): String = call("POST", "/auth/passkey/options").toString()
+    suspend fun signInWithPasskey(credentialJson: String): SignIn {
+        val r = call("POST", "/auth/passkey", JSONObject(credentialJson))
+        return SignIn(r.getString("deviceToken"), r.getString("sessionToken"), r.getBoolean("needsPin")).also { session = it.sessionToken }
+    }
+    suspend fun passkeyOptions(): String = call("POST", "/passkeys/options").toString()
+    suspend fun registerPasskey(credentialJson: String) { call("POST", "/passkeys", JSONObject(credentialJson)) }
+    suspend fun passkeys(): List<Pair<String, Instant>> = call("GET", "/passkeys").getJSONArray("passkeys").map { it.getString("id") to Instant.parse(it.getString("createdAt")) }
+    suspend fun deletePasskey(id: String) { call("POST", "/passkeys/$id/delete") }
 
     suspend fun signInWithPin(deviceToken: String, pin: String) {
         session = call("POST", "/auth/pin", JSONObject().put("deviceToken", deviceToken).put("pin", pin)).getString("sessionToken")
@@ -281,6 +305,56 @@ object Api {
             emit("error" to JSONObject().put("message", "You're offline, or the connection dropped. Check it and try again."))
         } finally { conn.disconnect() }
     }.flowOn(Dispatchers.IO)
+
+    // Wealth (stories S3.1–S3.9)
+    private fun ref(r: JSONObject) = r.getString("reference")
+    suspend fun wealth(): Wealth {
+        val r = call("GET", "/wealth")
+        return Wealth(r.getLong("total"), r.getJSONArray("parts").map { WealthPart(it.getString("key"), it.getString("label"), it.getLong("value")) }, r.getLong("creditOwed"))
+    }
+    suspend fun fx(): Pair<List<FxRate>, List<FxAccount>> {
+        val r = call("GET", "/fx")
+        return r.getJSONArray("rates").map { FxRate(it.getString("currency"), it.getString("name"), it.getInt("decimals"), it.getDouble("buy"), it.getDouble("sell"), it.getBoolean("special")) } to
+            r.getJSONArray("accounts").map { FxAccount(it.getString("currency"), it.getString("name"), it.getInt("decimals"), it.getLong("balance"), it.getLong("idrValue")) }
+    }
+    /** [minor] is in the currency's smallest unit (cents; yen). Returns the Rupiah amount and the rate used. */
+    suspend fun fxQuote(currency: String, buy: Boolean, minor: Long): Pair<Long, Double> =
+        call("POST", "/fx/quote", JSONObject().put("currency", currency).put("side", if (buy) "buy" else "sell").put("amount", minor)).let { it.getLong("idr") to it.getDouble("rate") }
+    suspend fun fxExchange(currency: String, buy: Boolean, minor: Long, pin: String, key: String): String =
+        ref(call("POST", "/fx/exchange", JSONObject().put("currency", currency).put("side", if (buy) "buy" else "sell").put("amount", minor).put("pin", pin).put("idempotencyKey", key)))
+    suspend fun fxClose(currency: String) { call("POST", "/fx/$currency/close") }
+
+    suspend fun deposits(): Pair<List<Pair<Int, Int>>, List<Deposit>> {
+        val r = call("GET", "/deposits")
+        return r.getJSONArray("rates").map { it.getInt("tenor") to it.getInt("rateBp") } to r.getJSONArray("deposits").map {
+            Deposit(it.getString("id"), it.getLong("principal"), it.getInt("rateBp"), it.getInt("tenor"), it.getString("openedOn"), it.getString("maturityDate"), it.getString("instruction"), it.getLong("expectedInterest"))
+        }
+    }
+    suspend fun depositQuote(amount: Long, tenor: Int): DepositQuote = call("POST", "/deposits/quote", JSONObject().put("amount", amount).put("tenor", tenor)).let {
+        DepositQuote(it.getInt("rateBp"), it.getString("maturityDate"), it.getLong("gross"), it.getLong("tax"), it.getLong("net"))
+    }
+    suspend fun openDeposit(amount: Long, tenor: Int, rollover: Boolean, pin: String, key: String): String =
+        ref(call("POST", "/deposits", JSONObject().put("amount", amount).put("tenor", tenor).put("instruction", if (rollover) "rollover" else "payout").put("pin", pin).put("idempotencyKey", key)))
+    suspend fun setDepositInstruction(id: String, rollover: Boolean) { call("POST", "/deposits/$id/instruction", JSONObject().put("instruction", if (rollover) "rollover" else "payout")) }
+    suspend fun withdrawDeposit(id: String, pin: String) { call("POST", "/deposits/$id/withdraw", JSONObject().put("pin", pin)) }
+
+    suspend fun invest(): Invest {
+        val r = call("GET", "/invest")
+        return Invest(r.optStringOrNull("riskProfile"),
+            r.getJSONArray("products").map { InvestProduct(it.getString("id"), it.getString("kind"), it.getString("name"), it.optStringOrNull("subtype"), it.getInt("riskLevel"),
+                it.optStringOrNull("manager"), it.getLong("minBuy"), it.getString("description"), if (it.isNull("suitable")) null else it.getBoolean("suitable"),
+                it.optDouble("nav").takeIf { d -> !d.isNaN() }, it.optDouble("oneYear").takeIf { d -> !d.isNaN() && !it.isNull("oneYear") },
+                it.optInt("couponBp").takeIf { c -> c > 0 }, it.optStringOrNull("maturity"), it.optLong("buyPrice").takeIf { p -> p > 0 }, it.optLong("sellPrice").takeIf { p -> p > 0 }) },
+            r.getJSONArray("holdings").map { Holding(it.getString("productId"), it.getString("kind"), it.getString("name"), it.getDouble("quantity"), it.getLong("cost"), it.getLong("value"), it.getLong("gain")) },
+            r.getJSONArray("quiz").map { q -> q.getString("q") to q.getJSONArray("a").let { a -> List(a.length()) { a.getString(it) } } })
+    }
+    suspend fun prices(productId: String, days: Int): List<Pair<String, Double>> =
+        call("GET", "/invest/$productId/prices?days=$days").getJSONArray("prices").map { it.getString("day") to it.getDouble("price") }
+    suspend fun setRiskProfile(answers: List<Int>): String = call("POST", "/invest/profile", JSONObject().put("answers", JSONArray(answers))).getString("profile")
+    suspend fun buyProduct(id: String, amount: Long?, grams: Double?, acknowledgeRisk: Boolean, pin: String, key: String): String =
+        ref(call("POST", "/invest/$id/buy", JSONObject().put("amount", amount ?: JSONObject.NULL).put("grams", grams ?: JSONObject.NULL).put("acknowledgeRisk", acknowledgeRisk).put("pin", pin).put("idempotencyKey", key)))
+    suspend fun sellProduct(id: String, quantity: Double?, pin: String, key: String): String =
+        ref(call("POST", "/invest/$id/sell", JSONObject().put("quantity", quantity ?: JSONObject.NULL).put("pin", pin).put("idempotencyKey", key)))
 
     // E-statements (story S2.17)
     suspend fun statementMonths(): List<String> = call("GET", "/statements").getJSONArray("months").let { a -> List(a.length()) { a.getString(it) } }
@@ -461,6 +535,7 @@ fun parseHome(j: JSONObject): Home {
         },
         recent = j.getJSONArray("recent").map(::parseTransaction),
         pockets = j.optJSONArray("pockets")?.map(::parsePocket) ?: emptyList(),
+        relationshipManager = j.optJSONObject("relationshipManager")?.let { RelationshipManager(it.getString("name"), it.getString("title"), it.getString("phone"), it.getString("email")) },
     )
 }
 

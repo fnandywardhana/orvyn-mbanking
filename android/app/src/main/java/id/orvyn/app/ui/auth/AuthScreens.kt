@@ -46,6 +46,7 @@ import id.orvyn.app.data.ApiException
 import id.orvyn.app.data.DeviceStore
 import id.orvyn.app.ui.components.MessageState
 import id.orvyn.app.ui.components.OrvynButton
+import id.orvyn.app.ui.components.ButtonKind
 import id.orvyn.app.ui.components.OrvynTextButton
 import id.orvyn.app.ui.components.OrvynTextField
 import id.orvyn.app.ui.components.PinPad
@@ -107,8 +108,23 @@ fun SignInScreen(store: DeviceStore, onBack: () -> Unit, onSignedIn: (needsPin: 
                     }
                 }
             },
-            modifier = Modifier.padding(vertical = 16.dp),
+            modifier = Modifier.padding(top = 16.dp),
         )
+        // Story S3.12: a passkey made earlier replaces the phone number and password.
+        val activity = androidx.compose.ui.platform.LocalContext.current as android.app.Activity
+        if (id.orvyn.app.data.AppConfig.on("passkeys")) OrvynButton("Sign in with a passkey", kind = ButtonKind.Secondary, enabled = !busy,
+            modifier = Modifier.padding(vertical = 12.dp), onClick = {
+                busy = true
+                scope.launch {
+                    try {
+                        val r = id.orvyn.app.ui.profile.signInWithPasskey(activity)
+                        store.forgetDevice()
+                        store.deviceToken = r.deviceToken
+                        onSignedIn(r.needsPin)
+                    } catch (_: id.orvyn.app.ui.profile.PasskeyCancelled) {
+                    } catch (e: ApiException) { error = e.message } finally { busy = false }
+                }
+            })
     }
 }
 

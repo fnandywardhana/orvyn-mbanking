@@ -13,7 +13,7 @@ type Customer = { id: string, tier: string, full_name?: string }
 
 /** Rates a customer gets. Prestige and Private pay a narrower spread around the middle rate (S3.2 AC4). */
 export async function ratesFor(sql: Sql, tier: string) {
-  const rows = await sql`select currency, buy, sell from fx_rates order by currency`
+  const rows = await sql`select currency, buy, sell from fx_rates order by array_position(array['USD', 'SGD', 'EUR', 'JPY', 'AUD'], currency::text)`
   const [s] = await sql`select value from settings where key = 'fx_prestige_spread'`
   const factor = tier === 'everyday' ? 1 : Number(s?.value?.factor ?? 0.5)
   return rows.map(r => {

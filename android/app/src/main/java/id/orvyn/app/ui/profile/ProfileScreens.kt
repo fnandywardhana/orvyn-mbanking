@@ -99,8 +99,13 @@ fun ProfileScreen(store: DeviceStore, onSignedOut: () -> Unit, onRoute: (String)
             Text(home.fullName, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             TierBadge(Tier.valueOf(home.tier.replaceFirstChar(Char::uppercase)))
         }
+        home?.relationshipManager?.let { id.orvyn.app.ui.wealth.RelationshipManagerCard(it, Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
         Section("Security") {
             SettingRow("Change PIN") { onRoute("profile/pin") }
+            if (id.orvyn.app.data.AppConfig.on("passkeys")) {
+                Divider()
+                SettingRow("Passkeys") { onRoute("passkeys") }
+            }
             Divider()
             SettingRow("Change password") { onRoute("profile/password") }
             if (canUseBiometrics(activity)) {

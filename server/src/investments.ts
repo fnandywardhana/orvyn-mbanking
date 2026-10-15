@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { Sql } from './db.ts'
 import { postJournal, houseAccount, LedgerError } from './ledger.ts'
 import { authorizePayout, TransferError } from './transfers.ts'
@@ -38,10 +39,10 @@ export async function setRiskProfile(sql: Sql, customerId: string, answers: numb
 // ---- Prices
 
 /** Same product and day, same number: a stable pseudo-random normal draw for the simulated NAV. */
+// SHA-256, not a quick string hash: FNV on near-identical seeds ("ORV-EQ2026-10-14") came out biased (mean -0.21 a day).
 function noise(seed: string) {
-  let h = 2166136261
-  for (const ch of seed) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0
-  const u1 = ((h & 0xffff) + 1) / 65537, u2 = ((h >>> 16) + 1) / 65537
+  const h = createHash('sha256').update(seed).digest()
+  const u1 = (h.readUInt32BE(0) + 1) / 4294967297, u2 = (h.readUInt32BE(4) + 1) / 4294967297
   return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
 }
 
@@ -106,7 +107,7 @@ export async function listHoldings(sql: Sql, customerId: string) {
   const rows = await sql`select h.*, p.kind, p.name from holdings h join products p on p.id = h.product_id where h.customer_id = ${customerId} and h.quantity > 0 order by p.kind, p.name`
   const out = []
   for (const h of rows) {
-    const value = Math.floor(Number(h.quantity) * await unitValue(sql, { id: h.product_id, kind: h.kind }))
+    const value = Math.round(Number(h.quantity) * await unitValue(sql, { id: h.product_id, kind: h.kind })) // round: floor showed Rp1 "lost" right after buying
     out.push({ productId: h.product_id, kind: h.kind, name: h.name, quantity: Number(h.quantity), cost: Number(h.cost), value, gain: value - Number(h.cost) })
   }
   return out

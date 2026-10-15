@@ -59,6 +59,8 @@ import id.orvyn.app.ui.pockets.PocketEditor
 import id.orvyn.app.ui.transfer.ScheduledScreen
 import id.orvyn.app.ui.vyna.VynaScreen
 import id.orvyn.app.ui.profile.StatementsScreen
+import id.orvyn.app.ui.profile.PasskeysScreen
+import id.orvyn.app.ui.wealth.*
 import id.orvyn.app.ui.requests.AskFlow
 import id.orvyn.app.ui.requests.RequestScreen
 import id.orvyn.app.ui.requests.RequestsScreen
@@ -117,7 +119,8 @@ object SignOutSignal { var count by mutableIntStateOf(0) }
 fun OrvynApp(store: DeviceStore) {
     val nav = rememberNavController()
     val cached = remember { store.lastHome?.second?.let { runCatching { parseHome(JSONObject(it)) }.getOrNull() } }
-    val start = if (store.deviceToken != null) "unlock" else "welcome"
+    // Decided once: recomputing it when the device token appears (first sign-in) would rebuild the graph and jump to unlock.
+    val start = remember { if (store.deviceToken != null) "unlock" else "welcome" }
 
     LaunchedEffect(DataVersion.count) { runCatching { Api.loadConfig() } }
     AppConfig.maintenance?.let { message ->
@@ -217,6 +220,21 @@ fun OrvynApp(store: DeviceStore) {
         composable("pocket/{id}/move/{dir}?amount={amount}", arguments = listOf(androidx.navigation.navArgument("amount") { nullable = true; defaultValue = null })) { entry ->
             PocketMoveFlow(entry.arguments!!.getString("id")!!, entry.arguments!!.getString("dir") == "in", onExit = { nav.popBackStack() },
                 startAmount = entry.arguments?.getString("amount")?.toLongOrNull() ?: 0L)
+        }
+        composable("passkeys") { PasskeysScreen(onBack = { nav.popBackStack() }) }
+        composable("wealth") { WealthScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate(it) }) }
+        composable("fx") { FxScreen(onBack = { nav.popBackStack() }, onExchange = { c, b -> nav.navigate("fx/$c/${if (b) "buy" else "sell"}") }) }
+        composable("fx/{currency}/{side}") { e -> FxExchangeFlow(e.arguments!!.getString("currency")!!, e.arguments!!.getString("side") == "buy", onExit = { nav.popBackStack() }) }
+        composable("deposits") { DepositsScreen(onBack = { nav.popBackStack() }, onOpenNew = { nav.navigate("deposits/new") }) }
+        composable("deposits/new") { OpenDepositFlow(onExit = { nav.popBackStack() }) }
+        composable("invest") { InvestScreen(onBack = { nav.popBackStack() }, onQuiz = { nav.navigate("invest/quiz") }, onProduct = { nav.navigate("invest/p/$it") }) }
+        composable("invest/quiz") { RiskQuizFlow(onExit = { nav.popBackStack() }) }
+        composable("invest/p/{pid}") { e ->
+            val pid = e.arguments!!.getString("pid")!!
+            ProductScreen(pid, onBack = { nav.popBackStack() }, onTrade = { nav.navigate("invest/p/$pid/${if (it) "buy" else "sell"}") })
+        }
+        composable("invest/p/{pid}/{side}") { e ->
+            TradeFlow(e.arguments!!.getString("pid")!!, e.arguments!!.getString("side") == "buy", onExit = { nav.popBackStack() }, onQuiz = { nav.navigate("invest/quiz") })
         }
         composable("statements") { StatementsScreen(onBack = { nav.popBackStack() }) }
         composable("vyna") {

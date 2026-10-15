@@ -187,6 +187,14 @@ fun HomeScreen(
                     Text(if (hidden) "Rp••••••" else Money.format(a.balance), style = MaterialTheme.typography.titleLarge)
                 }
             }
+            if (h != null && listOf("fx", "deposits", "invest").any { id.orvyn.app.data.AppConfig.on(it) }) item {
+                Eyebrow("Wealth")
+                id.orvyn.app.ui.wealth.WealthCard(onOpen = { onRoute("wealth") })
+            }
+            h?.relationshipManager?.let { rm -> item {
+                Eyebrow("Your Relationship Manager")
+                id.orvyn.app.ui.wealth.RelationshipManagerCard(rm, Modifier.padding(horizontal = 20.dp))
+            } }
             if (h != null && id.orvyn.app.data.AppConfig.on("pockets")) item {
                 Eyebrow("Pockets")
                 id.orvyn.app.ui.pockets.PocketsStrip(h.pockets, hidden, onOpen = { onRoute("pocket/$it") }, onCreate = { onRoute("pocket/new") })
@@ -225,15 +233,25 @@ private fun Hero(h: Home?, hidden: Boolean, onToggle: () -> Unit, onInbox: () ->
     id.orvyn.app.ui.DarkTopBar()
     // Count the balance up only when it actually changes (design system: balance motion).
     val reduced = rememberReducedMotion()
-    val shown = remember { Animatable(h?.totalBalance?.toFloat() ?: 0f) }
+    // Animate a 0..1 fraction and compute the Rupiah exactly: a Float can't hold Rp835,108,000 (it showed ...107,968).
+    var from by remember { mutableStateOf(h?.totalBalance ?: 0L) }
+    var to by remember { mutableStateOf(h?.totalBalance ?: 0L) }
+    val progress = remember { Animatable(1f) }
     LaunchedEffect(h?.totalBalance) {
-        val target = h?.totalBalance?.toFloat() ?: return@LaunchedEffect
-        if (reduced || shown.value == 0f) shown.snapTo(target) else shown.animateTo(target, tween(600))
+        val target = h?.totalBalance ?: return@LaunchedEffect
+        if (target == to) return@LaunchedEffect
+        from = if (to == 0L) target else to; to = target
+        progress.snapTo(0f)
+        if (reduced || from == to) progress.snapTo(1f) else progress.animateTo(1f, tween(600))
     }
+    val shownBalance = from + ((to - from) * progress.value.toDouble()).toLong()
     Column(
         Modifier.fillMaxWidth().background(Brand.Hero).drawBehind {
+            // S3.10: Prestige and Private get gold (Giallo) stripes and a gold edge
+            val prestige = h != null && h.tier != "everyday"
             val w = 22.dp.toPx(); var x = 0f
-            while (x < size.width) { drawRect(Color.White.copy(alpha = 0.05f), Offset(x, 0f), Size(w, size.height)); x += w * 2 }
+            while (x < size.width) { drawRect(if (prestige) Brand.Giallo.copy(alpha = 0.09f) else Color.White.copy(alpha = 0.05f), Offset(x, 0f), Size(w, size.height)); x += w * 2 }
+            if (prestige) drawRect(Brand.Giallo, Offset(0f, size.height - 3.dp.toPx()), Size(size.width, 3.dp.toPx()))
         }.statusBarsPadding().padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 56.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -254,7 +272,7 @@ private fun Hero(h: Home?, hidden: Boolean, onToggle: () -> Unit, onInbox: () ->
         Text("Total balance", style = MaterialTheme.typography.bodyMedium, color = Brand.HeroTextMuted)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (h == null) "Rp—" else if (hidden) "Rp••••••••" else Money.format(shown.value.toLong()),
+                if (h == null) "Rp—" else if (hidden) "Rp••••••••" else Money.format(shownBalance),
                 style = OrvynType.displayBalance, color = Color.White, modifier = Modifier.weight(1f, fill = false),
             )
             IconButton(onClick = onToggle) {
