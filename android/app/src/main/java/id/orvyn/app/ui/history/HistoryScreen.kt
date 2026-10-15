@@ -1,5 +1,11 @@
 package id.orvyn.app.ui.history
 
+import kotlinx.coroutines.launch
+import id.orvyn.app.data.DataVersion
+import id.orvyn.app.ui.components.ListRow
+import id.orvyn.app.ui.components.OrvynBottomSheet
+import id.orvyn.app.ui.insights.CATEGORIES
+import id.orvyn.app.ui.insights.categoryLabel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -76,7 +82,7 @@ private enum class Filter(val label: String, val direction: String?) { All("All"
 
 /** Story S1.10: newest first, grouped by day, loads more while scrolling, search and in/out filter. */
 @Composable
-fun HistoryScreen(accountId: String?, onOpen: (String) -> Unit) {
+fun HistoryScreen(accountId: String?, onOpen: (String) -> Unit, onInsights: (() -> Unit)? = null) {
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf(Filter.All) }
     val items = remember { mutableStateListOf<Transaction>() }
@@ -102,7 +108,10 @@ fun HistoryScreen(accountId: String?, onOpen: (String) -> Unit) {
     LaunchedEffect(nearEnd, next) { if (nearEnd && next != null && !loading) page(reset = false) }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
-        Text("History", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 12.dp).semantics { heading() })
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("History", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f).padding(start = 20.dp, top = 16.dp, bottom = 12.dp).semantics { heading() })
+            if (onInsights != null && AppConfig.on("insights")) OrvynTextButton("Insights", onClick = onInsights, modifier = Modifier.padding(end = 8.dp, top = 4.dp))
+        }
         OutlinedTextField(
             value = query, onValueChange = { query = it }, singleLine = true,
             placeholder = { Text("Search name, note or amount") },
@@ -168,6 +177,20 @@ fun TransactionDetailScreen(id: String, account: String? = null, onBack: () -> U
     LaunchedEffect(id) { try { t = Api.transaction(id, account) } catch (e: ApiException) { error = e.message } }
     val clipboard = LocalClipboardManager.current
     val context = androidx.compose.ui.platform.LocalContext.current
+    var picking by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    // S2.8 AC3: move this transaction to another spending category.
+    if (picking) OrvynBottomSheet(onDismiss = { picking = false }) {
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Category", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 8.dp))
+            for ((key, label, icon) in CATEGORIES) {
+                ListRow(label, null, icon, onClick = {
+                    picking = false
+                    scope.launch { runCatching { Api.setCategory(id, key); t = Api.transaction(id, account); DataVersion.count++ } }
+                }) { if (t?.spendCategory == key) Icon(painterResource(R.drawable.ph_check), contentDescription = "Current", tint = MaterialTheme.colorScheme.primary) }
+            }
+        }
+    }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         IconButton(onClick = onBack, modifier = Modifier.padding(start = 8.dp, top = 4.dp)) {
@@ -194,6 +217,12 @@ fun TransactionDetailScreen(id: String, account: String? = null, onBack: () -> U
                     verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Field("Date", formatDateTime(tx.at))
                     tx.subtitle?.let { Field("Type", it) }
+                    tx.spendCategory?.let { c ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) { Field("Category", categoryLabel(c)) }
+                            OrvynTextButton("Change", onClick = { picking = true })
+                        }
+                    }
                     tx.note?.let { Field("Note", it) }
                     if (tx.fee > 0) Field("Fee", Money.format(tx.fee))
                     tx.accountNumber?.let { Field("Account", groupAccountNumber(it)) }

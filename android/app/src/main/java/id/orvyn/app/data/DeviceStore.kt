@@ -51,6 +51,11 @@ class DeviceStore(context: Context) {
         get() = prefs.getBoolean("asked_notifications", false)
         set(v) = prefs.edit().putBoolean("asked_notifications", v).apply()
 
+    /** S2.11 AC3: the week ("2026-W42") the home insight card was closed; it comes back the week after. */
+    var insightDismissedWeek: String?
+        get() = prefs.getString("insight_week", null)
+        set(v) = prefs.edit().putString("insight_week", v).apply()
+
     fun forgetDevice() {
         val theme = themeMode
         prefs.edit().clear().putString("theme", theme).apply()

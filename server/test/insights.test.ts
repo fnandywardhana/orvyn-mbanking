@@ -38,7 +38,7 @@ test('six months of totals, categories against last month, pocket moves are not 
 })
 
 test('the home card names the biggest change on the same days last month, or a budget near its limit', async () => {
-  assert.equal((await insightCard(sql, raka.id, NOW))!.text, 'Food and drinks is up 25% on the same days last month.')
+  assert.equal((await insightCard(sql, raka.id, NOW))!.text, "You've spent 25% more on food and drinks than by this point last month.")
   await setBudget(sql, raka.id, 'bills', 350_000)
   assert.equal((await insightCard(sql, raka.id, NOW))!.text, "You've used 86% of your Bills budget this month.")
   await setBudget(sql, raka.id, 'bills', null)

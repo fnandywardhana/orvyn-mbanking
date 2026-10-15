@@ -31,6 +31,7 @@ data class Transaction(
     val reversed: Boolean,
     val reference: String? = null,
     val accountNumber: String? = null,
+    val spendCategory: String? = null,
 )
 
 /** Story S2.1. [rule] is the server's auto-save rule as-is, e.g. {"type":"weekly","day":1,"amount":100000}. */
@@ -42,6 +43,11 @@ data class Pocket(val id: String, val name: String, val balance: Long, val image
 data class MoneyRequest(val id: String, val amount: Long, val note: String?, val status: String, val mine: Boolean, val from: String, val to: String, val splitId: String?, val at: Instant)
 data class SplitPerson(val requestId: String, val name: String, val amount: Long, val status: String)
 data class Split(val id: String, val total: Long, val note: String?, val people: List<SplitPerson>)
+
+/** Stories S2.8–S2.11. [change] is percent against last month, null when last month had nothing. */
+data class CategorySpend(val key: String, val label: String, val total: Long, val previous: Long, val change: Int?)
+data class Budget(val category: String, val label: String, val limit: Long, val spent: Long)
+data class Insights(val month: String, val months: List<Pair<String, Long>>, val categories: List<CategorySpend>, val budgets: List<Budget>)
 
 data class Scheduled(val id: String, val name: String, val bank: String, val accountNumber: String, val amount: Long,
     val repeat: String, val nextRun: String?, val paused: Boolean, val lastOk: Boolean?, val lastMessage: String?)
@@ -172,9 +178,11 @@ object Api {
 
     suspend fun homeJson(): JSONObject = call("GET", "/home")
 
-    suspend fun transactions(accountId: String, before: String? = null, direction: String? = null, query: String? = null): Page {
+    suspend fun transactions(accountId: String, before: String? = null, direction: String? = null, query: String? = null, category: String? = null, from: Instant? = null): Page {
         val params = listOfNotNull(
             "limit=30",
+            category?.let { "category=$it" },
+            from?.let { "from=" + enc(it.toString()) },
             before?.let { "before=" + enc(it) },
             direction?.let { "direction=$it" },
             query?.takeIf { it.isNotBlank() }?.let { "q=" + enc(it) },
@@ -231,6 +239,19 @@ object Api {
     suspend fun updateSchedule(id: String, paused: Boolean? = null, delete: Boolean = false) {
         call("POST", "/scheduled/$id", JSONObject().apply { paused?.let { put("paused", it) }; if (delete) put("delete", true) })
     }
+
+    // Insights and budgets (stories S2.8–S2.11)
+    suspend fun insights(): Insights {
+        val r = call("GET", "/insights")
+        return Insights(r.getString("month"),
+            r.getJSONArray("months").map { it.getString("month") to it.getLong("total") },
+            r.getJSONArray("categories").map { CategorySpend(it.getString("key"), it.getString("label"), it.getLong("total"), it.getLong("previous"), if (it.isNull("change")) null else it.getInt("change")) },
+            r.getJSONArray("budgets").map { Budget(it.getString("category"), it.getString("label"), it.getLong("limit"), it.getLong("spent")) })
+    }
+    /** One sentence for the home screen, or null when there isn't enough history yet. */
+    suspend fun insightCard(): String? = call("GET", "/insights/card").optJSONObject("card")?.getString("text")
+    suspend fun setBudget(category: String, limit: Long?) { call("POST", "/budgets", JSONObject().put("category", category).put("limit", limit ?: JSONObject.NULL)) }
+    suspend fun setCategory(transactionId: String, category: String) { call("POST", "/transactions/$transactionId/category", JSONObject().put("category", category)) }
 
     // Money Requests and Split Bills (stories S2.6–S2.7)
     private fun parseRequest(r: JSONObject) = MoneyRequest(r.getString("id"), r.getLong("amount"), r.optStringOrNull("note"), r.getString("status"),
@@ -425,6 +446,7 @@ fun parseTransaction(t: JSONObject) = Transaction(
     reversed = t.optString("status") == "reversed",
     reference = t.optStringOrNull("reference"),
     accountNumber = t.optStringOrNull("accountNumber"),
+    spendCategory = t.optStringOrNull("spendCategory"),
 )
 
 private fun JSONObject.optStringOrNull(key: String) = if (isNull(key) || !has(key)) null else getString(key)

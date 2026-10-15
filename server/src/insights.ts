@@ -36,19 +36,30 @@ async function spending(sql: Sql, customerId: string, from: Date, to: Date) {
   return rows.map(r => ({ month: r.month as string, category: r.category as Category, total: Number(r.total) }))
 }
 
+/** Last month from its 1st up to the same day of the month as now: a fair comparison while this month is still going. */
+function sameDaysLastMonth(now: Date) {
+  const day = new Date(now.getTime() + 7 * 3600_000).getUTCDate()
+  const from = monthStart(monthKey(now, -1))
+  return { from, to: new Date(Math.min(from.getTime() + day * 86400_000, monthStart(monthKey(now)).getTime())) }
+}
+
 export async function insights(sql: Sql, customerId: string, now = new Date()) {
-  const thisMonth = monthKey(now), lastMonth = monthKey(now, -1)
+  const thisMonth = monthKey(now)
   const rows = await spending(sql, customerId, monthStart(monthKey(now, -5)), monthStart(monthKey(now, 1)))
-  const sum = (month: string, cat?: Category) => rows.filter(r => r.month === month && (!cat || r.category === cat)).reduce((s, r) => s + r.total, 0)
+  const last = sameDaysLastMonth(now)
+  const before = await spending(sql, customerId, last.from, last.to)
+  const sum = (list: typeof rows, month: string | null, cat?: Category) =>
+    list.filter(r => (!month || r.month === month) && (!cat || r.category === cat)).reduce((s, r) => s + r.total, 0)
   const budgets = await sql`select category, monthly_limit from budgets where customer_id = ${customerId}`
   return {
     month: thisMonth,
-    months: [-5, -4, -3, -2, -1, 0].map(d => ({ month: monthKey(now, d), total: sum(monthKey(now, d)) })),
+    months: [-5, -4, -3, -2, -1, 0].map(d => ({ month: monthKey(now, d), total: sum(rows, monthKey(now, d)) })),
+    // previous: the same days of last month, not all of it
     categories: CATEGORIES.map(c => {
-      const total = sum(thisMonth, c), previous = sum(lastMonth, c)
+      const total = sum(rows, thisMonth, c), previous = sum(before, null, c)
       return { key: c, label: LABELS[c], total, previous, change: previous > 0 ? Math.round((total - previous) * 100 / previous) : null }
     }).filter(c => c.total > 0 || c.previous > 0).sort((a, b) => b.total - a.total),
-    budgets: budgets.map(b => ({ category: b.category, label: LABELS[b.category as Category], limit: Number(b.monthly_limit), spent: sum(thisMonth, b.category) })),
+    budgets: budgets.map(b => ({ category: b.category, label: LABELS[b.category as Category], limit: Number(b.monthly_limit), spent: sum(rows, thisMonth, b.category) })),
   }
 }
 
@@ -61,10 +72,8 @@ export async function insightCard(sql: Sql, customerId: string, now = new Date()
   const tight = i.budgets.map(b => ({ ...b, used: Math.round(b.spent * 100 / b.limit) })).filter(b => b.used >= 80).sort((a, b) => b.used - a.used)[0]
   if (tight) return { text: tight.used >= 100 ? `You've gone over your ${tight.label} budget this month.` : `You've used ${tight.used}% of your ${tight.label} budget this month.`, category: tight.category }
 
-  const day = new Date(now.getTime() + 7 * 3600_000).getUTCDate()
-  const lastFrom = monthStart(monthKey(now, -1))
-  const lastSameDay = new Date(Math.min(lastFrom.getTime() + day * 86400_000, monthStart(monthKey(now)).getTime()))
-  const before = await spending(sql, customerId, lastFrom, lastSameDay)
+  const last = sameDaysLastMonth(now)
+  const before = await spending(sql, customerId, last.from, last.to)
   const so = await spending(sql, customerId, monthStart(monthKey(now)), now)
   if (!before.length) return null
   const best = CATEGORIES.map(c => {
@@ -73,7 +82,7 @@ export async function insightCard(sql: Sql, customerId: string, now = new Date()
     return { c, a, b, change: b > 0 ? Math.round((a - b) * 100 / b) : 0 }
   }).filter(x => x.b >= 100_000 && Math.abs(x.change) >= 10).sort((x, y) => Math.abs(y.change) - Math.abs(x.change))[0]
   if (!best) return { text: `You've spent ${rp(so.reduce((s, r) => s + r.total, 0))} so far this month, about the same as last month.`, category: null }
-  return { text: `${LABELS[best.c]} is ${best.change > 0 ? 'up' : 'down'} ${Math.abs(best.change)}% on the same days last month.`, category: best.c }
+  return { text: `You've spent ${Math.abs(best.change)}% ${best.change > 0 ? 'more' : 'less'} on ${LABELS[best.c].toLowerCase()} than by this point last month.`, category: best.c }
 }
 
 export async function setBudget(sql: Sql, customerId: string, category: string, limit: number | null) {

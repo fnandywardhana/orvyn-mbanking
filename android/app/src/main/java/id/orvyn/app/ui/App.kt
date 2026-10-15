@@ -1,5 +1,7 @@
 package id.orvyn.app.ui
 
+import id.orvyn.app.ui.insights.CategoryScreen
+import id.orvyn.app.ui.insights.InsightsScreen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -179,6 +181,11 @@ fun OrvynApp(store: DeviceStore) {
         composable("help") { HelpScreen(onBack = { nav.popBackStack() }) }
         composable("privacy") { PrivacyScreen(onBack = { nav.popBackStack() }) }
         composable("inbox") { InboxScreen(onBack = { nav.popBackStack() }, onOpenTransaction = { nav.navigate("tx/$it") }, onOpenRequest = { nav.navigate("request/$it") }) }
+        composable("insights") { InsightsScreen(onBack = { nav.popBackStack() }, onCategory = { nav.navigate("insights/$it") }) }
+        composable("insights/{key}") { entry ->
+            CategoryScreen(entry.arguments!!.getString("key")!!, store.lastHome?.second?.let { runCatching { parseHome(JSONObject(it)).accounts.firstOrNull()?.id }.getOrNull() },
+                onBack = { nav.popBackStack() }, onOpen = { nav.navigate("tx/$it") })
+        }
         composable("requests") { RequestsScreen(onBack = { nav.popBackStack() }, onAsk = { nav.navigate("request/new") }, onSplit = { nav.navigate("split/new") }, onOpen = { nav.navigate("request/$it") }) }
         composable("request/new") { AskFlow(onExit = { nav.popBackStack() }) }
         composable("request/{id}") { entry -> RequestScreen(entry.arguments!!.getString("id")!!, onBack = { nav.popBackStack() }) }
@@ -257,7 +264,7 @@ private fun MainShell(store: DeviceStore, onOpenTransaction: (String) -> Unit, o
                     else when (action) { "Transfer" -> onTransfer(); "QRIS" -> onQris(); "Pay" -> onRoute("bills"); else -> onRoute("topup") }
                 }, onCopied = say,
                     onInbox = { onRoute("inbox") }, onRoute = onRoute)
-                Tab.History -> HistoryScreen(store.lastHome?.second?.let { runCatching { parseHome(JSONObject(it)).accounts.firstOrNull()?.id }.getOrNull() }, onOpenTransaction)
+                Tab.History -> HistoryScreen(store.lastHome?.second?.let { runCatching { parseHome(JSONObject(it)).accounts.firstOrNull()?.id }.getOrNull() }, onOpenTransaction, onInsights = { onRoute("insights") })
                 Tab.Profile -> ProfileScreen(store, onSignedOut, onRoute)
                 Tab.Cards -> CardsScreen(onPayBill = onPayCard, say = say)
                 else -> {}

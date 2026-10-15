@@ -155,6 +155,7 @@ fun HomeScreen(
                 Hero(h, hidden, onToggle = { hidden = !hidden; store.balanceHidden = hidden }, onInbox = onInbox)
                 QuickActions(enabled = !offline, onAction = onQuickAction)
                 Banners(onAction = onQuickAction)
+                if (id.orvyn.app.data.AppConfig.on("insights")) id.orvyn.app.ui.insights.InsightCard(store, onOpen = { onRoute("insights") })
             }
             if (offline) item {
                 Text(
