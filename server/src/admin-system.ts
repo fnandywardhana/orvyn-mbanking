@@ -31,7 +31,7 @@ export function systemRoutes(sql: Sql) {
     const limits = await setting('daily_limit'), fees = await setting('transfer_fees'), features = await setting('features'), maint = await setting('maintenance'), vyna = await setting('vyna')
     const directory = await sql`select * from external_directory order by bank, account_number`
     const fx = await sql`select currency, buy, sell from fx_rates order by currency`
-    const deposit = await setting('deposit_rates'), spread = await setting('fx_prestige_spread')
+    const deposit = await setting('deposit_rates'), spread = await setting('fx_prestige_spread'), gold = await setting('gold_price')
     const done = c.req.query('done')
     return c.html(shell(c.get('officer'), '/admin/settings', 'Settings', html`<div class="formgrid" style="max-width:760px">
 ${done ? html`<div class="ok-box"><pre>${done}</pre></div>` : ''}
@@ -66,6 +66,12 @@ ${fx.map(r => html`<div class="actions" style="align-items:end"><b style="width:
 <label style="flex:1">Sell<input name="${r.currency}_sell" type="number" step="0.0001" min="0.0001" value="${Number(r.sell)}"></label></div>`)}
 <label>Prestige and Private pay this share of the spread<input name="factor" type="number" step="0.05" min="0" max="1" value="${spread?.factor ?? 0.5}"></label>
 <button class="btn" style="width:max-content">Save rates</button></form>
+
+<form method="post" action="/admin/settings/gold" class="card" style="gap:10px">
+<span class="eyebrow">Gold price (Rupiah per gram)</span>
+<label>Buy back (what customers get when they sell)<input name="buy" type="number" min="1" value="${gold.buy}"></label>
+<label>Sell (what customers pay)<input name="sell" type="number" min="1" value="${gold.sell}"></label>
+<button class="btn" style="width:max-content">Save gold price</button></form>
 
 <form method="post" action="/admin/settings/deposits" class="card" style="gap:10px">
 <span class="eyebrow">Time deposit rates (% a year)</span>
@@ -119,6 +125,13 @@ ${directory.map(d => html`<form method="post" action="/admin/settings/directory/
     await audit(sql, c.get('officer').id, 'settings.fx_rates', null, old.map(r => ({ ...r })), (await sql`select currency, buy, sell from fx_rates`).map(r => ({ ...r })))
     await save(c, 'fx_prestige_spread', { factor: Math.min(1, Math.max(0, Number(v.factor) || 0)) })
     return flash(c, '/admin/settings', 'Exchange rates saved.')
+  })
+  app.post('/settings/gold', async c => {
+    const v = await form(c)
+    const buy = Math.floor(Number(v.buy)), sell = Math.floor(Number(v.sell))
+    if (!(buy > 0 && sell >= buy)) return flash(c, '/admin/settings', 'The sell price must be at least the buy-back price.')
+    await save(c, 'gold_price', { buy, sell })
+    return flash(c, '/admin/settings', 'Gold price saved.')
   })
   app.post('/settings/deposits', async c => {
     const v = await form(c)

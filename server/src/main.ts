@@ -11,6 +11,7 @@ import { runAutoSave } from './pockets.ts'
 import { runScheduledTransfers } from './scheduled.ts'
 import { runBudgetAlerts } from './insights.ts'
 import { runMaturities } from './deposits.ts'
+import { ensurePrices, runBonds } from './investments.ts'
 
 const sql = connect()
 await migrate(sql)
@@ -48,6 +49,9 @@ setInterval(() => runAutoSave(sql).catch(e => console.error('auto-save failed', 
 setInterval(() => runScheduledTransfers(sql).catch(e => console.error('scheduled transfers failed', e)), 60_000)
 setInterval(() => runBudgetAlerts(sql).catch(e => console.error('budget alerts failed', e)), 60_000)
 setInterval(() => runMaturities(sql).catch(e => console.error('deposit maturities failed', e)), 60_000)
+setInterval(() => runBonds(sql).catch(e => console.error('bond coupons failed', e)), 60_000)
+await ensurePrices(sql) // fund NAVs up to today, then a new one each day
+setInterval(() => ensurePrices(sql).catch(e => console.error('fund prices failed', e)), 3_600_000)
 
 const port = Number(process.env.PORT ?? 8790)
 serve({ fetch: app.fetch, port }, () => console.log(`ORVYN server on :${port}`))

@@ -8,6 +8,7 @@ import { BANKS, lookupRecipient, transferOptions, sendTransfer, payMerchant, Tra
 import { parseQris, buildQris } from './qris.ts'
 import { ratesFor, listFx, openFx, closeFx, quote, exchange } from './fx.ts'
 import { depositRates, depositQuote, listDeposits, openDeposit, breakDeposit, setInstruction } from './deposits.ts'
+import { QUIZ, setRiskProfile, listProducts, priceHistory, listHoldings, buy as buyProduct, sell as sellProduct, totalAssets } from './investments.ts'
 import { statement, statementMonths } from './statements.ts'
 import { askVyna, vynaAllowance, vynaAvailable } from './vyna.ts'
 import { insights, insightCard, setBudget, setCategory, categoryOf, SPEND_KINDS, CATEGORIES } from './insights.ts'
@@ -257,6 +258,32 @@ export function apiRoutes(sql: Sql) {
     const b = await c.req.json().catch(() => ({}))
     try { await breakDeposit(sql, c.get('customer') as any, c.req.param('id'), String(b.pin ?? '')); return c.json({ ok: true }) } catch (e) { return fail(c, e) }
   })
+
+  // Investments and Total Assets (stories S3.5–S3.9)
+  app.get('/invest', async c => {
+    const me = c.get('customer') as any
+    return c.json({ ...(await listProducts(sql, me)), holdings: await listHoldings(sql, me.id), quiz: QUIZ })
+  })
+  app.get('/invest/:id/prices', async c => c.json({ prices: await priceHistory(sql, c.req.param('id'), Number(c.req.query('days') ?? 30)) }))
+  app.post('/invest/profile', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try { return c.json({ profile: await setRiskProfile(sql, c.get('customer').id, Array.isArray(b.answers) ? b.answers.map(Number) : []) }) } catch (e) { return fail(c, e) }
+  })
+  app.post('/invest/:id/buy', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try {
+      const j = await buyProduct(sql, c.get('customer') as any, { productId: c.req.param('id'), amount: b.amount, grams: b.grams, pin: String(b.pin ?? ''), acknowledgeRisk: b.acknowledgeRisk === true, idempotencyKey: String(b.idempotencyKey ?? crypto.randomUUID()) })
+      return c.json({ transactionId: j.id, reference: j.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
+    } catch (e) { return fail(c, e) }
+  })
+  app.post('/invest/:id/sell', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try {
+      const j = await sellProduct(sql, c.get('customer') as any, { productId: c.req.param('id'), quantity: b.quantity ?? undefined, pin: String(b.pin ?? ''), idempotencyKey: String(b.idempotencyKey ?? crypto.randomUUID()) })
+      return c.json({ transactionId: j.id, reference: j.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
+    } catch (e) { return fail(c, e) }
+  })
+  app.get('/wealth', async c => c.json(await totalAssets(sql, c.get('customer') as any)))
 
   // E-statements (story S2.17)
   app.get('/statements', async c => c.json({ months: await statementMonths(sql, c.get('customer').id) }))
