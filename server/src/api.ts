@@ -5,6 +5,7 @@ import {
 } from './customers.ts'
 import { BANKS, lookupRecipient, transferOptions, sendTransfer, payMerchant, TransferError } from './transfers.ts'
 import { parseQris, buildQris } from './qris.ts'
+import { createSchedule, listSchedules, updateSchedule } from './scheduled.ts'
 import { listPockets, createPocket, updatePocket, movePocket, closePocket, PocketError, POCKET_IMAGES } from './pockets.ts'
 import { inquire, payBill } from './bills.ts'
 import { listCards, updateCard, cardDetails, payCardBill } from './cards.ts'
@@ -247,6 +248,24 @@ export function apiRoutes(sql: Sql) {
       })
       return c.json({ transactionId: j.id, reference: j.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
     } catch (e) { return fail(c, e) }
+  })
+
+  // Scheduled Transfers (stories S2.4–S2.5)
+  app.get('/scheduled', async c => c.json({ scheduled: await listSchedules(sql, c.get('customer').id) }))
+  app.post('/scheduled', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try {
+      const id = await createSchedule(sql, c.get('customer') as any, {
+        bank: String(b.bank ?? ''), accountNumber: String(b.accountNumber ?? ''), amount: Number(b.amount), method: b.method,
+        note: b.note, repeat: b.repeat, firstDate: String(b.firstDate ?? ''), pin: String(b.pin ?? ''),
+      })
+      return c.json({ id })
+    } catch (e) { return fail(c, e) }
+  })
+  app.post('/scheduled/:id', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try { await updateSchedule(sql, c.get('customer').id, c.req.param('id'), { paused: typeof b.paused === 'boolean' ? b.paused : undefined, delete: b.delete === true }); return c.json({ ok: true }) }
+    catch (e) { return fail(c, e) }
   })
 
   // Saved Recipients first, then people paid recently who aren't saved yet.

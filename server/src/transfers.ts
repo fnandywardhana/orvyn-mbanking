@@ -91,7 +91,7 @@ export async function transferOptions(sql: Sql, customer: { id: string; tier: st
   return { methods, dailyLimit: limit, remainingToday: remaining }
 }
 
-async function checkPin(sql: Sql, customerId: string, pin: string) {
+export async function checkPin(sql: Sql, customerId: string, pin: string) {
   const [c] = await sql`select pin_hash, locked from customers where id = ${customerId}`
   if (c.locked) throw new TransferError('LOCKED', 'Your account is locked after too many wrong tries. Ask the ORVYN team to unlock it.')
   if (c.pin_hash && await verifyPassword(pin, c.pin_hash)) {
@@ -106,15 +106,15 @@ async function checkPin(sql: Sql, customerId: string, pin: string) {
   throw new TransferError('WRONG_PIN', `Wrong PIN. ${u.left} ${u.left === 1 ? 'try' : 'tries'} left.`, { attemptsLeft: u.left })
 }
 
-/** Daily Limit then PIN: the two checks every payout passes before money moves. */
-export async function authorizePayout(sql: Sql, customer: { id: string; tier: string }, amount: number, pin: string, remainingToday?: number) {
+/** Daily Limit then PIN: the two checks every payout passes before money moves. A null PIN means it was given earlier (a Scheduled Transfer). */
+export async function authorizePayout(sql: Sql, customer: { id: string; tier: string }, amount: number, pin: string | null, remainingToday?: number) {
   const [m] = await sql`select value from settings where key = 'maintenance'`
   if (m?.value?.on) throw new TransferError('MAINTENANCE', m.value.message) // story S1.37 AC4: no money moves during maintenance
   const remaining = remainingToday ?? (await transferOptions(sql, customer, true, amount)).remainingToday
   if (amount > remaining) {
     throw new TransferError('OVER_LIMIT', `That's over your daily limit. You can still pay out Rp${remaining.toLocaleString('en-US')} today.`, { remainingToday: remaining })
   }
-  await checkPin(sql, customer.id, pin)
+  if (pin !== null) await checkPin(sql, customer.id, pin)
 }
 
 /** Story S1.15: pay a QRIS merchant. Money lands in Merchant Settlement. */
@@ -143,7 +143,7 @@ export type TransferInput = {
   amount: number
   method: Method
   note?: string
-  pin: string
+  pin: string | null
   idempotencyKey: string
 }
 

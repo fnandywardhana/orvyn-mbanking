@@ -121,7 +121,10 @@ ORVYN Bank is a demo. All money in it is pretend.`
   app.get('/:id', async c => {
     const [cu] = await sql`select * from customers where id = ${c.req.param('id')}`
     if (!cu) return c.notFound()
-    const accounts = await sql`select * from accounts where customer_id = ${cu.id} order by created_at`
+    const accounts = await sql`
+      select a.*, p.target, p.rule from accounts a left join pockets p on p.account_id = a.id
+      where a.customer_id = ${cu.id} and (p.closed_at is null) order by a.created_at`
+    const scheduled = await sql`select * from scheduled_transfers where customer_id = ${cu.id} and deleted_at is null order by next_run nulls last`
     const cards = await sql`select id, product, number, frozen from cards where customer_id = ${cu.id} order by kind desc, created_at`
     // Story S1.33 AC4: what the customer sees, read-only.
     const recent = await sql`
@@ -138,8 +141,14 @@ ${cu.locked ? html`<span class="chip bad">Locked</span>` : html`<span class="chi
 <div class="card"><span class="eyebrow">Phone</span><b>${device ? 'Signed in on a phone' : 'Not signed in yet'}</b>
 <span class="hint">${device ? `Since ${device.created_at.toLocaleString('en-GB', { timeZone: 'Asia/Jakarta' })} WIB` : 'Waiting for the first sign-in'}</span>
 <span class="hint">${cu.pin_hash ? 'PIN set' : 'No PIN yet'}</span></div></div>
-<div class="tablewrap"><table><thead><tr><th>Account</th><th>Number</th><th class="num">Balance</th></tr></thead>
-<tbody>${accounts.map(a => html`<tr><td>${a.name}</td><td class="mono">${a.number ? group4(a.number) : '—'}</td><td class="num">${rupiah(a.balance)}</td></tr>`)}</tbody></table></div>
+<div class="tablewrap"><table><thead><tr><th>Account</th><th>Number or goal</th><th class="num">Balance</th></tr></thead>
+<tbody>${accounts.map(a => html`<tr><td>${a.name}${a.kind === 'pocket' ? html` <span class="chip">Pocket</span>` : ''}</td>
+<td class="${a.number ? 'mono' : 'hint'}">${a.number ? group4(a.number) : a.target ? `Goal ${rupiah(a.target)}` : a.kind === 'pocket' ? 'No goal' : '—'}${a.rule ? html`<br><span class="hint">Auto-save: ${a.rule.type}</span>` : ''}</td>
+<td class="num">${rupiah(a.balance)}</td></tr>`)}</tbody></table></div>
+${scheduled.length ? html`<div class="tablewrap"><table><thead><tr><th>Scheduled transfer</th><th>Next</th><th class="num">Amount</th></tr></thead><tbody>
+${scheduled.map(t => html`<tr><td>${t.name}<br><span class="hint">${t.repeat === 'once' ? 'Once' : t.repeat === 'weekly' ? 'Every week' : 'Every month'}${t.paused ? ' · paused' : ''}${t.last_result ? ` · last: ${t.last_result.ok ? 'sent' : t.last_result.message}` : ''}</span></td>
+<td class="mono">${t.next_run?.toISOString().slice(0, 10) ?? 'Done'}</td><td class="num">${rupiah(t.amount)}</td></tr>`)}
+</tbody></table></div>` : ''}
 <div class="tablewrap"><table><thead><tr><th colspan="3">As ${cu.full_name.split(' ')[0]} sees it: latest in History</th></tr></thead><tbody>
 ${recent.length === 0 ? html`<tr><td class="hint">No transactions yet.</td></tr>` : recent.map(t => {
   const amount = Number(t.amount), party = amount < 0 ? t.memo?.to : t.memo?.from
