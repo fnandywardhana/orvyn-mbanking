@@ -5,6 +5,7 @@ import {
 } from './customers.ts'
 import { BANKS, lookupRecipient, transferOptions, sendTransfer, payMerchant, TransferError } from './transfers.ts'
 import { parseQris, buildQris } from './qris.ts'
+import { createRequest, createSplit, listRequests, listSplits, getRequest, payRequest, declineRequest, cancelRequest } from './requests.ts'
 import { createSchedule, listSchedules, updateSchedule } from './scheduled.ts'
 import { listPockets, createPocket, updatePocket, movePocket, closePocket, PocketError, POCKET_IMAGES } from './pockets.ts'
 import { inquire, payBill } from './bills.ts'
@@ -267,6 +268,30 @@ export function apiRoutes(sql: Sql) {
     try { await updateSchedule(sql, c.get('customer').id, c.req.param('id'), { paused: typeof b.paused === 'boolean' ? b.paused : undefined, delete: b.delete === true }); return c.json({ ok: true }) }
     catch (e) { return fail(c, e) }
   })
+
+  // Money Requests and Split Bills (stories S2.6–S2.7)
+  app.get('/requests', async c => {
+    const me = c.get('customer')
+    return c.json({ requests: await listRequests(sql, me.id), splits: await listSplits(sql, me.id) })
+  })
+  app.get('/requests/:id', async c => { try { return c.json(await getRequest(sql, c.get('customer').id, c.req.param('id'))) } catch (e) { return fail(c, e) } })
+  app.post('/requests', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try { return c.json({ id: await createRequest(sql, c.get('customer') as any, { accountNumber: String(b.accountNumber ?? ''), amount: b.amount, note: b.note }) }) } catch (e) { return fail(c, e) }
+  })
+  app.post('/splits', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try { return c.json({ id: await createSplit(sql, c.get('customer') as any, { total: b.total, note: b.note, shares: Array.isArray(b.shares) ? b.shares : [] }) }) } catch (e) { return fail(c, e) }
+  })
+  app.post('/requests/:id/pay', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try {
+      const j = await payRequest(sql, c.get('customer') as any, c.req.param('id'), String(b.pin ?? ''))
+      return c.json({ transactionId: j.id, reference: j.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
+    } catch (e) { return fail(c, e) }
+  })
+  app.post('/requests/:id/decline', async c => { try { await declineRequest(sql, c.get('customer') as any, c.req.param('id')); return c.json({ ok: true }) } catch (e) { return fail(c, e) } })
+  app.post('/requests/:id/cancel', async c => { try { await cancelRequest(sql, c.get('customer').id, c.req.param('id')); return c.json({ ok: true }) } catch (e) { return fail(c, e) } })
 
   // Saved Recipients first, then people paid recently who aren't saved yet.
   app.get('/recipients', async c => {

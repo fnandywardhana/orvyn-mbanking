@@ -124,6 +124,10 @@ ORVYN Bank is a demo. All money in it is pretend.`
     const accounts = await sql`
       select a.*, p.target, p.rule from accounts a left join pockets p on p.account_id = a.id
       where a.customer_id = ${cu.id} and (p.closed_at is null) order by a.created_at`
+    const requests = await sql`
+      select r.amount, r.note, r.requester_id = ${cu.id} as mine, q.full_name as requester, p.full_name as payer, r.created_at
+      from money_requests r join customers q on q.id = r.requester_id join customers p on p.id = r.payer_id
+      where (r.requester_id = ${cu.id} or r.payer_id = ${cu.id}) and r.status = 'open' and r.expires_at > now() order by r.created_at desc`
     const scheduled = await sql`select * from scheduled_transfers where customer_id = ${cu.id} and deleted_at is null order by next_run nulls last`
     const cards = await sql`select id, product, number, frozen from cards where customer_id = ${cu.id} order by kind desc, created_at`
     // Story S1.33 AC4: what the customer sees, read-only.
@@ -148,6 +152,9 @@ ${cu.locked ? html`<span class="chip bad">Locked</span>` : html`<span class="chi
 ${scheduled.length ? html`<div class="tablewrap"><table><thead><tr><th>Scheduled transfer</th><th>Next</th><th class="num">Amount</th></tr></thead><tbody>
 ${scheduled.map(t => html`<tr><td>${t.name}<br><span class="hint">${t.repeat === 'once' ? 'Once' : t.repeat === 'weekly' ? 'Every week' : 'Every month'}${t.paused ? ' · paused' : ''}${t.last_result ? ` · last: ${t.last_result.ok ? 'sent' : t.last_result.message}` : ''}</span></td>
 <td class="mono">${t.next_run?.toISOString().slice(0, 10) ?? 'Done'}</td><td class="num">${rupiah(t.amount)}</td></tr>`)}
+</tbody></table></div>` : ''}
+${requests.length ? html`<div class="tablewrap"><table><thead><tr><th>Open money request</th><th class="num">Amount</th></tr></thead><tbody>
+${requests.map(r => html`<tr><td>${r.mine ? `Asked ${r.payer}` : `${r.requester} asks`}${r.note ? html`<br><span class="hint">${r.note}</span>` : ''}</td><td class="num">${rupiah(r.amount)}</td></tr>`)}
 </tbody></table></div>` : ''}
 <div class="tablewrap"><table><thead><tr><th colspan="3">As ${cu.full_name.split(' ')[0]} sees it: latest in History</th></tr></thead><tbody>
 ${recent.length === 0 ? html`<tr><td class="hint">No transactions yet.</td></tr>` : recent.map(t => {
