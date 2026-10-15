@@ -38,8 +38,8 @@ android {
         applicationId = "id.orvyn.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.7.0"
+        versionCode = 10
+        versionName = "0.8.0"
         firebase?.forEach { (k, v) -> resValue("string", k, v) }
     }
 

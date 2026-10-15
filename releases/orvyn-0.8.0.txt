@@ -1,0 +1,23 @@
+ORVYN 0.8.0
+
+What's new
+- Wealth: everything you have with ORVYN in one number, with a bar showing how it's split. Open it from the Wealth card on the home screen.
+- Foreign currency: hold USD, SGD, EUR, JPY or AUD and exchange at the rates shown. Prestige customers get better rates.
+- Time deposits: lock money away for 1, 3, 6 or 12 months at a fixed rate, see the interest after tax before you confirm, and choose to renew or pay out at maturity.
+- Investments: take a five-question risk quiz, then buy made-up mutual funds whose prices move every day, retail government bonds that pay a coupon every month, or gold by the gram.
+- Prestige: gold touches on the home screen, and your Relationship Manager's card with one-tap Call and Message.
+- Passkeys: add one in Profile, then sign in on a new phone with your fingerprint or screen lock instead of your password.
+- Fixed: the balance on the home screen could be a few rupiah off for very large balances while it counted up.
+- Fixed: signing in for the first time asks you to create a PIN (also in 0.7.1).
+
+Permissions this app asks for
+- INTERNET: to talk to the ORVYN server.
+- CAMERA: only while scanning a QR code or taking the sign-up photos. Nothing is uploaded.
+- POST_NOTIFICATIONS: to show your sign-up code and account activity (Android 13 and newer ask first).
+- RECEIVE (Firebase), WAKE_LOCK, ACCESS_NETWORK_STATE: added by Firebase so push notifications arrive. None of them reads anything about you or your phone.
+- USE_BIOMETRIC / USE_FINGERPRINT: only if you turn on fingerprint sign-in.
+- RECORD_AUDIO: only while you hold Vyna's microphone open, on phones that can recognise speech by themselves. Your voice never leaves the phone. Android asks the first time.
+No contacts, location, SMS, storage, device IDs, analytics or ads.
+
+How to update
+Open the download link on your phone, download, tap the file, then Update.
