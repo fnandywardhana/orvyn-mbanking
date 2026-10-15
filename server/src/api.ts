@@ -163,6 +163,9 @@ export function apiRoutes(sql: Sql) {
       totalBalance: accounts.reduce((s, a) => s + Number(a.balance), 0),
       accounts: accounts.filter(a => a.kind === 'savings').map(a => ({ id: a.id, kind: a.kind, name: a.name, number: a.number, balance: Number(a.balance) })),
       pockets: await listPockets(sql, me.id),
+      // S3.11: only Prestige and Private customers have a Relationship Manager
+      relationshipManager: me.tier === 'everyday' || !me.rm_id ? null
+        : (await sql`select name, title, phone, email from relationship_managers where id = ${me.rm_id}`)[0] ?? null,
       recent: recent.map(toTransaction),
     })
   })

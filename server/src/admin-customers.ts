@@ -97,6 +97,7 @@ ${PERSONAS.map((p, i) => html`<label class="persona"><input type="radio" name="p
       const { customer, savings } = await sql.begin(async tx => {
         const r = await createCustomer(tx, { fullName: f.fullName?.trim() || persona.fullName, phone: f.phone, password: f.password, tier: persona.tier, persona: persona.key })
         await generateHistory(tx, persona.key, r.savings.id, r.customer.id)
+        if (persona.tier !== 'everyday') await tx`update customers set rm_id = coalesce(rm_id, (select id from relationship_managers order by name limit 1)) where id = ${r.customer.id}` // S3.11
         return r
       })
       await audit(sql, o.id, 'customer.create', customer.id, null, { name: customer.full_name, phone: customer.phone, persona: persona.key })
@@ -133,6 +134,7 @@ ORVYN Bank is a demo. All money in it is pretend.`
       select r.amount, r.note, r.requester_id = ${cu.id} as mine, q.full_name as requester, p.full_name as payer, r.created_at
       from money_requests r join customers q on q.id = r.requester_id join customers p on p.id = r.payer_id
       where (r.requester_id = ${cu.id} or r.payer_id = ${cu.id}) and r.status = 'open' and r.expires_at > now() order by r.created_at desc`
+    const rms = await sql`select id, name from relationship_managers order by name`
     const deposits = await sql`select d.*, a.balance from time_deposits d join accounts a on a.id = d.account_id where d.customer_id = ${cu.id} and d.closed_at is null order by d.maturity_date`
     const scheduled = await sql`select * from scheduled_transfers where customer_id = ${cu.id} and deleted_at is null order by next_run nulls last`
     const cards = await sql`select id, product, number, frozen from cards where customer_id = ${cu.id} order by kind desc, created_at`
@@ -178,6 +180,10 @@ ${recent.length === 0 ? html`<tr><td class="hint">No transactions yet.</td></tr>
 <label>Tier<select name="tier" style="height:40px;border-radius:10px;padding:0 10px;font:inherit">
 ${Object.entries(TIER).map(([k, l]) => html`<option value="${k}" ${k === cu.tier ? 'selected' : ''}>${l}</option>`)}</select></label>
 <button class="btn secondary">Save tier</button></form>
+${cu.tier !== 'everyday' ? html`<form method="post" action="/admin/customers/${cu.id}/rm" class="actions" style="align-items:end">
+<label>Relationship Manager<select name="rm" style="height:40px;border-radius:10px;padding:0 10px;font:inherit"><option value="">None</option>
+${rms.map(r => html`<option value="${r.id}" ${r.id === cu.rm_id ? 'selected' : ''}>${r.name}</option>`)}</select></label>
+<button class="btn secondary">Save RM</button></form>` : ''}
 <div class="actions">
 ${cu.locked ? html`<form method="post" action="/admin/customers/${cu.id}/unlock"><button class="btn">Unlock</button></form>`
   : html`<form method="post" action="/admin/customers/${cu.id}/lock"><button class="btn secondary">Lock</button></form>`}
@@ -252,6 +258,12 @@ ${cards.map(k => html`<option value="${k.id}">${PRODUCTS[k.product as keyof type
 <div class="actions"><a class="btn secondary" href="/admin/customers/${id}">Back to customer</a></div></div>`))
   })
   // Story S1.34: officer money moves, always through the ledger and always audited.
+  app.post('/:id/rm', async c => {
+    const id = c.req.param('id'), rm = String((await c.req.parseBody()).rm || '') || null
+    await sql`update customers set rm_id = ${rm} where id = ${id}`
+    await audit(sql, c.get('officer').id, 'customer.rm', id, null, { rm })
+    return c.redirect(`/admin/customers/${id}?done=${encodeURIComponent('Relationship Manager saved.')}`)
+  })
   app.post('/:id/deposits/:dep/mature', async c => {
     const r = await matureDeposit(sql, c.req.param('dep'))
     await audit(sql, c.get('officer').id, 'deposit.mature_now', c.req.param('dep'), null, r)
@@ -303,6 +315,7 @@ ${cards.map(k => html`<option value="${k.id}">${PRODUCTS[k.product as keyof type
     if (!TIER[tier]) return c.text('Unknown tier', 400)
     const [before] = await sql`select tier from customers where id = ${id}`
     await sql`update customers set tier = ${tier} where id = ${id}`
+    if (tier !== 'everyday') await sql`update customers set rm_id = coalesce(rm_id, (select id from relationship_managers order by name limit 1)) where id = ${id}` // S3.11: Prestige comes with an RM
     await audit(sql, c.get('officer').id, 'customer.tier', id, { tier: before.tier }, { tier })
     return c.redirect(`/admin/customers/${id}?done=${encodeURIComponent(`Tier changed to ${TIER[tier]}.`)}`)
   })

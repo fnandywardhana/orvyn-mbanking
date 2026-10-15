@@ -107,7 +107,7 @@ Sumber: `PRD-ORVYN.md` (F18–F23, KR7), istilah dari `CONTEXT.md`, keputusan di
 ### S3.11 Relationship Manager
 **Sebagai** nasabah Prestige, **saya ingin** tahu siapa RM saya dan menghubunginya dengan satu ketukan, **supaya** saya dapat bantuan pribadi.
 
-1. Petugas membuat RM (nama, foto dari pustaka, nomor telepon, email) dan menugaskannya ke nasabah Prestige atau Private.
+1. Petugas membuat RM (nama, jabatan, nomor telepon, email) dan menugaskannya ke nasabah Prestige atau Private. RM tampil dengan avatar monogram, bukan foto orang sungguhan.
 2. Beranda dan Profil nasabah menampilkan kartu RM dengan tombol Telepon dan Pesan, yang membuka aplikasi telepon atau SMS di HP tanpa izin tambahan.
 3. Nasabah Everyday tidak melihat kartu RM.
 

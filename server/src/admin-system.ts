@@ -31,6 +31,7 @@ export function systemRoutes(sql: Sql) {
     const limits = await setting('daily_limit'), fees = await setting('transfer_fees'), features = await setting('features'), maint = await setting('maintenance'), vyna = await setting('vyna')
     const directory = await sql`select * from external_directory order by bank, account_number`
     const fx = await sql`select currency, buy, sell from fx_rates order by currency`
+    const rms = await sql`select r.*, (select count(*)::int from customers c where c.rm_id = r.id) as customers from relationship_managers r order by name`
     const deposit = await setting('deposit_rates'), spread = await setting('fx_prestige_spread'), gold = await setting('gold_price')
     const done = c.req.query('done')
     return c.html(shell(c.get('officer'), '/admin/settings', 'Settings', html`<div class="formgrid" style="max-width:760px">
@@ -57,6 +58,16 @@ ${['everyday', 'prestige', 'private'].map(t => html`<label>${t[0].toUpperCase() 
 <label>RTGS fee<input name="rtgs" type="number" min="0" value="${fees.rtgs}"></label>
 <label>RTGS smallest amount<input name="rtgs_min" type="number" min="1" value="${fees.rtgs_min}"></label>
 <button class="btn" style="width:max-content">Save limits and fees</button></form>
+
+<div class="card" style="gap:10px"><span class="eyebrow">Relationship Managers</span>
+${rms.map(r => html`<form method="post" action="/admin/settings/rm/delete" class="actions" style="align-items:center">
+<div style="flex:1"><b>${r.name}</b><br><span class="hint">${r.title} · ${r.phone} · ${r.email} · ${r.customers} ${r.customers === 1 ? 'customer' : 'customers'}</span></div>
+<input type="hidden" name="id" value="${r.id}"><button class="btn secondary" ${r.customers ? 'disabled title="Assign their customers to someone else first"' : ''}>Remove</button></form>`)}
+<form method="post" action="/admin/settings/rm" style="display:grid;gap:10px">
+<label>Name<input name="name" required maxlength="40"></label><label>Title<input name="title" maxlength="40" value="Relationship Manager"></label>
+<label>Phone<input name="phone" required maxlength="20" value="+62 21 0000 "></label><label>Email<input name="email" type="email" required maxlength="60"></label>
+<p class="hint">Use numbers with a 0000 block so a tester's call can't reach a real person. Customers see a monogram, not a photo.</p>
+<button class="btn" style="width:max-content">Add Relationship Manager</button></form></div>
 
 <form method="post" action="/admin/settings/fx" class="card" style="gap:10px">
 <span class="eyebrow">Exchange rates (Rupiah per unit)</span>
@@ -125,6 +136,19 @@ ${directory.map(d => html`<form method="post" action="/admin/settings/directory/
     await audit(sql, c.get('officer').id, 'settings.fx_rates', null, old.map(r => ({ ...r })), (await sql`select currency, buy, sell from fx_rates`).map(r => ({ ...r })))
     await save(c, 'fx_prestige_spread', { factor: Math.min(1, Math.max(0, Number(v.factor) || 0)) })
     return flash(c, '/admin/settings', 'Exchange rates saved.')
+  })
+  app.post('/settings/rm', async c => {
+    const v = await form(c)
+    if (!v.name || !v.phone || !v.email) return flash(c, '/admin/settings', 'Name, phone and email are needed.')
+    await sql`insert into relationship_managers (name, title, phone, email) values (${v.name}, ${v.title || 'Relationship Manager'}, ${v.phone}, ${v.email})`
+    await audit(sql, c.get('officer').id, 'rm.add', null, null, { name: v.name })
+    return flash(c, '/admin/settings', 'Relationship Manager added.')
+  })
+  app.post('/settings/rm/delete', async c => {
+    const v = await form(c)
+    const [r] = await sql`delete from relationship_managers r where id = ${v.id} and not exists (select 1 from customers c where c.rm_id = r.id) returning name`
+    if (r) await audit(sql, c.get('officer').id, 'rm.remove', v.id, { name: r.name }, null)
+    return flash(c, '/admin/settings', r ? 'Relationship Manager removed.' : 'Assign their customers to someone else first.')
   })
   app.post('/settings/gold', async c => {
     const v = await form(c)
@@ -242,8 +266,13 @@ ${done ? html`<div class="ok-box"><pre>${done}</pre></div>` : ''}
       await tx`delete from saved_bill_numbers`; await tx`delete from bill_payments`; await tx`delete from inbox_messages`; await tx`delete from announcement_seen`
       await tx`delete from saved_recipients`; await tx`delete from registrations`; await tx`delete from otp_codes`; await tx`delete from cards`
       await tx`delete from customer_sessions`; await tx`delete from registered_devices`
+      // Phase 2 and 3 tables that point at customers, accounts or journal entries
+      await tx`delete from autosave_runs`; await tx`delete from pockets`; await tx`delete from scheduled_transfers`
+      await tx`delete from money_requests`; await tx`delete from splits`; await tx`delete from category_overrides`
+      await tx`delete from budgets`; await tx`delete from budget_alerts`; await tx`delete from vyna_usage`
+      await tx`delete from time_deposits`; await tx`delete from holdings`; await tx`delete from bond_coupons`
       await tx`delete from postings`; await tx`update journal_entries set reverses_id = null`; await tx`delete from journal_entries`
-      await tx`delete from accounts where kind <> 'house'`; await tx`update accounts set balance = 0`; await tx`delete from customers`
+      await tx`delete from accounts where kind <> 'house' or code like 'CLOSED_%'`; await tx`update accounts set balance = 0`; await tx`delete from customers`
       return n
     })
     await audit(sql, c.get('officer').id, 'demo.reset', null, { customers: counts }, null)
