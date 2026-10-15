@@ -47,9 +47,11 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import id.orvyn.app.BuildConfig
 import id.orvyn.app.R
 import id.orvyn.app.data.Api
+import id.orvyn.app.data.Push
 import id.orvyn.app.data.AppConfig
 import id.orvyn.app.data.DataVersion
 import id.orvyn.app.data.DeviceStore
@@ -120,6 +122,15 @@ fun OrvynApp(store: DeviceStore) {
         if (SignOutSignal.count > 0) nav.navigate(if (store.deviceToken != null) "unlock" else "welcome") { popUpTo(0) }
     }
     val toMain = { nav.navigate("main") { popUpTo(0) } }
+    // Story S2.0 AC4: a tapped notification opens its screen once the customer is signed in.
+    val entry by nav.currentBackStackEntryAsState()
+    LaunchedEffect(Push.pendingLink, entry) {
+        val link = Push.pendingLink ?: return@LaunchedEffect
+        val route = entry?.destination?.route ?: return@LaunchedEffect
+        if (route in setOf("welcome", "unlock", "signin", "register", "pin/create", "biometric")) return@LaunchedEffect
+        Push.pendingLink = null
+        nav.navigate(if (link.startsWith("tx:")) "tx/${link.removePrefix("tx:")}" else "inbox")
+    }
     var pendingCard by remember { mutableStateOf<id.orvyn.app.data.Card?>(null) }
     var pendingQrTransfer by remember { mutableStateOf<Pair<id.orvyn.app.data.Recipient, Long?>?>(null) }
 
@@ -135,6 +146,15 @@ fun OrvynApp(store: DeviceStore) {
             UnlockScreen(store, cached?.firstName, onUnlocked = toMain, onUsePassword = { nav.navigate("signin") { popUpTo(0) } })
         }
         composable("main") {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val askNotify = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {}
+            LaunchedEffect(Unit) {
+                Push.register(context)
+                if (android.os.Build.VERSION.SDK_INT >= 33 && !store.askedNotifications) {
+                    store.askedNotifications = true
+                    askNotify.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
             MainShell(store, onOpenTransaction = { nav.navigate("tx/$it") }, onSignedOut = { nav.navigate("welcome") { popUpTo(0) } },
                 onTransfer = { nav.navigate("transfer") }, onQris = { nav.navigate("qris") }, onRoute = { nav.navigate(it) },
                 onPayCard = { pendingCard = it; nav.navigate("cardpay") })

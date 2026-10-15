@@ -115,7 +115,15 @@ export function apiRoutes(sql: Sql) {
   })
 
   app.post('/auth/signout', async c => {
+    // forget: the customer signed out from Profile, so this phone is no longer theirs and gets no more pushes
+    if ((await c.req.json().catch(() => ({}))).forget) await sql`delete from registered_devices where customer_id = ${c.get('customer').id}`
     await signOut(sql, c.get('token'))
+    return c.json({ ok: true })
+  })
+
+  app.post('/me/push', async c => {
+    const token = String((await c.req.json().catch(() => ({}))).token ?? '').slice(0, 4096)
+    await sql`update registered_devices set push_token = ${token || null} where customer_id = ${c.get('customer').id}`
     return c.json({ ok: true })
   })
 

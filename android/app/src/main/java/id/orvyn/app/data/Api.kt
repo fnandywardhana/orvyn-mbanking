@@ -148,10 +148,13 @@ object Api {
 
     suspend fun setPin(pin: String) { call("POST", "/pin", JSONObject().put("pin", pin)) }
 
-    suspend fun signOut() {
-        runCatching { call("POST", "/auth/signout") }
+    /** [forget]: signing out from Profile, so the server also forgets this phone and stops pushing to it. */
+    suspend fun signOut(forget: Boolean = false) {
+        runCatching { call("POST", "/auth/signout", JSONObject().put("forget", forget)) }
         session = null
     }
+
+    suspend fun registerPush(token: String) { call("POST", "/me/push", JSONObject().put("token", token)) }
 
     suspend fun homeJson(): JSONObject = call("GET", "/home")
 

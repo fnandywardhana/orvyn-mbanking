@@ -280,7 +280,7 @@ Wireframe dan desain final dibuat dengan skill ui-ux-pro-max sebelum tiap fase d
 | Kamera | Ya, hanya saat dibuka pengguna | Untuk scan QR (diproses di dalam HP) dan alur foto KTP/selfie (foto tidak dikirim, langsung dihapus) |
 | Mikrofon | Ya, hanya saat tombol mikrofon Vyna ditekan (Fase 2) | Diproses di dalam HP, rekaman tidak dikirim |
 | Galeri | Tidak ada izin | Memakai Photo Picker bawaan Android: pengguna memilih satu gambar QR, aplikasi tidak bisa melihat foto lain |
-| Notifikasi | Ya | Untuk push notification |
+| Notifikasi | Ya | Untuk push notification. Library Firebase Cloud Messaging menambah tiga izin teknis: menerima push (`c2dm.RECEIVE`), menjaga HP tetap bangun sebentar (`WAKE_LOCK`), dan melihat apakah ada koneksi (`ACCESS_NETWORK_STATE`). Tidak satu pun membaca data pengguna. Isi push sama dengan pesan di kotak masuk, dan di layar kunci hanya tertulis "New activity". |
 | Biometrik (USE_BIOMETRIC, dan USE_FINGERPRINT untuk Android 8) | Ya | Ditangani sistem Android. Aplikasi hanya menerima hasil "cocok / tidak cocok", tidak pernah menerima sidik jari atau wajah. |
 | Kontak, lokasi, SMS, telepon, file, daftar aplikasi | **Tidak** | Izinnya tidak dideklarasikan sama sekali, jadi tidak bisa diminta |
 | ID perangkat (IMEI, nomor seri, Android ID, ID iklan) | **Tidak** | Pengenal "HP terdaftar" memakai kode acak yang dibuat aplikasi saat pertama dipasang |

@@ -97,7 +97,7 @@ export async function signInWithPassword(sql: Sql, phoneInput: string, password:
   await sql`delete from customer_sessions where customer_id = ${c.id}`
   await sql`
     insert into registered_devices (customer_id, device_token) values (${c.id}, ${deviceToken})
-    on conflict (customer_id) do update set device_token = excluded.device_token, created_at = now()`
+    on conflict (customer_id) do update set device_token = excluded.device_token, push_token = null, created_at = now()`
   return { ok: true, deviceToken, sessionToken: await openSession(sql, c.id), needsPin: !c.pin_hash }
 }
 

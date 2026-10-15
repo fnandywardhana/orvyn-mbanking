@@ -13,6 +13,23 @@ val signing = Properties().apply {
     if (f.exists()) f.inputStream().use(::load)
 }
 
+// Story S2.0: Firebase settings come from ../secrets/google-services.json (kept out of git) as the
+// string resources FirebaseApp reads at start-up, so the google-services plugin isn't needed. No file, no push.
+@Suppress("UNCHECKED_CAST")
+val firebase = rootProject.file("../secrets/google-services.json").takeIf { it.exists() }?.let { f ->
+    val json = groovy.json.JsonSlurper().parse(f) as Map<String, Any>
+    val project = json["project_info"] as Map<String, String>
+    val client = (json["client"] as List<Map<String, Any>>).first {
+        ((it["client_info"] as Map<String, Any>)["android_client_info"] as Map<String, String>)["package_name"] == "id.orvyn.app"
+    }
+    mapOf(
+        "google_app_id" to (client["client_info"] as Map<String, String>)["mobilesdk_app_id"]!!,
+        "google_api_key" to (client["api_key"] as List<Map<String, String>>).first()["current_key"]!!,
+        "gcm_defaultSenderId" to project["project_number"]!!,
+        "project_id" to project["project_id"]!!,
+    )
+}
+
 android {
     namespace = "id.orvyn.app"
     compileSdk = 36
@@ -21,8 +38,9 @@ android {
         applicationId = "id.orvyn.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.4.1"
+        versionCode = 6
+        versionName = "0.5.0"
+        firebase?.forEach { (k, v) -> resValue("string", k, v) }
     }
 
     signingConfigs {
@@ -74,6 +92,7 @@ dependencies {
     implementation("androidx.fragment:fragment-ktx:1.8.5")
     // QR: ZXing reads and draws codes fully on the phone (no Google services, no network; ADR 0002)
     implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.firebase:firebase-messaging:25.1.3")
     implementation("androidx.camera:camera-camera2:1.4.2")
     implementation("androidx.camera:camera-lifecycle:1.4.2")
     implementation("androidx.camera:camera-view:1.4.2")
@@ -96,6 +115,10 @@ val allowedPermissions = setOf(
     "android.permission.USE_BIOMETRIC",
     "android.permission.USE_FINGERPRINT", // added by androidx.biometric for Android 8–8.1 phones
     "id.orvyn.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION", // AndroidX-internal, app-private
+    // Added by Firebase Cloud Messaging (story S2.0). None of them reads anything about the person or the phone.
+    "com.google.android.c2dm.permission.RECEIVE", // receive pushes
+    "android.permission.WAKE_LOCK", // keep the phone awake long enough to show one
+    "android.permission.ACCESS_NETWORK_STATE", // wait for a connection before fetching the token
 )
 
 androidComponents {

@@ -24,6 +24,7 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         Api.onSignedOut = { runOnUiThread { SignOutSignal.count++ } }
+        intent.getStringExtra(id.orvyn.app.data.Push.EXTRA_LINK)?.let { id.orvyn.app.data.Push.pendingLink = it }
         val store = DeviceStore(this)
         ThemeMode.value = store.themeMode
         setContent {
@@ -37,6 +38,11 @@ class MainActivity : FragmentActivity() {
     /** Light icons for dark backgrounds. Screens with a dark hero ask for them via [id.orvyn.app.ui.DarkTopBar]. */
     fun setStatusBarIcons(light: Boolean) {
         androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = !light
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        intent.getStringExtra(id.orvyn.app.data.Push.EXTRA_LINK)?.let { id.orvyn.app.data.Push.pendingLink = it }
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {

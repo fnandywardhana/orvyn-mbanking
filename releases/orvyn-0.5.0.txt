@@ -1,0 +1,18 @@
+ORVYN 0.5.0
+
+What's new
+- Push notifications: your phone now tells you about money in and out, card payments and messages from the ORVYN team, even when ORVYN is closed.
+- Your lock screen only says "New activity". Amounts and names show once your phone is unlocked.
+- Tap a notification to go straight to that transaction (after your PIN).
+- Signing out from Profile stops notifications to this phone.
+
+Permissions this app asks for
+- INTERNET: to talk to the ORVYN server.
+- CAMERA: only while scanning a QR code or taking the sign-up photos. Nothing is uploaded.
+- POST_NOTIFICATIONS: to show your sign-up code and account activity (Android 13 and newer ask first).
+- RECEIVE (Firebase), WAKE_LOCK, ACCESS_NETWORK_STATE: added by Firebase so push notifications arrive. None of them reads anything about you or your phone.
+- USE_BIOMETRIC / USE_FINGERPRINT: only if you turn on fingerprint sign-in.
+No contacts, location, SMS, storage, device IDs, analytics or ads.
+
+How to update
+Open the download link on your phone, download, tap the file, then Update.

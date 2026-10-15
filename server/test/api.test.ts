@@ -131,3 +131,20 @@ test('content lists live banners and FAQs; PIN and password changes need the cur
   assert.equal((await call('POST', '/me/password', { oldPassword: 'rahasia123', newPassword: 'short' })).body.error, 'WEAK_PASSWORD')
   assert.equal((await call('POST', '/me/password', { oldPassword: 'rahasia123', newPassword: 'baru12345' })).status, 200)
 })
+
+test('the push token belongs to the phone: a new phone or a Profile sign-out stops pushes to the old one', async () => {
+  const pushToken = async () => (await sql`select d.push_token from registered_devices d join customers c on c.id = d.customer_id where c.phone = '081299990000'`)[0]?.push_token
+  const first = await call('POST', '/auth/password', { phone: '081299990000', password: 'baru12345' })
+  session = first.body.sessionToken
+  assert.equal(first.status, 200, JSON.stringify(first.body))
+  assert.equal((await call('POST', '/me/push', { token: 'phone-a' })).status, 200)
+  assert.equal(await pushToken(), 'phone-a')
+
+  session = (await call('POST', '/auth/password', { phone: '081299990000', password: 'baru12345' })).body.sessionToken
+  assert.equal(await pushToken(), null)
+
+  await call('POST', '/me/push', { token: 'phone-b' })
+  assert.equal((await call('POST', '/auth/signout', { forget: true })).status, 200)
+  assert.equal(await pushToken(), undefined)
+  session = (await call('POST', '/auth/password', { phone: '081299990000', password: 'baru12345' })).body.sessionToken
+})

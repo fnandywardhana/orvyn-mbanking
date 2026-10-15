@@ -1,11 +1,13 @@
 import type { Sql } from './db.ts'
+import { push } from './push.ts'
 
-// Inbox Messages (CONTEXT.md). Push notifications, when Firebase is set up, send the same title and body.
+// Inbox Messages (CONTEXT.md). Each one is also sent as a push when Firebase is set up (story S2.0).
 
 const rp = (n: number) => 'Rp' + Math.abs(n).toLocaleString('en-US')
 
 export async function notify(sql: Sql, customerId: string, title: string, body: string, link?: string) {
   await sql`insert into inbox_messages (customer_id, title, body, link) values (${customerId}, ${title}, ${body}, ${link ?? null})`
+  void push(sql, customerId, { title, body, link }) // never holds up the money movement that caused it
 }
 
 /** One message per customer touched by a journal entry: money in, money out, or a card purchase. */

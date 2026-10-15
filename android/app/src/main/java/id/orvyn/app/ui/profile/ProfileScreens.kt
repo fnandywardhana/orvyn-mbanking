@@ -135,7 +135,7 @@ fun ProfileScreen(store: DeviceStore, onSignedOut: () -> Unit, onRoute: (String)
         title = "Sign out of ORVYN?",
         body = "This phone forgets your PIN and fingerprint sign-in. Next time you sign in with your phone number and password.",
         confirmLabel = "Sign out", destructive = true, onDismiss = { confirm = false },
-        onConfirm = { scope.launch { Api.signOut(); store.forgetDevice(); onSignedOut() } },
+        onConfirm = { scope.launch { Api.signOut(forget = true); store.forgetDevice(); onSignedOut() } },
     )
 }
 
@@ -238,7 +238,7 @@ fun PrivacyScreen(onBack: () -> Unit) {
                 "Gallery" to "When you pick a QR picture, Android hands ORVYN that one picture. ORVYN can't see your other photos.",
                 "Never touched" to "Your contacts, location, messages, calls, files and other apps. ORVYN doesn't ask for them, so it can't read them.",
                 "No tracking" to "No analytics, ads or crash reporters. Your phone is recognised by a random code ORVYN makes when it's installed, not by its serial number.",
-                "Notifications" to "If push notifications are switched on, Google delivers them using a random token. It doesn't carry your name or data.",
+                "Notifications" to "Google's Firebase delivers push notifications to a random token made for this phone. Each one carries the same short text as your Inbox, like an amount and a name. Your lock screen only shows \"New activity\".",
             )) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(title, style = MaterialTheme.typography.titleMedium)

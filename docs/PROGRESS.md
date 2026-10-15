@@ -1,6 +1,6 @@
 # Progres ORVYN
 
-Terakhir diperbarui: 15 Okt 2026, sekitar 06.40 WIB. Versi online: **0.4.1** di `https://orvyn.delvault.uk`.
+Terakhir diperbarui: 15 Okt 2026, sekitar 06.40 WIB. Versi online: **0.5.0** di `https://orvyn.delvault.uk`.
 
 ## Fase 0: Fondasi ✅
 
@@ -19,7 +19,7 @@ Semua story S0.1–S0.7 selesai (lihat riwayat commit).
 | QRIS: scan kamera / galeri, QR-ku, merchant di admin | S1.15–S1.17 | ✅ |
 | Bayar & beli: token PLN, tagihan PLN, BPJS, pulsa/data, e-wallet, biller | S1.18–S1.22 | ✅ Biller dikelola lewat database dan halaman Settings, belum ada halaman khusus biller |
 | Kartu: tampilan, blokir, sakelar, limit, detail dengan PIN, tagihan kartu kredit, simulasi transaksi kartu | S1.23–S1.26 | ✅ |
-| Kotak masuk, pesan petugas, pengumuman | S1.27–S1.28 | ✅ Push notification **menunggu Firebase** (lihat DECISIONS-PENDING #3) |
+| Kotak masuk, pesan petugas, pengumuman | S1.27–S1.28 | ✅ Push notification aktif sejak 0.5.0 (S2.0) |
 | Tema, ganti PIN/password, bantuan, privasi | S1.29–S1.31 | ✅ |
 | Admin: nasabah dari persona, nasabah dummy massal, kelola nasabah, lihat sebagai nasabah | S1.32–S1.33 | ✅ |
 | Admin: tambah/kurangi uang, uang masuk realistis | S1.34 | ✅ |
@@ -37,7 +37,11 @@ Semua story S0.1–S0.7 selesai (lihat riwayat commit).
 3. Penguji memasang APK dari link di pesan itu, lalu masuk.
 4. Untuk menambah uang, buka halaman nasabah di admin, bagian **Add or remove money**.
 
-## Berikutnya: Fase 2
+## Fase 2: sedang dikerjakan
+
+Story: `docs/stories/STORIES-F2.md`. Selesai: S2.0 push notification (0.5.0).
+
+## Fitur Fase 2
 
 Fitur: Vyna (asisten AI), insight pengeluaran, kantong tabungan, transfer terjadwal, minta uang / split bill, e-statement PDF, widget.
 

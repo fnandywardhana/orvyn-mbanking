@@ -17,6 +17,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -24,6 +25,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service android:name=".data.PushService" android:exported="false">
+            <intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter>
+        </service>
+        <!-- Story S2.0: no token is made until the customer signs in (Push.register). -->
+        <meta-data android:name="firebase_messaging_auto_init_enabled" android:value="false" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="id.orvyn.app.receipts"

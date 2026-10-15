@@ -46,6 +46,11 @@ class DeviceStore(context: Context) {
             if (v == null) remove("last_home").remove("last_home_at") else putLong("last_home_at", v.first).putString("last_home", v.second)
         }.apply()
 
+    /** Story S1.27 AC2: the notification permission is asked once, after the first sign-in. */
+    var askedNotifications: Boolean
+        get() = prefs.getBoolean("asked_notifications", false)
+        set(v) = prefs.edit().putBoolean("asked_notifications", v).apply()
+
     fun forgetDevice() {
         val theme = themeMode
         prefs.edit().clear().putString("theme", theme).apply()
