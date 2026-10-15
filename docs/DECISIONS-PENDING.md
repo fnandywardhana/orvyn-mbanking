@@ -16,7 +16,7 @@ Claude's working notes for things that need your answer. None of them blocks the
 | 3 | Firebase project `orvyn-94fcb` is set up; both files are in `secrets/` and were checked against Google. | 15 Oct |
 | 5 | Anthropic API key (workspace-scoped) is in `.env` and was checked with a test message to Claude Haiku 5.5. | 15 Oct |
 | 8 | The release signing key (orvyn-release.jks + signing.properties) is backed up off the server by the owner; checksums matched (jks 31b747e7…). | 15 Oct |
-| 7 | The project is on GitHub at github.com/fnandywardhana/orvyn-mbanking (KR7), private for now at the owner's request; switch to public in Settings when ready to show it. Commits use the GitHub noreply email. | 15 Oct |
+| 7 | The project is on GitHub at github.com/fnandywardhana/orvyn-mbanking (KR7), public since 15 Oct at the owner's request, after a check of the whole history for secrets and personal data. Commits use the GitHub noreply email. | 15 Oct |
 | 4 | Banners use real photos that Claude picks (public-domain, see `docs/CREDITS.md`), chosen from a photo library in admin. No uploads. Done in 0.4.1. | 15 Oct |
 
 # For your information
