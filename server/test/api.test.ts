@@ -170,3 +170,16 @@ test('people the persona paid keep their name when paid again', async () => {
   assert.ok(sri)
   assert.equal((await call('POST', '/transfers/lookup', { bank: sri.bank, accountNumber: sri.accountNumber })).body.name, 'Sri Wahyuni')
 })
+
+test('insights over the API, and history filtered by a spending category', async () => {
+  const i = await call('GET', '/insights')
+  assert.equal(i.body.months.length, 6)
+  const top = i.body.categories[0]
+  if (top?.total > 0) {
+    const page = await call('GET', `/accounts/${(await call('GET', '/home')).body.accounts[0].id}/transactions?category=${top.key}`)
+    assert.ok(page.body.items.every((t: any) => t.spendCategory === top.key))
+  }
+  assert.equal((await call('POST', '/budgets', { category: 'food', limit: 2_000_000 })).status, 200)
+  assert.equal((await call('GET', '/insights')).body.budgets[0].limit, 2_000_000)
+  assert.equal((await call('POST', '/budgets', { category: 'yachts', limit: 1 })).status, 400)
+})

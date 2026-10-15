@@ -9,6 +9,7 @@ import { apiRoutes } from './api.ts'
 import { backfillDebitCards } from './cards.ts'
 import { runAutoSave } from './pockets.ts'
 import { runScheduledTransfers } from './scheduled.ts'
+import { runBudgetAlerts } from './insights.ts'
 
 const sql = connect()
 await migrate(sql)
@@ -38,9 +39,10 @@ setInterval(async () => {
   if (!r.ok) console.error('LEDGER CHECK FAILED', r.problems)
 }, 24 * 60 * 60 * 1000)
 
-// Money that moves on its own (auto-save, scheduled transfers). Each job is safe to run twice.
+// Jobs that run on their own (auto-save, scheduled transfers, budget reminders). Each is safe to run twice.
 setInterval(() => runAutoSave(sql).catch(e => console.error('auto-save failed', e)), 60_000)
 setInterval(() => runScheduledTransfers(sql).catch(e => console.error('scheduled transfers failed', e)), 60_000)
+setInterval(() => runBudgetAlerts(sql).catch(e => console.error('budget alerts failed', e)), 60_000)
 
 const port = Number(process.env.PORT ?? 8790)
 serve({ fetch: app.fetch, port }, () => console.log(`ORVYN server on :${port}`))

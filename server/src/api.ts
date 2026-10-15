@@ -5,6 +5,7 @@ import {
 } from './customers.ts'
 import { BANKS, lookupRecipient, transferOptions, sendTransfer, payMerchant, TransferError } from './transfers.ts'
 import { parseQris, buildQris } from './qris.ts'
+import { insights, insightCard, setBudget, setCategory, categoryOf, SPEND_KINDS, CATEGORIES } from './insights.ts'
 import { createRequest, createSplit, listRequests, listSplits, getRequest, payRequest, declineRequest, cancelRequest } from './requests.ts'
 import { createSchedule, listSchedules, updateSchedule } from './scheduled.ts'
 import { listPockets, createPocket, updatePocket, movePocket, closePocket, PocketError, POCKET_IMAGES } from './pockets.ts'
@@ -24,7 +25,7 @@ const SIGN_IN_ERRORS = {
 
 // One customer-side view of a journal entry (CONTEXT.md: Transaction).
 const txColumns = (sql: Sql) => sql`
-  j.id, j.kind, j.created_at as at, p.amount, j.memo, j.reverses_id,
+  j.id, j.kind, j.created_at as at, p.amount, j.memo, j.reverses_id, ${categoryOf(sql)} as spend_category,
   exists (select 1 from journal_entries r where r.reverses_id = j.id) as reversed`
 
 function toTransaction(r: any) {
@@ -38,6 +39,7 @@ function toTransaction(r: any) {
     title: r.kind === 'reversal' ? 'Reversed by ORVYN Bank' : (party?.name ?? m.channel ?? 'Transaction'),
     subtitle: m.channel ?? null,
     category: m.category ?? null,
+    spendCategory: amount < 0 && SPEND_KINDS.includes(r.kind) ? r.spend_category : null, // S2.8: one of the seven, for spending only
     note: m.note ?? null,
     fee: m.fee ?? 0,
     kind: r.kind,
@@ -177,6 +179,7 @@ export function apiRoutes(sql: Sql) {
         ${q.to ? sql`and j.created_at < ${new Date(q.to)}` : sql``}
         ${q.direction === 'in' ? sql`and p.amount > 0` : q.direction === 'out' ? sql`and p.amount < 0` : sql``}
         ${q.kind ? sql`and j.kind = ${q.kind}` : sql``}
+        ${q.category ? sql`and p.amount < 0 and j.kind in ${sql(SPEND_KINDS)} and ${categoryOf(sql)} = ${q.category}` : sql``}
         ${text ? sql`and (j.memo::text ilike ${'%' + text + '%'} ${digits ? sql`or abs(p.amount)::text = ${digits}` : sql``})` : sql``}
       order by j.created_at desc, j.id desc limit ${limit + 1}`
     const items = rows.slice(0, limit).map(toTransaction)
@@ -194,6 +197,22 @@ export function apiRoutes(sql: Sql) {
       order by a.kind = 'savings' desc limit 1`
     if (!r) return c.json({ error: 'not_found', message: "We couldn't find that transaction." }, 404)
     return c.json({ ...toTransaction(r), accountNumber: r.account_number, reference: r.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
+  })
+
+  // Insights and budgets (stories S2.8–S2.11)
+  app.get('/insights', async c => c.json(await insights(sql, c.get('customer').id)))
+  app.get('/insights/card', async c => c.json({ card: await insightCard(sql, c.get('customer').id) }))
+  app.post('/budgets', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    if (!CATEGORIES.includes(b.category)) return c.json({ error: 'BAD_INPUT', message: 'Pick a category.' }, 400)
+    await setBudget(sql, c.get('customer').id, b.category, b.limit == null ? null : Number(b.limit))
+    return c.json({ ok: true })
+  })
+  app.post('/transactions/:id/category', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    if (!(await setCategory(sql, c.get('customer').id, c.req.param('id'), String(b.category ?? ''))))
+      return c.json({ error: 'not_found', message: "We couldn't change that transaction." }, 404)
+    return c.json({ ok: true })
   })
 
   // Pockets (stories S2.1–S2.3)
