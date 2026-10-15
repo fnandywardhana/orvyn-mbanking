@@ -37,6 +37,8 @@ Semua story S0.1–S0.7 selesai (lihat riwayat commit).
 3. Penguji memasang APK dari link di pesan itu, lalu masuk.
 4. Untuk menambah uang, buka halaman nasabah di admin, bagian **Add or remove money**.
 
+**Nasabah showcase di produksi (15 Okt):** Fidel Castro dinaikkan ke Prestige dengan RM Anindya Prameswari, dan semua fitur sudah terisi lewat Journal Entry bertanggal mundur. Isinya: penjualan rumah Rp1,25 M (Mei), bagi hasil bulanan, 4 kantong (satu sudah mencapai target), 4 deposito, USD/SGD/JPY, profil risiko agresif, 4 reksadana, ORI dan SR dengan kupon bulanan, emas 17,5 g, kartu kredit Voyage dengan tagihan berjalan, 4 penerima tersimpan, 4 transfer terjadwal, 5 nomor tagihan tersimpan, 4 anggaran, serta permintaan uang dan split bill. Dua teman di ORVYN dibuat sebagai lawan transaksi: Raka Pratama (081211112222) dan Sinta Maharani (081233334444), dengan password yang sama dan PIN dibuat saat pertama masuk. Total aset sekitar Rp1,38 M. Ledger dicek: OK.
+
 ## Fase 2: sedang dikerjakan
 
 Story: `docs/stories/STORIES-F2.md`. Selesai: S2.0 push notification (0.5.0); S2.1–S2.3 kantong dan tabung otomatis, S2.4–S2.5 transfer terjadwal, S2.6–S2.7 minta uang dan split bill (0.6.0); S2.8–S2.11 insight dan anggaran, S2.12–S2.16 Vyna (uji 30/30), S2.17 e-statement PDF, S2.18 widget, S2.19 persona dengan kantong dan anggaran (0.7.0). **Fase 2 selesai.**
