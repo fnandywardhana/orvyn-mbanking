@@ -7,4 +7,5 @@
     <string name="welcome_sign_in">Sign in</string>
     <string name="welcome_register">New to ORVYN? Open an account</string>
     <string name="demo_label">Demo · ORVYN Bank is a fictional bank</string>
+    <string name="widget_description">Scan QRIS in one tap. Your balance stays hidden until you tap it.</string>
 </resources>

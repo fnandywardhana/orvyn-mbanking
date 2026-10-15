@@ -114,6 +114,7 @@ fun HomeScreen(
     onInbox: () -> Unit = {},
     onRoute: (String) -> Unit = {},
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var home by remember { mutableStateOf(store.lastHome?.second?.let { runCatching { parseHome(JSONObject(it)) }.getOrNull() }) }
     var updatedAt by remember { mutableStateOf(store.lastHome?.first) }
     var offline by remember { mutableStateOf(false) }
@@ -129,6 +130,7 @@ fun HomeScreen(
             offline = false; error = null
             updatedAt = System.currentTimeMillis()
             store.lastHome = updatedAt!! to json.toString()
+            id.orvyn.app.widget.BalanceWidget.refresh(context)
         } catch (e: ApiException) {
             if (e.code == "offline") offline = true else error = e.message
         }

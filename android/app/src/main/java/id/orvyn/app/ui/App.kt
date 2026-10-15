@@ -144,6 +144,7 @@ fun OrvynApp(store: DeviceStore) {
         Push.pendingLink = null
         nav.navigate(when {
             link.startsWith("tx:") -> "tx/${link.removePrefix("tx:")}"
+            link == "qris" -> "qris" // the widget's Scan QRIS button
             link.startsWith("request:") -> "request/${link.removePrefix("request:")}"
             else -> "inbox"
         })

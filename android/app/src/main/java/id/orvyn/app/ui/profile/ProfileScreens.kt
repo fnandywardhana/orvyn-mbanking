@@ -135,11 +135,12 @@ fun ProfileScreen(store: DeviceStore, onSignedOut: () -> Unit, onRoute: (String)
         Text("ORVYN ${BuildConfig.VERSION_NAME} · Demo. ORVYN Bank is a fictional bank, and all money in it is pretend.",
             style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textTertiary, modifier = Modifier.padding(20.dp))
     }
+    val widgetContext = androidx.compose.ui.platform.LocalContext.current
     if (confirm) ConfirmDialog(
         title = "Sign out of ORVYN?",
         body = "This phone forgets your PIN and fingerprint sign-in. Next time you sign in with your phone number and password.",
         confirmLabel = "Sign out", destructive = true, onDismiss = { confirm = false },
-        onConfirm = { scope.launch { Api.signOut(forget = true); store.forgetDevice(); onSignedOut() } },
+        onConfirm = { scope.launch { Api.signOut(forget = true); store.forgetDevice(); id.orvyn.app.widget.BalanceWidget.refresh(widgetContext); onSignedOut() } },
     )
 }
 

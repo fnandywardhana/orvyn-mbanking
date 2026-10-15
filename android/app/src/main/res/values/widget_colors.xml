@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Story S2.18: the home screen widget follows the phone's light or dark theme. -->
+<resources>
+    <color name="widget_bg">#FFFFFF</color>
+    <color name="widget_text">#0B1020</color>
+    <color name="widget_muted">#4D5872</color>
+    <color name="widget_pill">#E5ECFA</color>
+    <color name="widget_pill_text">#0032A0</color>
+</resources>
