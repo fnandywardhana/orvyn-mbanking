@@ -47,9 +47,16 @@ Fitur: Vyna (asisten AI), insight pengeluaran, kantong tabungan, transfer terjad
 
 Vyna butuh API key Anthropic di `.env` (lihat DECISIONS-PENDING #5). Fitur lain bisa langsung dikerjakan.
 
-## Fase 3: dimulai (dijeda 15 Okt sekitar 08.50 WIB)
+## Fase 3: selesai ✅ (0.8.0)
 
-- Selesai: istilah domain di `CONTEXT.md`, ADR 0003, story di `docs/stories/STORIES-F3.md`.
-- Draft migrasi valas + deposito ada di `server/migrations-wip/022_fx_deposits.sql`. Sengaja di luar folder `migrations/` supaya tidak ikut terpasang saat deploy. Pindahkan kembali saat kodenya dibuat.
-- `server/src/fx.ts` (rekening valas, kurs, kurs Prestige, kuotasi, penukaran) sudah ditulis tapi **belum dites dan belum dipakai route mana pun**.
-- Berikutnya: test + route valas (S3.1–S3.2) dan deposito (S3.3–S3.4), lalu investasi, total aset, Prestige/RM, passkey, README.
+| Fitur | Story | Status |
+|---|---|---|
+| Rekening valas dan tukar mata uang, kurs Prestige | S3.1–S3.2 | ✅ Diuji di HP (beli USD 1,000 dengan kurs Prestige) |
+| Deposito: buka, jatuh tempo, perpanjang atau cair, cair lebih awal, "Mature now" di admin | S3.3–S3.4 | ✅ Diuji di HP |
+| Profil risiko, reksadana (NAB harian simulasi), SBN (kupon bulanan), emas | S3.5–S3.8 | ✅ Diuji di HP |
+| Layar Wealth (total aset dan komposisi) | S3.9 | ✅ Diuji di HP, terang dan gelap |
+| Tampilan Prestige dan kartu RM (avatar monogram) | S3.10–S3.11 | ✅ Diuji di HP |
+| Passkey | S3.12 | ⚠️ Server teruji dengan authenticator software. Pembuatan passkey di HP belum diuji (menunggu izin pemilik) |
+| README dan cerita proyek | S3.13 | ✅ `README.md`, `docs/STORY.md`. Repo belum di GitHub (menunggu pemilik) |
+
+**Test otomatis:** 92 test server, test aplikasi, dan evaluasi Vyna 30/30.
