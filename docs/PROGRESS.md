@@ -51,4 +51,5 @@ Vyna butuh API key Anthropic di `.env` (lihat DECISIONS-PENDING #5). Fitur lain 
 
 - Selesai: istilah domain di `CONTEXT.md`, ADR 0003, story di `docs/stories/STORIES-F3.md`.
 - Draft migrasi valas + deposito ada di `server/migrations-wip/022_fx_deposits.sql`. Sengaja di luar folder `migrations/` supaya tidak ikut terpasang saat deploy. Pindahkan kembali saat kodenya dibuat.
-- Berikutnya: kode server valas (S3.1–S3.2) dan deposito (S3.3–S3.4), lalu investasi, total aset, Prestige/RM, passkey, README.
+- `server/src/fx.ts` (rekening valas, kurs, kurs Prestige, kuotasi, penukaran) sudah ditulis tapi **belum dites dan belum dipakai route mana pun**.
+- Berikutnya: test + route valas (S3.1–S3.2) dan deposito (S3.3–S3.4), lalu investasi, total aset, Prestige/RM, passkey, README.
