@@ -139,6 +139,40 @@ export async function generateHistory(tx: TransactionSql, personaKey: string, sa
       }
     }
   }
+
+  // Story S2.19 AC2: a pocket or two and some budgets, so pockets and insights have something to show in a demo.
+  const goals = GOALS[personaKey] ?? { pockets: [], budgets: {} }
+  for (const g of goals.pockets) {
+    const [a] = await tx`insert into accounts (kind, customer_id, name, currency, floor) values ('pocket', ${customerId}, ${g.name}, 'IDR', 0) returning id`
+    await tx`insert into pockets (account_id, customer_id, image, target, rule, rule_since)
+      values (${a.id}, ${customerId}, ${g.image}, ${g.target}, ${g.rule ? tx.json(g.rule) : null}, ${g.rule ? now : null})`
+    await postJournal(tx, { kind: 'pocket_move', at: new Date(today - 3 * DAY + 9 * 3_600_000), memo: { from: { name: 'ORVYN Everyday' }, to: { name: g.name }, channel: 'Pocket', category: 'pocket' },
+      postings: [{ accountId: savingsId, amount: -g.saved }, { accountId: a.id, amount: g.saved }] }).catch(e => { if (!(e instanceof LedgerError)) throw e })
+  }
+  for (const [category, limit] of Object.entries(goals.budgets))
+    await tx`insert into budgets (customer_id, category, monthly_limit) values (${customerId}, ${category}, ${limit})`
+}
+
+type Goal = { name: string, image: string, target: number, saved: number, rule?: object }
+const GOALS: Record<string, { pockets: Goal[], budgets: Record<string, number> }> = {
+  raka: {
+    pockets: [
+      { name: 'New laptop', image: 'gadget', target: 15_000_000, saved: 2_500_000, rule: { type: 'weekly', day: 1, amount: 100_000 } },
+      { name: 'Emergency fund', image: 'safety', target: 10_000_000, saved: 1_500_000 },
+    ],
+    budgets: { food: 1_500_000, transport: 600_000 },
+  },
+  sinta: {
+    pockets: [{ name: 'Bali holiday', image: 'travel', target: 8_000_000, saved: 3_200_000, rule: { type: 'payday', percent: 10 } }],
+    budgets: { shopping: 2_000_000, food: 2_500_000 },
+  },
+  hendra: {
+    pockets: [
+      { name: "Kevin's school", image: 'study', target: 200_000_000, saved: 75_000_000 },
+      { name: 'Japan trip', image: 'travel', target: 60_000_000, saved: 20_000_000, rule: { type: 'roundup' } },
+    ],
+    budgets: { entertainment: 10_000_000, food: 8_000_000 },
+  },
 }
 
 /** A stable 10-digit number for a made-up person at another bank. */

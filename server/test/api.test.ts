@@ -45,7 +45,8 @@ test('a tester signs in, sets a PIN, and sees home with balance and recent trans
   const home = await call('GET', '/home')
   assert.equal(home.body.customer.firstName, 'Raka')
   assert.equal(home.body.accounts.length, 1)
-  assert.equal(home.body.totalBalance, home.body.accounts[0].balance)
+  assert.equal(home.body.totalBalance, home.body.accounts[0].balance + home.body.pockets.reduce((t: number, p: any) => t + p.balance, 0))
+  assert.deepEqual(home.body.pockets.map((p: any) => p.name), ['New laptop', 'Emergency fund']) // persona goals (S2.19)
   assert.equal(home.body.recent.length, 5)
 
   const pin = await call('POST', '/auth/pin', { deviceToken: ok.body.deviceToken, pin: '000001' })
@@ -156,7 +157,7 @@ test('pockets over the API: home lists them, a move shows once in recent, detail
   const moved = await call('POST', `/pockets/${made.body.id}/move`, { direction: 'in', amount: 250_000, idempotencyKey: 'pk-1' })
   assert.equal(moved.status, 200)
   const home = await call('GET', '/home')
-  assert.equal(home.body.pockets[0].balance, 250_000)
+  assert.equal(home.body.pockets.find((p: any) => p.id === made.body.id).balance, 250_000)
   assert.equal(home.body.accounts.length, 1)
   assert.equal(home.body.recent.filter((t: any) => t.id === moved.body.journalId).length, 1)
   assert.equal((await call('GET', `/transactions/${moved.body.journalId}`)).body.amount, -250_000)
