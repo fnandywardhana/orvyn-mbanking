@@ -52,6 +52,9 @@ import id.orvyn.app.BuildConfig
 import id.orvyn.app.R
 import id.orvyn.app.data.Api
 import id.orvyn.app.data.Push
+import id.orvyn.app.ui.pockets.PocketEditor
+import id.orvyn.app.ui.pockets.PocketMoveFlow
+import id.orvyn.app.ui.pockets.PocketScreen
 import id.orvyn.app.data.AppConfig
 import id.orvyn.app.data.DataVersion
 import id.orvyn.app.data.DeviceStore
@@ -175,12 +178,24 @@ fun OrvynApp(store: DeviceStore) {
             val (r, a) = pendingQrTransfer ?: return@composable
             TransferFlow(onExit = { nav.popBackStack() }, startWith = r, startAmount = a)
         }
-        composable("tx/{id}") { entry ->
+        composable("pocket/new") { PocketEditor(null, onBack = { nav.popBackStack() }, onSaved = { nav.navigate("pocket/$it") { popUpTo("main") } }, onClosed = {}) }
+        composable("pocket/{id}") { entry ->
+            val id = entry.arguments!!.getString("id")!!
+            PocketScreen(id, onBack = { nav.popBackStack() }, onMove = { nav.navigate("pocket/$id/move/${if (it) "in" else "out"}") },
+                onEdit = { nav.navigate("pocket/$id/edit") }, onOpenTransaction = { nav.navigate("tx/$it?account=$id") })
+        }
+        composable("pocket/{id}/edit") { entry ->
+            PocketEditor(entry.arguments!!.getString("id"), onBack = { nav.popBackStack() }, onSaved = { nav.popBackStack() }, onClosed = { nav.popBackStack("main", false) })
+        }
+        composable("pocket/{id}/move/{dir}") { entry ->
+            PocketMoveFlow(entry.arguments!!.getString("id")!!, entry.arguments!!.getString("dir") == "in", onExit = { nav.popBackStack() })
+        }
+        composable("tx/{id}?account={account}", arguments = listOf(androidx.navigation.navArgument("account") { nullable = true; defaultValue = null })) { entry ->
             val snack = remember { SnackbarHostState() }
             val scope = rememberCoroutineScope()
             Scaffold(snackbarHost = { SnackbarHost(snack) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
                 Box(Modifier.padding(pad)) {
-                    TransactionDetailScreen(entry.arguments!!.getString("id")!!, onBack = { nav.popBackStack() }) { msg -> scope.launch { snack.showSnackbar(msg) } }
+                    TransactionDetailScreen(entry.arguments!!.getString("id")!!, entry.arguments?.getString("account"), onBack = { nav.popBackStack() }) { msg -> scope.launch { snack.showSnackbar(msg) } }
                 }
             }
         }
@@ -224,7 +239,7 @@ private fun MainShell(store: DeviceStore, onOpenTransaction: (String) -> Unit, o
                     if (!AppConfig.on(feature)) say("$action is switched off for now. Try again later.")
                     else when (action) { "Transfer" -> onTransfer(); "QRIS" -> onQris(); "Pay" -> onRoute("bills"); else -> onRoute("topup") }
                 }, onCopied = say,
-                    onInbox = { onRoute("inbox") })
+                    onInbox = { onRoute("inbox") }, onRoute = onRoute)
                 Tab.History -> HistoryScreen(store.lastHome?.second?.let { runCatching { parseHome(JSONObject(it)).accounts.firstOrNull()?.id }.getOrNull() }, onOpenTransaction)
                 Tab.Profile -> ProfileScreen(store, onSignedOut, onRoute)
                 Tab.Cards -> CardsScreen(onPayBill = onPayCard, say = say)

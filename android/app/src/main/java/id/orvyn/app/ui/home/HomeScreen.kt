@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -86,6 +89,7 @@ import org.json.JSONObject
 fun iconFor(t: Transaction) = when (t.kind) {
     "qris_payment" -> R.drawable.ph_qr_code
     "bill_payment" -> R.drawable.ph_lightning
+    "pocket_move" -> R.drawable.ph_piggy_bank
     "internal_transfer", "external_transfer", "reversal" -> R.drawable.ph_arrows_left_right
     else -> R.drawable.ph_arrows_left_right
 }
@@ -108,6 +112,7 @@ fun HomeScreen(
     onQuickAction: (String) -> Unit,
     onCopied: (String) -> Unit,
     onInbox: () -> Unit = {},
+    onRoute: (String) -> Unit = {},
 ) {
     var home by remember { mutableStateOf(store.lastHome?.second?.let { runCatching { parseHome(JSONObject(it)) }.getOrNull() }) }
     var updatedAt by remember { mutableStateOf(store.lastHome?.first) }
@@ -144,7 +149,8 @@ fun HomeScreen(
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { scope.launch { refreshing = true; load(); refreshing = false } },
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val h = home
-        LazyColumn(Modifier.fillMaxSize()) {
+        val list = androidx.compose.foundation.lazy.rememberLazyListState()
+        LazyColumn(Modifier.fillMaxSize(), state = list) {
             item {
                 Hero(h, hidden, onToggle = { hidden = !hidden; store.balanceHidden = hidden }, onInbox = onInbox)
                 QuickActions(enabled = !offline, onAction = onQuickAction)
@@ -177,6 +183,10 @@ fun HomeScreen(
                     Text(if (hidden) "Rp••••••" else Money.format(a.balance), style = MaterialTheme.typography.titleLarge)
                 }
             }
+            if (h != null && id.orvyn.app.data.AppConfig.on("pockets")) item {
+                Eyebrow("Pockets")
+                id.orvyn.app.ui.pockets.PocketsStrip(h.pockets, hidden, onOpen = { onRoute("pocket/$it") }, onCreate = { onRoute("pocket/new") })
+            }
             item {
                 Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("RECENT", style = MaterialTheme.typography.labelSmall, color = OrvynTheme.colors.textSecondary, modifier = Modifier.weight(1f))
@@ -194,6 +204,9 @@ fun HomeScreen(
             }
             item { Spacer(Modifier.height(24.dp)) }
         }
+        // Once the dark hero scrolls away, keep a dark strip under the (light) status bar icons so they stay readable.
+        val pastHero by remember { androidx.compose.runtime.derivedStateOf { list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 200 } }
+        if (pastHero) Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(Brand.HeroMid))
     }
 }
 

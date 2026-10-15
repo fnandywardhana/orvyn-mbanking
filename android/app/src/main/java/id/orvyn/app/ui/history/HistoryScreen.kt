@@ -161,10 +161,10 @@ private fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
 
 /** Story S1.11. */
 @Composable
-fun TransactionDetailScreen(id: String, onBack: () -> Unit, onCopied: (String) -> Unit) {
+fun TransactionDetailScreen(id: String, account: String? = null, onBack: () -> Unit, onCopied: (String) -> Unit) {
     var t by remember { mutableStateOf<Transaction?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(id) { try { t = Api.transaction(id) } catch (e: ApiException) { error = e.message } }
+    LaunchedEffect(id) { try { t = Api.transaction(id, account) } catch (e: ApiException) { error = e.message } }
     val clipboard = LocalClipboardManager.current
     val context = androidx.compose.ui.platform.LocalContext.current
 

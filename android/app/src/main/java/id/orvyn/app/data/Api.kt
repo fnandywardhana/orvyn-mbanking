@@ -33,6 +33,11 @@ data class Transaction(
     val accountNumber: String? = null,
 )
 
+/** Story S2.1. [rule] is the server's auto-save rule as-is, e.g. {"type":"weekly","day":1,"amount":100000}. */
+data class Pocket(val id: String, val name: String, val balance: Long, val image: String, val target: Long?, val targetDate: String?, val rule: JSONObject?, val reached: Boolean) {
+    val progress get() = target?.let { (balance.toFloat() / it).coerceIn(0f, 1f) }
+}
+
 data class Home(
     val unread: Int,
     val firstName: String,
@@ -41,6 +46,7 @@ data class Home(
     val totalBalance: Long,
     val accounts: List<Account>,
     val recent: List<Transaction>,
+    val pockets: List<Pocket> = emptyList(),
 )
 
 data class Page(val items: List<Transaction>, val next: String?)
@@ -169,7 +175,22 @@ object Api {
         return Page(r.getJSONArray("items").map(::parseTransaction), r.optString("next").takeIf { it.isNotEmpty() && it != "null" })
     }
 
-    suspend fun transaction(id: String): Transaction = parseTransaction(call("GET", "/transactions/$id"))
+    suspend fun transaction(id: String, account: String? = null): Transaction =
+        parseTransaction(call("GET", "/transactions/$id" + (account?.let { "?account=$it" } ?: "")))
+
+    // Pockets (stories S2.1–S2.3)
+    suspend fun pockets(): List<Pocket> = call("GET", "/pockets").getJSONArray("pockets").map(::parsePocket)
+    private fun pocketBody(name: String, image: String, target: Long?, targetDate: String?) =
+        JSONObject().put("name", name).put("image", image).put("target", target ?: JSONObject.NULL).put("targetDate", targetDate ?: JSONObject.NULL)
+    suspend fun createPocket(name: String, image: String, target: Long?, targetDate: String?): String =
+        call("POST", "/pockets", pocketBody(name, image, target, targetDate)).getString("id")
+    suspend fun updatePocket(p: Pocket, name: String = p.name, image: String = p.image, target: Long? = p.target, targetDate: String? = p.targetDate, rule: JSONObject? = p.rule) {
+        call("POST", "/pockets/${p.id}", pocketBody(name, image, target, targetDate).put("rule", rule ?: JSONObject.NULL))
+    }
+    /** Returns true when this move reached the pocket's target. */
+    suspend fun movePocket(id: String, intoPocket: Boolean, amount: Long, key: String): Boolean =
+        call("POST", "/pockets/$id/move", JSONObject().put("direction", if (intoPocket) "in" else "out").put("amount", amount).put("idempotencyKey", key)).optBoolean("reached")
+    suspend fun closePocket(id: String, key: String) { call("POST", "/pockets/$id/close", JSONObject().put("idempotencyKey", key)) }
 
     suspend fun banks(): List<Bank> = call("GET", "/banks").getJSONArray("banks").map { Bank(it.getString("code"), it.getString("name")) }
 
@@ -322,8 +343,14 @@ fun parseHome(j: JSONObject): Home {
             Account(it.getString("id"), it.getString("kind"), it.getString("name"), it.optString("number").takeIf { n -> n.isNotEmpty() && n != "null" }, it.getLong("balance"))
         },
         recent = j.getJSONArray("recent").map(::parseTransaction),
+        pockets = j.optJSONArray("pockets")?.map(::parsePocket) ?: emptyList(),
     )
 }
+
+fun parsePocket(p: JSONObject) = Pocket(
+    p.getString("id"), p.getString("name"), p.getLong("balance"), p.getString("image"),
+    p.optLong("target").takeIf { !p.isNull("target") }, p.optStringOrNull("targetDate"), p.optJSONObject("rule"), p.optBoolean("reached"),
+)
 
 fun parseRecipient(r: JSONObject) = Recipient(
     bank = r.getString("bank"), bankName = r.getString("bankName"), accountNumber = r.getString("accountNumber"),

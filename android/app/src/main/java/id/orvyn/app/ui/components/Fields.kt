@@ -139,7 +139,7 @@ fun AmountDisplay(amount: Long, available: Long?, error: String?, onQuickPick: (
 }
 
 @Composable
-private fun Chip(text: String, selected: Boolean, onClick: () -> Unit) {
+fun Chip(text: String, selected: Boolean, onClick: () -> Unit) {
     val c = MaterialTheme.colorScheme
     Box(
         Modifier
