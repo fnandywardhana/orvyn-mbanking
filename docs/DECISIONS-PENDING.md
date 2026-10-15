@@ -5,7 +5,6 @@ Claude's working notes for things that need your answer. None of them blocks the
 | # | Question | Default in use | Since |
 |---|---|---|---|
 | 6 | Passkey test on the Note10+ (allowed by the owner on 15 Oct) stopped at Google's "Set up screen lock to create passkeys": the phone has no screen lock, and Claude won't change that. To finish: set a screen lock (PIN or pattern) on the Note10+, tell Claude, and remove it afterwards if you like. | Google accepted ORVYN's request for orvyn.delvault.uk and reached the screen-lock step; cancelling is handled in the app | 15 Oct |
-| 7 | KR7 asks for the project on GitHub. Create an empty repository (public or private) and say its name; Claude will add it as a remote. Pushing stays blocked for Claude by the git guardrail, so you push, or allow it once. | README and story are ready in the repo | 15 Oct |
 
 
 # Decided
@@ -16,6 +15,7 @@ Claude's working notes for things that need your answer. None of them blocks the
 | 2 | Fingerprint sign-in: the owner tested it on another phone and it works. | 15 Oct |
 | 3 | Firebase project `orvyn-94fcb` is set up; both files are in `secrets/` and were checked against Google. | 15 Oct |
 | 5 | Anthropic API key (workspace-scoped) is in `.env` and was checked with a test message to Claude Haiku 5.5. | 15 Oct |
+| 7 | The project is public at github.com/fnandywardhana/orvyn-mbanking (KR7). Commits use the GitHub noreply email. | 15 Oct |
 | 4 | Banners use real photos that Claude picks (public-domain, see `docs/CREDITS.md`), chosen from a photo library in admin. No uploads. Done in 0.4.1. | 15 Oct |
 
 # For your information
