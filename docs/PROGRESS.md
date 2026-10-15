@@ -1,6 +1,6 @@
 # Progres ORVYN
 
-Terakhir diperbarui: 15 Okt 2026, sekitar 06.40 WIB. Versi online: **0.6.0** di `https://orvyn.delvault.uk`.
+Terakhir diperbarui: 15 Okt 2026, sekitar 06.40 WIB. Versi online: **0.7.0** di `https://orvyn.delvault.uk`.
 
 ## Fase 0: Fondasi ✅
 
@@ -39,7 +39,7 @@ Semua story S0.1–S0.7 selesai (lihat riwayat commit).
 
 ## Fase 2: sedang dikerjakan
 
-Story: `docs/stories/STORIES-F2.md`. Selesai: S2.0 push notification (0.5.0); S2.1–S2.3 kantong dan tabung otomatis, S2.4–S2.5 transfer terjadwal, S2.6–S2.7 minta uang dan split bill (0.6.0).
+Story: `docs/stories/STORIES-F2.md`. Selesai: S2.0 push notification (0.5.0); S2.1–S2.3 kantong dan tabung otomatis, S2.4–S2.5 transfer terjadwal, S2.6–S2.7 minta uang dan split bill (0.6.0); S2.8–S2.11 insight dan anggaran, S2.12–S2.16 Vyna (uji 30/30), S2.17 e-statement PDF, S2.18 widget, S2.19 persona dengan kantong dan anggaran (0.7.0). **Fase 2 selesai.**
 
 ## Fitur Fase 2
 

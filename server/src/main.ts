@@ -27,6 +27,9 @@ app.use('/banners/*', serveStatic({ root: './public' }))
 app.use('/download/*', async (c, next) => {
   await next()
   if (c.req.path.endsWith('.apk')) c.res.headers.set('Content-Type', 'application/vnd.android.package-archive') // lets Android offer "Install"
+  // orvyn.apk points at a new version after every release, so neither Cloudflare nor the phone may keep a copy.
+  // Versioned files never change and can be cached.
+  c.res.headers.set('Cache-Control', /orvyn-\d+\.\d+\.\d+\./.test(c.req.path) ? 'public, max-age=31536000, immutable' : 'no-store')
 })
 app.use('/download/*', serveStatic({ root: './', rewriteRequestPath: p => p.replace(/^\/download/, '/releases') }))
 app.route('/admin', adminRoutes(sql))

@@ -6,6 +6,10 @@ import { shell, audit, requireRole, type Officer } from './admin.ts'
 import { createCustomer, CustomerError } from './customers.ts'
 import { hashPassword } from './auth.ts'
 import { PERSONAS, generateHistory } from './personas.ts'
+import { readlinkSync } from 'node:fs'
+
+/** The versioned file orvyn.apk points at, so a link in a message never gets an old copy from a cache. */
+const latestApk = () => { try { return readlinkSync('./releases/orvyn.apk') } catch { return 'orvyn.apk' } }
 import { PRODUCTS, spendOnCard } from './cards.ts'
 import { postJournal, houseAccount, LedgerError } from './ledger.ts'
 import { notifyJournal } from './inbox.ts'
@@ -98,7 +102,7 @@ ${PERSONAS.map((p, i) => html`<label class="persona"><input type="radio" name="p
       const [{ balance }] = await sql`select balance from accounts where id = ${savings.id}`
       const message = `Hi ${customer.full_name.split(' ')[0]}! Here's your ORVYN demo account.
 
-1. Install the app: ${PUBLIC_URL}/download/orvyn.apk
+1. Install the app: ${PUBLIC_URL}/download/${latestApk()}
 2. Open it and tap Sign in.
    Phone: ${customer.phone}
    Password: ${f.password}

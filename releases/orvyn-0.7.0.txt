@@ -1,0 +1,21 @@
+ORVYN 0.7.0
+
+What's new
+- Vyna, your assistant: tap the sparkle at the top of the home screen. Ask about your balance, spending or anything in ORVYN, in English or Bahasa Indonesia. She can get a transfer or a pocket move ready, and you always check it and enter your PIN yourself. She can read her replies aloud.
+- Insights: where your money went this month by category, six months at a glance, and how this month compares with the same days last month. Open it from the card on the home screen or from History.
+- Budgets: set a monthly limit per category and get a reminder at 80% and 100%. Nothing is ever blocked.
+- Change the category of any payment from its details.
+- E-statements: a PDF of any of the last 12 months, under Profile.
+- Home screen widget: Scan QRIS in one tap, and peek at your balance for 10 seconds.
+
+Permissions this app asks for
+- INTERNET: to talk to the ORVYN server.
+- CAMERA: only while scanning a QR code or taking the sign-up photos. Nothing is uploaded.
+- POST_NOTIFICATIONS: to show your sign-up code and account activity (Android 13 and newer ask first).
+- RECEIVE (Firebase), WAKE_LOCK, ACCESS_NETWORK_STATE: added by Firebase so push notifications arrive. None of them reads anything about you or your phone.
+- USE_BIOMETRIC / USE_FINGERPRINT: only if you turn on fingerprint sign-in.
+- RECORD_AUDIO: only while you hold Vyna's microphone open, on phones that can recognise speech by themselves. Your voice never leaves the phone. Android asks the first time.
+No contacts, location, SMS, storage, device IDs, analytics or ads.
+
+How to update
+Open the download link on your phone, download, tap the file, then Update.
