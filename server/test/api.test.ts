@@ -163,3 +163,10 @@ test('pockets over the API: home lists them, a move shows once in recent, detail
   assert.equal((await call('GET', `/transactions/${moved.body.journalId}?account=${made.body.id}`)).body.amount, 250_000)
   assert.equal((await call('POST', `/pockets/${made.body.id}/move`, { direction: 'out', amount: 999_999_999 })).body.error, 'INSUFFICIENT_FUNDS')
 })
+
+test('people the persona paid keep their name when paid again', async () => {
+  const recent = (await call('GET', '/recipients')).body.recent
+  const sri = recent.find((r: any) => r.name === 'Sri Wahyuni')
+  assert.ok(sri)
+  assert.equal((await call('POST', '/transfers/lookup', { bank: sri.bank, accountNumber: sri.accountNumber })).body.name, 'Sri Wahyuni')
+})

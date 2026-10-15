@@ -1,4 +1,5 @@
 import type { TransactionSql } from 'postgres'
+import { BANKS } from './transfers.ts'
 import { postJournal, houseAccount, LedgerError } from './ledger.ts'
 import { issueCard, spendOnCard } from './cards.ts'
 
@@ -147,7 +148,7 @@ function accountFor(name: string) {
   return String(h).padStart(10, '1')
 }
 
-function post(tx: TransactionSql, s: Spec, savings: string, house: Record<string, string>, at: Date) {
+async function post(tx: TransactionSql, s: Spec, savings: string, house: Record<string, string>, at: Date) {
   switch (s.type) {
     case 'in':
       return postJournal(tx, { kind: 'inflow', at, memo: { from: s.from, channel: s.channel, category: s.category } satisfies Memo,
@@ -155,6 +156,9 @@ function post(tx: TransactionSql, s: Spec, savings: string, house: Record<string
     case 'transfer': {
       const fee = s.rtgs ? 25_000 : 2_500
       s = { ...s, to: { ...s.to, account: s.to.account ?? accountFor(s.to.name) } } // so they show up as recent recipients
+      // ...and so sending to them again finds the same name (External Directory), not a generated one.
+      const code = BANKS.find(b => b.name === s.to.bank || b.code === s.to.bank)?.code ?? s.to.bank
+      await tx`insert into external_directory (bank, account_number, name) values (${code}, ${s.to.account!}, ${s.to.name}) on conflict do nothing`
       return postJournal(tx, { kind: 'external_transfer', at,
         memo: { to: s.to, channel: `${s.rtgs ? 'RTGS' : 'BI-FAST'} · ${s.to.bank}`, category: s.category, fee, note: s.note } satisfies Memo,
         postings: [{ accountId: savings, amount: -(s.amount + fee) }, { accountId: house.EXTERNAL_CLEARING, amount: s.amount }, { accountId: house.FEE_INCOME, amount: fee }] })

@@ -53,6 +53,7 @@ import id.orvyn.app.R
 import id.orvyn.app.data.Api
 import id.orvyn.app.data.Push
 import id.orvyn.app.ui.pockets.PocketEditor
+import id.orvyn.app.ui.transfer.ScheduledScreen
 import id.orvyn.app.ui.pockets.PocketMoveFlow
 import id.orvyn.app.ui.pockets.PocketScreen
 import id.orvyn.app.data.AppConfig
@@ -162,7 +163,8 @@ fun OrvynApp(store: DeviceStore) {
                 onTransfer = { nav.navigate("transfer") }, onQris = { nav.navigate("qris") }, onRoute = { nav.navigate(it) },
                 onPayCard = { pendingCard = it; nav.navigate("cardpay") })
         }
-        composable("transfer") { TransferFlow(onExit = { nav.popBackStack() }) }
+        composable("transfer") { TransferFlow(onExit = { nav.popBackStack() }, onScheduled = { nav.navigate("scheduled") }) }
+        composable("scheduled") { ScheduledScreen(onBack = { nav.popBackStack() }) }
         composable("bills") { BillsFlow(onExit = { nav.popBackStack() }) }
         composable("profile/pin") { ChangePinFlow(onDone = { nav.popBackStack() }) }
         composable("profile/password") { ChangePasswordScreen(onDone = { nav.popBackStack() }) }

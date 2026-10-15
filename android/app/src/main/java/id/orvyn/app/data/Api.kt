@@ -38,6 +38,9 @@ data class Pocket(val id: String, val name: String, val balance: Long, val image
     val progress get() = target?.let { (balance.toFloat() / it).coerceIn(0f, 1f) }
 }
 
+data class Scheduled(val id: String, val name: String, val bank: String, val accountNumber: String, val amount: Long,
+    val repeat: String, val nextRun: String?, val paused: Boolean, val lastOk: Boolean?, val lastMessage: String?)
+
 data class Home(
     val unread: Int,
     val firstName: String,
@@ -209,6 +212,20 @@ object Api {
     suspend fun sendTransfer(to: Recipient, amount: Long, method: String, note: String, pin: String, idempotencyKey: String): String =
         call("POST", "/transfers", JSONObject().put("bank", to.bank).put("accountNumber", to.accountNumber).put("amount", amount)
             .put("method", method).put("note", note).put("pin", pin).put("idempotencyKey", idempotencyKey)).getString("reference")
+
+    // Scheduled Transfers (stories S2.4–S2.5). [repeat] is once, weekly or monthly; [firstDate] YYYY-MM-DD.
+    suspend fun createSchedule(to: Recipient, amount: Long, method: String, note: String, repeat: String, firstDate: String, pin: String) {
+        call("POST", "/scheduled", JSONObject().put("bank", to.bank).put("accountNumber", to.accountNumber).put("amount", amount)
+            .put("method", method).put("note", note).put("repeat", repeat).put("firstDate", firstDate).put("pin", pin))
+    }
+    suspend fun scheduled(): List<Scheduled> = call("GET", "/scheduled").getJSONArray("scheduled").map {
+        val last = it.optJSONObject("lastResult")
+        Scheduled(it.getString("id"), it.getString("name"), it.getString("bank"), it.getString("accountNumber"), it.getLong("amount"),
+            it.getString("repeat"), it.optStringOrNull("nextRun"), it.getBoolean("paused"), last?.optBoolean("ok"), last?.optString("message"))
+    }
+    suspend fun updateSchedule(id: String, paused: Boolean? = null, delete: Boolean = false) {
+        call("POST", "/scheduled/$id", JSONObject().apply { paused?.let { put("paused", it) }; if (delete) put("delete", true) })
+    }
 
     suspend fun recipients(): Recipients {
         val r = call("GET", "/recipients")
