@@ -10,7 +10,8 @@ type Env = { Variables: { officer: Officer } }
 const sel = 'style="height:40px;border-radius:10px;padding:0 10px;font:inherit"'
 const form = async (c: any) => Object.fromEntries(Object.entries(await c.req.parseBody()).map(([k, x]) => [k, String(x).trim()])) as Record<string, string>
 const FEATURES: [string, string][] = [['transfer', 'Transfers'], ['qris', 'QRIS'], ['bills', 'Pay and buy'], ['cards', 'Cards'], ['register', 'Open an account'],
-  ['pockets', 'Pockets'], ['scheduled', 'Scheduled transfers'], ['requests', 'Request money and split bill'], ['insights', 'Insights and budgets'], ['vyna', 'Vyna, the assistant'], ['statements', 'E-statements']]
+  ['pockets', 'Pockets'], ['scheduled', 'Scheduled transfers'], ['requests', 'Request money and split bill'], ['insights', 'Insights and budgets'], ['vyna', 'Vyna, the assistant'], ['statements', 'E-statements'],
+  ['fx', 'Foreign currency'], ['deposits', 'Time deposits'], ['invest', 'Investments'], ['passkeys', 'Passkey sign-in']]
 const ROLES = { super_admin: 'Super Admin', operator: 'Operator', content: 'Content' } as Record<string, string>
 
 // Stories S1.37 (settings) and S1.38 (officers, audit log, reset demo). Super Admin only.
@@ -29,6 +30,8 @@ export function systemRoutes(sql: Sql) {
   app.get('/settings', async c => {
     const limits = await setting('daily_limit'), fees = await setting('transfer_fees'), features = await setting('features'), maint = await setting('maintenance'), vyna = await setting('vyna')
     const directory = await sql`select * from external_directory order by bank, account_number`
+    const fx = await sql`select currency, buy, sell from fx_rates order by currency`
+    const deposit = await setting('deposit_rates'), spread = await setting('fx_prestige_spread')
     const done = c.req.query('done')
     return c.html(shell(c.get('officer'), '/admin/settings', 'Settings', html`<div class="formgrid" style="max-width:760px">
 ${done ? html`<div class="ok-box"><pre>${done}</pre></div>` : ''}
@@ -54,6 +57,21 @@ ${['everyday', 'prestige', 'private'].map(t => html`<label>${t[0].toUpperCase() 
 <label>RTGS fee<input name="rtgs" type="number" min="0" value="${fees.rtgs}"></label>
 <label>RTGS smallest amount<input name="rtgs_min" type="number" min="1" value="${fees.rtgs_min}"></label>
 <button class="btn" style="width:max-content">Save limits and fees</button></form>
+
+<form method="post" action="/admin/settings/fx" class="card" style="gap:10px">
+<span class="eyebrow">Exchange rates (Rupiah per unit)</span>
+<p class="hint">Buy: what ORVYN pays when a customer sells. Sell: what a customer pays. Prestige and Private customers pay a narrower spread.</p>
+${fx.map(r => html`<div class="actions" style="align-items:end"><b style="width:48px">${r.currency}</b>
+<label style="flex:1">Buy<input name="${r.currency}_buy" type="number" step="0.0001" min="0.0001" value="${Number(r.buy)}"></label>
+<label style="flex:1">Sell<input name="${r.currency}_sell" type="number" step="0.0001" min="0.0001" value="${Number(r.sell)}"></label></div>`)}
+<label>Prestige and Private pay this share of the spread<input name="factor" type="number" step="0.05" min="0" max="1" value="${spread?.factor ?? 0.5}"></label>
+<button class="btn" style="width:max-content">Save rates</button></form>
+
+<form method="post" action="/admin/settings/deposits" class="card" style="gap:10px">
+<span class="eyebrow">Time deposit rates (% a year)</span>
+${['1', '3', '6', '12'].map(t => html`<label>${t} ${t === '1' ? 'month' : 'months'}<input name="t${t}" type="number" step="0.05" min="0" max="20" value="${Number(deposit[t]) / 100}"></label>`)}
+<p class="hint">New deposits and renewals use these. Open deposits keep their rate.</p>
+<button class="btn" style="width:max-content">Save deposit rates</button></form>
 
 <form method="post" action="/admin/settings/vyna" class="card" style="gap:10px">
 <span class="eyebrow">Vyna</span>
@@ -89,6 +107,24 @@ ${directory.map(d => html`<form method="post" action="/admin/settings/directory/
     await save(c, 'daily_limit', { everyday: n('everyday'), prestige: n('prestige'), private: n('private') })
     await save(c, 'transfer_fees', { bifast: n('bifast'), bifast_max: n('bifast_max'), rtgs: n('rtgs'), rtgs_min: n('rtgs_min') })
     return flash(c, '/admin/settings', 'Limits and fees saved.')
+  })
+  app.post('/settings/fx', async c => {
+    const v = await form(c)
+    const old = await sql`select currency, buy, sell from fx_rates`
+    for (const r of old) {
+      const buy = Number(v[`${r.currency}_buy`]), sell = Number(v[`${r.currency}_sell`])
+      if (!(buy > 0 && sell >= buy)) return flash(c, '/admin/settings', `${r.currency}: the sell rate must be at least the buy rate.`)
+    }
+    for (const r of old) await sql`update fx_rates set buy = ${Number(v[`${r.currency}_buy`])}, sell = ${Number(v[`${r.currency}_sell`])}, updated_at = now() where currency = ${r.currency}`
+    await audit(sql, c.get('officer').id, 'settings.fx_rates', null, old.map(r => ({ ...r })), (await sql`select currency, buy, sell from fx_rates`).map(r => ({ ...r })))
+    await save(c, 'fx_prestige_spread', { factor: Math.min(1, Math.max(0, Number(v.factor) || 0)) })
+    return flash(c, '/admin/settings', 'Exchange rates saved.')
+  })
+  app.post('/settings/deposits', async c => {
+    const v = await form(c)
+    const bp = (k: string) => Math.round(Math.min(20, Math.max(0, Number(v[k]) || 0)) * 100)
+    await save(c, 'deposit_rates', { '1': bp('t1'), '3': bp('t3'), '6': bp('t6'), '12': bp('t12') })
+    return flash(c, '/admin/settings', 'Deposit rates saved.')
   })
   app.post('/settings/vyna', async c => {
     const v = await form(c)

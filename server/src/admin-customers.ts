@@ -7,6 +7,7 @@ import { createCustomer, CustomerError } from './customers.ts'
 import { hashPassword } from './auth.ts'
 import { PERSONAS, generateHistory } from './personas.ts'
 import { readlinkSync } from 'node:fs'
+import { matureDeposit } from './deposits.ts'
 
 /** The versioned file orvyn.apk points at, so a link in a message never gets an old copy from a cache. */
 const latestApk = () => { try { return readlinkSync('./releases/orvyn.apk') } catch { return 'orvyn.apk' } }
@@ -127,11 +128,12 @@ ORVYN Bank is a demo. All money in it is pretend.`
     if (!cu) return c.notFound()
     const accounts = await sql`
       select a.*, p.target, p.rule from accounts a left join pockets p on p.account_id = a.id
-      where a.customer_id = ${cu.id} and (p.closed_at is null) order by a.created_at`
+      where a.customer_id = ${cu.id} and (p.closed_at is null) and a.kind <> 'deposit' order by a.created_at`
     const requests = await sql`
       select r.amount, r.note, r.requester_id = ${cu.id} as mine, q.full_name as requester, p.full_name as payer, r.created_at
       from money_requests r join customers q on q.id = r.requester_id join customers p on p.id = r.payer_id
       where (r.requester_id = ${cu.id} or r.payer_id = ${cu.id}) and r.status = 'open' and r.expires_at > now() order by r.created_at desc`
+    const deposits = await sql`select d.*, a.balance from time_deposits d join accounts a on a.id = d.account_id where d.customer_id = ${cu.id} and d.closed_at is null order by d.maturity_date`
     const scheduled = await sql`select * from scheduled_transfers where customer_id = ${cu.id} and deleted_at is null order by next_run nulls last`
     const cards = await sql`select id, product, number, frozen from cards where customer_id = ${cu.id} order by kind desc, created_at`
     // Story S1.33 AC4: what the customer sees, read-only.
@@ -152,7 +154,12 @@ ${cu.locked ? html`<span class="chip bad">Locked</span>` : html`<span class="chi
 <div class="tablewrap"><table><thead><tr><th>Account</th><th>Number or goal</th><th class="num">Balance</th></tr></thead>
 <tbody>${accounts.map(a => html`<tr><td>${a.name}${a.kind === 'pocket' ? html` <span class="chip">Pocket</span>` : ''}</td>
 <td class="${a.number ? 'mono' : 'hint'}">${a.number ? group4(a.number) : a.target ? `Goal ${rupiah(a.target)}` : a.kind === 'pocket' ? 'No goal' : '—'}${a.rule ? html`<br><span class="hint">Auto-save: ${a.rule.type}</span>` : ''}</td>
-<td class="num">${rupiah(a.balance)}</td></tr>`)}</tbody></table></div>
+<td class="num">${a.currency === 'IDR' ? rupiah(a.balance) : `${a.currency} ${(Number(a.balance) / 10 ** (a.currency === 'JPY' ? 0 : 2)).toLocaleString('en-US')}`}</td></tr>`)}</tbody></table></div>
+${deposits.length ? html`<div class="tablewrap"><table><thead><tr><th>Time deposit</th><th>Matures</th><th class="num">Principal</th><th></th></tr></thead><tbody>
+${deposits.map(d => html`<tr><td>${d.tenor_months} ${d.tenor_months === 1 ? 'month' : 'months'} · ${(d.rate_bp / 100).toFixed(2)}%<br><span class="hint">${d.instruction === 'rollover' ? 'Renews automatically' : 'Pays out to savings'}</span></td>
+<td class="mono">${d.maturity_date.toISOString().slice(0, 10)}</td><td class="num">${rupiah(d.balance)}</td>
+<td><form method="post" action="/admin/customers/${cu.id}/deposits/${d.account_id}/mature"><button class="btn secondary">Mature now</button></form></td></tr>`)}
+</tbody></table></div><p class="hint">Mature now runs the maturity today for a demo: interest up to today, then renew or pay out as the customer chose.</p>` : ''}
 ${scheduled.length ? html`<div class="tablewrap"><table><thead><tr><th>Scheduled transfer</th><th>Next</th><th class="num">Amount</th></tr></thead><tbody>
 ${scheduled.map(t => html`<tr><td>${t.name}<br><span class="hint">${t.repeat === 'once' ? 'Once' : t.repeat === 'weekly' ? 'Every week' : 'Every month'}${t.paused ? ' · paused' : ''}${t.last_result ? ` · last: ${t.last_result.ok ? 'sent' : t.last_result.message}` : ''}</span></td>
 <td class="mono">${t.next_run?.toISOString().slice(0, 10) ?? 'Done'}</td><td class="num">${rupiah(t.amount)}</td></tr>`)}
@@ -245,6 +252,11 @@ ${cards.map(k => html`<option value="${k.id}">${PRODUCTS[k.product as keyof type
 <div class="actions"><a class="btn secondary" href="/admin/customers/${id}">Back to customer</a></div></div>`))
   })
   // Story S1.34: officer money moves, always through the ledger and always audited.
+  app.post('/:id/deposits/:dep/mature', async c => {
+    const r = await matureDeposit(sql, c.req.param('dep'))
+    await audit(sql, c.get('officer').id, 'deposit.mature_now', c.req.param('dep'), null, r)
+    return c.redirect(`/admin/customers/${c.req.param('id')}?done=${encodeURIComponent(r ? `Matured. Interest after tax: Rp${r.net.toLocaleString('en-US')}.` : 'That deposit is already closed.')}`)
+  })
   app.post('/:id/money', async c => {
     const id = c.req.param('id')
     const f = Object.fromEntries(Object.entries(await c.req.parseBody()).map(([k, v]) => [k, String(v).trim()]))

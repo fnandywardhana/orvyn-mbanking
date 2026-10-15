@@ -6,6 +6,8 @@ import {
 } from './customers.ts'
 import { BANKS, lookupRecipient, transferOptions, sendTransfer, payMerchant, TransferError } from './transfers.ts'
 import { parseQris, buildQris } from './qris.ts'
+import { ratesFor, listFx, openFx, closeFx, quote, exchange } from './fx.ts'
+import { depositRates, depositQuote, listDeposits, openDeposit, breakDeposit, setInstruction } from './deposits.ts'
 import { statement, statementMonths } from './statements.ts'
 import { askVyna, vynaAllowance, vynaAvailable } from './vyna.ts'
 import { insights, insightCard, setBudget, setCategory, categoryOf, SPEND_KINDS, CATEGORIES } from './insights.ts'
@@ -213,6 +215,47 @@ export function apiRoutes(sql: Sql) {
       })
       await stream.writeSSE({ event: 'done', data: '{}' })
     })
+  })
+
+  // FX (stories S3.1–S3.2)
+  app.get('/fx', async c => {
+    const me = c.get('customer') as any
+    return c.json({ rates: await ratesFor(sql, me.tier), accounts: await listFx(sql, me) })
+  })
+  app.post('/fx/quote', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try { return c.json(await quote(sql, c.get('customer') as any, String(b.currency), b.side === 'sell' ? 'sell' : 'buy', Number(b.amount))) } catch (e) { return fail(c, e) }
+  })
+  app.post('/fx/exchange', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try {
+      const j = await exchange(sql, c.get('customer') as any, { currency: String(b.currency), side: b.side === 'sell' ? 'sell' : 'buy', amount: Number(b.amount), pin: String(b.pin ?? ''), idempotencyKey: String(b.idempotencyKey ?? crypto.randomUUID()) })
+      return c.json({ transactionId: j.id, reference: j.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
+    } catch (e) { return fail(c, e) }
+  })
+  app.post('/fx/:currency/open', async c => { try { await openFx(sql, c.get('customer').id, c.req.param('currency')); return c.json({ ok: true }) } catch (e) { return fail(c, e) } })
+  app.post('/fx/:currency/close', async c => { try { await closeFx(sql, c.get('customer').id, c.req.param('currency')); return c.json({ ok: true }) } catch (e) { return fail(c, e) } })
+
+  // Time Deposits (stories S3.3–S3.4)
+  app.get('/deposits', async c => c.json({ rates: await depositRates(sql), deposits: await listDeposits(sql, c.get('customer').id) }))
+  app.post('/deposits/quote', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try { return c.json(await depositQuote(sql, b.amount, Number(b.tenor))) } catch (e) { return fail(c, e) }
+  })
+  app.post('/deposits', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try {
+      const j = await openDeposit(sql, c.get('customer') as any, { amount: b.amount, tenor: Number(b.tenor), instruction: String(b.instruction), pin: String(b.pin ?? ''), idempotencyKey: String(b.idempotencyKey ?? crypto.randomUUID()) })
+      return c.json({ transactionId: j.id, reference: j.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
+    } catch (e) { return fail(c, e) }
+  })
+  app.post('/deposits/:id/instruction', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try { await setInstruction(sql, c.get('customer').id, c.req.param('id'), String(b.instruction)); return c.json({ ok: true }) } catch (e) { return fail(c, e) }
+  })
+  app.post('/deposits/:id/withdraw', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try { await breakDeposit(sql, c.get('customer') as any, c.req.param('id'), String(b.pin ?? '')); return c.json({ ok: true }) } catch (e) { return fail(c, e) }
   })
 
   // E-statements (story S2.17)
