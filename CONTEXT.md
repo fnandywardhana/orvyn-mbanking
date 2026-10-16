@@ -177,6 +177,10 @@ _Avoid_: vendor, provider
 A payment to a Biller for a specific customer number: a bill, a token, airtime or an e-wallet top-up.
 _Avoid_: purchase, PPOB
 
+**Quick Amount**:
+A button on an amount screen that fills in a preset amount in one tap. A screen only offers Quick Amounts its own product rule accepts (minimum and fixed steps), so a Time Deposit screen never offers less than Rp1,000,000.
+_Avoid_: pill (the business team's word; fine in conversation, not in docs or code), preset, shortcut
+
 ### Cards
 
 **Card**:

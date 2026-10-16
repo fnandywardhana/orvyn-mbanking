@@ -1,6 +1,6 @@
 # Progres ORVYN
 
-Terakhir diperbarui: 15 Okt 2026, sekitar 06.40 WIB. Versi online: **0.7.0** di `https://orvyn.delvault.uk`.
+Terakhir diperbarui: 17 Okt 2026 dini hari WIB. Versi online: **0.8.1** di `https://orvyn.delvault.uk` (unduh: `/download/orvyn-0.8.1.apk`).
 
 ## Fase 0: Fondasi ✅
 
@@ -48,6 +48,14 @@ Story: `docs/stories/STORIES-F2.md`. Selesai: S2.0 push notification (0.5.0); S2
 Fitur: Vyna (asisten AI), insight pengeluaran, kantong tabungan, transfer terjadwal, minta uang / split bill, e-statement PDF, widget.
 
 Vyna butuh API key Anthropic di `.env` (lihat DECISIONS-PENDING #5). Fitur lain bisa langsung dikerjakan.
+
+## Hotfix 0.8.1 ✅ (16 Okt)
+
+Dua bug dari tim bisnis, dikerjakan lewat alur tim (PO, CX, IT, QA). Folder: `docs/features/2026-10-16-hotfix-dob-pills/`.
+- Tanggal lahir saat buka rekening bisa diketik dengan keyboard angka: 8 angka, garis miring muncul sendiri.
+- Quick Amount sesuai aturan produk: deposito 1M/5M/10M/50M, reksadana 100k/250k/500k/1M, SBN 1M/2M/5M/10M.
+- Temuan QA yang ikut diperbaiki: aplikasi tidak lagi crash saat offline, dan kursor tanggal lahir tidak lagi melompat.
+- QA: READY FOR RELEASE (dua putaran). Temuan minor F3–F5 masuk rilis perbaikan berikutnya.
 
 ## Fase 3: selesai ✅ (0.8.0)
 

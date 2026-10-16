@@ -21,6 +21,11 @@ Claude's working notes for things that need your answer. None of them blocks the
 
 # For your information
 
+- **16 Oct, night (owner asleep, decisions delegated):**
+  - Hotfix 0.8.1 also carries two QA findings: the app crashed when offline instead of saying "You're offline" (F2, already in 0.8.0), and the birth-date cursor jumped after a rejected digit (F1). Both are small and make the release safer.
+  - The double tap on a bottom button (F3) and the keypad cut off at 200% text (F4) go into the next quality release, not this hotfix.
+  - The phone shows a Google Play Protect dialog from QA's reinstall of the release. ORVYN didn't open it, so Claude left it alone; please close it. QA's reinstall also signed you out of ORVYN on the phone.
+
 - **15 Oct:** Relationship Managers use a monogram, not a photo. The free-licence portraits available were either old, casual, or of a real public figure, and putting a real stranger's face on a made-up bank employee felt wrong.
 - **15 Oct:** Hotfix 0.7.1: since 0.5.0, a first sign-in asked for a PIN the customer hadn't made yet. Fixed and released the same day.
 

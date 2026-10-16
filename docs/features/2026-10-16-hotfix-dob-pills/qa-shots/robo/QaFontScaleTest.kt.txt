@@ -1,0 +1,104 @@
+package id.orvyn.app
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import com.github.takahirom.roborazzi.captureRoboImage
+import id.orvyn.app.ui.DEPOSIT_QUICK_AMOUNTS
+import id.orvyn.app.ui.DobTransformation
+import id.orvyn.app.ui.Money
+import id.orvyn.app.ui.QUICK_AMOUNTS
+import id.orvyn.app.ui.auth.FlowScreen
+import id.orvyn.app.ui.components.AmountDisplay
+import id.orvyn.app.ui.components.AmountKeypad
+import id.orvyn.app.ui.components.OrvynButton
+import id.orvyn.app.ui.components.OrvynTextField
+import id.orvyn.app.ui.investQuickAmounts
+import id.orvyn.app.ui.theme.OrvynTheme
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.ParameterizedRobolectricTestRunner
+import org.robolectric.ParameterizedRobolectricTestRunner.Parameters
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+/** QA temporary, not committed: 0.8.1 at fontScale 2.0, 360dp and Note10+ 411dp, light and dark. */
+@RunWith(ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [35])
+class QaFontScaleTest(private val night: Boolean, private val qualifiers: String, private val scale: Float) {
+    companion object {
+        @JvmStatic
+        @Parameters(name = "dark={0} {1} x{2}")
+        fun variants() = listOf(false, true).flatMap { n ->
+            listOf("w360dp-h740dp-xxhdpi", "w411dp-h869dp-420dpi").flatMap { q -> listOf(1f, 2f).map { s -> arrayOf<Any>(n, q, s) } }
+        }
+    }
+
+    @get:Rule val compose = createComposeRule()
+    private val out = "/tmp/claude-1000/-home-fnandywardhana-mbanking-apps/a85cf662-e197-48f6-a915-75c2097f6ae0/scratchpad/qa/robo"
+
+    private fun capture(name: String, content: @Composable () -> Unit) {
+        RuntimeEnvironment.setQualifiers("$qualifiers-${if (night) "night" else "notnight"}")
+        compose.setContent {
+            val d = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(d.density, scale)) { OrvynTheme(dark = night) { content() } }
+        }
+        compose.onNode(androidx.compose.ui.test.isRoot()).captureRoboImage("$out/$name-${qualifiers.substringBefore('-')}-x$scale-${if (night) "dark" else "light"}.png")
+    }
+
+    private fun amountScreen(title: String, amount: Long, amounts: List<Long>, available: Long? = null) = capture(title.lowercase().replace(' ', '-')) {
+        FlowScreen(title, "How much? From ORVYN Everyday, at least Rp1,000,000.", {}) {
+            Column(Modifier.weight(1f)) {
+                AmountDisplay(amount, available, null, onQuickPick = {}, quickAmounts = amounts)
+                Spacer(Modifier.weight(1f))
+                AmountKeypad(amount, {})
+            }
+            OrvynButton("Next", onClick = {}, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp))
+        }
+    }
+
+    /** Every chip is fully on screen, at least 48dp tall and wide, labelled with the full amount; only [picked] is selected. */
+    private fun checkChips(amounts: List<Long>, picked: Long) {
+        val root = compose.onNode(androidx.compose.ui.test.isRoot()).fetchSemanticsNode().boundsInRoot
+        val dp = RuntimeEnvironment.getApplication().resources.displayMetrics.density
+        for (v in amounts) {
+            val node = compose.onNodeWithContentDescription(Money.format(v))
+            if (v == picked) node.assertIsSelected() else node.assertIsNotSelected()
+            val b = node.fetchSemanticsNode().boundsInRoot
+            assertTrue("${Money.format(v)} off screen: $b in $root", b.left >= 0f && b.right <= root.right && b.top >= 0f && b.bottom <= root.bottom)
+            assertTrue("${Money.format(v)} smaller than 48dp: $b", b.height / dp >= 47.9f && b.width / dp >= 47.9f)
+        }
+    }
+
+    @Test fun deposit() { amountScreen("Open a deposit", 1_000_000, DEPOSIT_QUICK_AMOUNTS); checkChips(DEPOSIT_QUICK_AMOUNTS, 1_000_000) }
+    @Test fun fund() { amountScreen("Buy Fund", 100_000, investQuickAmounts("fund")); checkChips(investQuickAmounts("fund"), 100_000) }
+    @Test fun bond() { amountScreen("Buy Bond", 2_000_000, investQuickAmounts("bond")); checkChips(investQuickAmounts("bond"), 2_000_000) }
+    @Test fun transfer() { amountScreen("Transfer", 250_000, QUICK_AMOUNTS, available = 12_920_500); checkChips(QUICK_AMOUNTS, 250_000) }
+
+    @Test fun dob() = capture("dob") {
+        FlowScreen("About you", "As written on your KTP. Step 3 of 8.", {}) {
+            OrvynTextField("Date of birth", "17081990", {}, keyboardType = KeyboardType.Number, helper = "DD/MM/YYYY", visualTransformation = DobTransformation)
+            OrvynTextField("Date of birth", "3102199", {}, keyboardType = KeyboardType.Number, helper = "DD/MM/YYYY", error = "Use the format DD/MM/YYYY.", visualTransformation = DobTransformation)
+            OrvynTextField("Date of birth", "16102016", {}, keyboardType = KeyboardType.Number, helper = "DD/MM/YYYY", error = "You need to be at least 17 to open an account.", visualTransformation = DobTransformation)
+        }
+    }
+}

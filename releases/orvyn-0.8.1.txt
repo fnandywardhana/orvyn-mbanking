@@ -1,0 +1,20 @@
+ORVYN 0.8.1
+
+What's new
+- Fixed: you can type your date of birth when opening an account. Type the 8 digits, like 17081990, and the slashes appear on their own. Before, the number keyboard had no "/" key, so sign-up got stuck on this step.
+- Fixed: the quick amount buttons match each product. Time deposits offer 1M, 5M, 10M and 50M. Funds start at 100k, and bonds go up in steps of 1M. Before, some of these buttons picked amounts the product doesn't accept.
+- Fixed: the app showed an error and closed when you lost your connection while signing in, signing up or paying. Now it says you're offline, and you can try again when you're back online. Nothing is sent twice.
+- With large text, the quick amount buttons move to a second line instead of being cut off. TalkBack reads the full amount, like "Rp1,000,000".
+
+Permissions this app asks for
+No change from 0.8.0.
+- INTERNET: to talk to the ORVYN server.
+- CAMERA: only while scanning a QR code or taking the sign-up photos. Nothing is uploaded.
+- POST_NOTIFICATIONS: to show your sign-up code and account activity (Android 13 and newer ask first).
+- RECEIVE (Firebase), WAKE_LOCK, ACCESS_NETWORK_STATE: added by Firebase so push notifications arrive. None of them reads anything about you or your phone.
+- USE_BIOMETRIC / USE_FINGERPRINT: only if you turn on fingerprint sign-in.
+- RECORD_AUDIO: only while you hold Vyna's microphone open, on phones that can recognise speech by themselves. Your voice never leaves the phone. Android asks the first time.
+No contacts, location, SMS, storage, device IDs, analytics or ads.
+
+How to update
+Open the download link on your phone, download, tap the file, then Update.
