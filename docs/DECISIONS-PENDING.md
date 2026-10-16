@@ -21,6 +21,14 @@ Claude's working notes for things that need your answer. None of them blocks the
 
 # For your information
 
+- **17 Oct, early morning (owner asleep, decisions delegated):** the full end-to-end test and the UI audit became the 0.9.0 "quality pass" (`docs/features/2026-10-16-quality-pass/requirement.md`). Claude decided, and you can overturn any of these:
+  - Promo banners move below recent transactions on the home screen, and stop auto-scrolling when TalkBack is on.
+  - The account detail screen (S1.9) and the date and type filters in history (S1.10) get built now. They were in the approved Phase 1 stories but never built.
+  - Help gets an "Ask Vyna" link instead of a phone number, so no one dials a made-up number that belongs to a real person.
+  - No Widget switch in admin (S2.19 changed): the widget only shows the balance already saved on the phone, so a server switch would do nothing.
+  - Wrong PINs in Change PIN and Change password now count toward the same 5-try lock as the unlock screen.
+  - 0.9.0 is built and tested but **not released** until you say so.
+
 - **16 Oct, night (owner asleep, decisions delegated):**
   - Hotfix 0.8.1 also carries two QA findings: the app crashed when offline instead of saying "You're offline" (F2, already in 0.8.0), and the birth-date cursor jumped after a rejected digit (F1). Both are small and make the release safer.
   - The double tap on a bottom button (F3) and the keypad cut off at 200% text (F4) go into the next quality release, not this hotfix.

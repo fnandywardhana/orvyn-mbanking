@@ -1,0 +1,155 @@
+package id.orvyn.app
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import com.github.takahirom.roborazzi.captureRoboImage
+import id.orvyn.app.data.DeviceStore
+import id.orvyn.app.ui.QUICK_AMOUNTS
+import id.orvyn.app.ui.auth.CreatePinScreen
+import id.orvyn.app.ui.auth.FlowScreen
+import id.orvyn.app.ui.auth.SignInScreen
+import id.orvyn.app.ui.components.AmountDisplay
+import id.orvyn.app.ui.components.AmountKeypad
+import id.orvyn.app.ui.components.ListRow
+import id.orvyn.app.ui.components.MoneyText
+import id.orvyn.app.ui.components.OrvynButton
+import id.orvyn.app.ui.components.OrvynTextButton
+import id.orvyn.app.ui.components.PinPad
+import id.orvyn.app.ui.components.ReceiptLine
+import id.orvyn.app.ui.components.SuccessScreen
+import id.orvyn.app.ui.home.HomeScreen
+import id.orvyn.app.ui.theme.OrvynTheme
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.ParameterizedRobolectricTestRunner
+import org.robolectric.ParameterizedRobolectricTestRunner.Parameters
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import java.io.File
+
+/** QA temporary, not committed: e2e regression 0.8.1, fontScale 2.0 (and 1.0 reference), 360dp and 411dp, light and dark. */
+@RunWith(ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [35])
+class QaE2eFontTest(private val night: Boolean, private val qualifiers: String, private val scale: Float) {
+    companion object {
+        @JvmStatic
+        @Parameters(name = "dark={0} {1} x{2}")
+        fun variants() = listOf(false, true).flatMap { n ->
+            listOf("w360dp-h640dp-xxhdpi", "w411dp-h869dp-420dpi").flatMap { q -> listOf(1f, 2f).map { s -> arrayOf<Any>(n, q, s) } }
+        }
+        private const val OUT = "/tmp/claude-1000/-home-fnandywardhana-mbanking-apps/a85cf662-e197-48f6-a915-75c2097f6ae0/scratchpad/qa/e2e"
+    }
+
+    @get:Rule val compose = createComposeRule()
+    private val tag get() = "${qualifiers.substringBefore('-')}-x$scale-${if (night) "dark" else "light"}"
+
+    private fun capture(name: String, content: @Composable () -> Unit) {
+        RuntimeEnvironment.setQualifiers(qualifiers); RuntimeEnvironment.setQualifiers(if (night) "+night" else "+notnight")
+        compose.setContent {
+            val d = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(d.density, scale)) { OrvynTheme(dark = night) { content() } }
+        }
+        compose.waitForIdle()
+        compose.onNode(androidx.compose.ui.test.isRoot()).captureRoboImage("$OUT/$name-$tag.png")
+    }
+
+    /** Writes whether each node is fully inside the screen; never fails, QA reads the file. */
+    private fun report(name: String, checks: List<Pair<String, androidx.compose.ui.test.SemanticsMatcher>>) {
+        val root = compose.onNode(androidx.compose.ui.test.isRoot()).fetchSemanticsNode().boundsInRoot
+        val lines = checks.map { (label, m) ->
+            val nodes = compose.onAllNodes(m, useUnmergedTree = true).fetchSemanticsNodes()
+            if (nodes.isEmpty()) "$name $tag $label: NOT RENDERED"
+            else {
+                val b = nodes.first().boundsInRoot
+                val inside = b.top >= 0f && b.bottom <= root.bottom + 0.5f && b.left >= 0f && b.right <= root.right + 0.5f
+                "$name $tag $label: ${if (inside) "inside" else "CUT"} (bottom ${b.bottom.toInt()} of ${root.bottom.toInt()}, right ${b.right.toInt()} of ${root.right.toInt()})"
+            }
+        }
+        File(OUT).mkdirs(); File("$OUT/results.txt").appendText(lines.joinToString("\n", postfix = "\n"))
+    }
+
+    @Test fun unlock() {
+        capture("unlock") {
+            FlowScreen("Welcome back, Raka", "Enter your 6-digit PIN.", null) {
+                Spacer(Modifier.weight(1f))
+                PinPad(onComplete = {}, errorCount = 1, errorText = "Wrong PIN. 2 tries left.", onBiometric = {})
+                OrvynTextButton("Not you? Sign in with a password", onClick = {}, modifier = Modifier.align(Alignment.CenterHorizontally).padding(vertical = 8.dp))
+                Text("Demo · ORVYN Bank is a fictional bank", style = MaterialTheme.typography.labelMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
+                Spacer(Modifier.size(8.dp))
+            }
+        }
+        report("unlock", listOf("key 1" to hasContentDescription("1"), "key 0" to hasContentDescription("0"), "Delete" to hasContentDescription("Delete"),
+            "error" to hasText("Wrong PIN. 2 tries left."), "Not you" to hasText("Not you? Sign in with a password"), "Demo" to hasText("Demo · ORVYN Bank is a fictional bank")))
+    }
+
+    @Test fun createPin() {
+        capture("create-pin") { CreatePinScreen(onDone = {}) }
+        report("create-pin", listOf("key 0" to hasContentDescription("0"), "Delete" to hasContentDescription("Delete")))
+    }
+
+    @Test fun signIn() {
+        capture("sign-in") { SignInScreen(DeviceStore(RuntimeEnvironment.getApplication()), onBack = {}, onSignedIn = {}) }
+        report("sign-in", listOf("Sign in button" to hasText("Sign in"), "Password label" to hasText("Password")))
+    }
+
+    @Test fun transferAmount() {
+        capture("transfer-amount") {
+            FlowScreen("How much?", null, {}) {
+                Column(Modifier.weight(1f)) {
+                    AmountDisplay(150_000_000, 696_518_116, null, onQuickPick = {}, quickAmounts = QUICK_AMOUNTS)
+                    Spacer(Modifier.weight(1f))
+                    AmountKeypad(150_000_000, {})
+                }
+                OrvynButton("Continue", onClick = {}, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp))
+            }
+        }
+        report("transfer-amount", listOf("amount" to hasText("Rp150,000,000"), "key 0" to hasContentDescription("0"), "Delete" to hasContentDescription("Delete"), "Continue" to hasText("Continue")))
+    }
+
+    @Test fun success() {
+        capture("success-scheduled") {
+            SuccessScreen("Scheduled", "Rp150,000,000", "to PT Griya Properti Utama", details = {
+                ReceiptLine("To", "Mandiri · 5626 2903 32")
+                ReceiptLine("Method", "RTGS · fee Rp25,000")
+                ReceiptLine("First send", "18 Oct 2026, 07:00 WIB")
+                ReceiptLine("Repeats", "Every month on the 18th")
+                ReceiptLine("Reference", "CB2CC8CA1F52")
+            }, primaryLabel = "Done", onPrimary = {})
+        }
+        report("success-scheduled", listOf("amount" to hasText("Rp150,000,000"), "Done" to hasText("Done")))
+    }
+
+    @Test fun rows() {
+        capture("list-rows") {
+            Column {
+                ListRow("PT Griya Properti Utama", "Transfer · Today, 04:19", R.drawable.ph_receipt) { MoneyText(-150_025_000) }
+                ListRow("Kopi Senja Cipete", "QRIS · 12:45", R.drawable.ph_receipt) { MoneyText(-31_000) }
+            }
+        }
+    }
+
+    @Test fun home() {
+        val store = DeviceStore(RuntimeEnvironment.getApplication())
+        store.lastHome = System.currentTimeMillis() to File("/tmp/claude-1000/-home-fnandywardhana-mbanking-apps/a85cf662-e197-48f6-a915-75c2097f6ae0/scratchpad/home-stress.json").readText()
+        capture("home") { HomeScreen(store, onSeeAll = {}, onOpenTransaction = {}, onQuickAction = {}, onCopied = {}) }
+        report("home", listOf("balance" to hasText("Rp834,912,398"), "Transfer label" to hasText("Transfer"), "Request label" to hasText("Request")))
+    }
+}
