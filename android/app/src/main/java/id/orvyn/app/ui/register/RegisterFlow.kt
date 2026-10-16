@@ -76,7 +76,11 @@ import id.orvyn.app.R
 import id.orvyn.app.data.Api
 import id.orvyn.app.data.ApiException
 import id.orvyn.app.data.DeviceStore
+import id.orvyn.app.ui.DobTransformation
 import id.orvyn.app.ui.auth.FlowScreen
+import id.orvyn.app.ui.dobDigits
+import id.orvyn.app.ui.dobInput
+import id.orvyn.app.ui.parseDobDigits
 import id.orvyn.app.ui.components.ButtonKind
 import id.orvyn.app.ui.components.MessageState
 import id.orvyn.app.ui.components.OrvynButton
@@ -211,20 +215,18 @@ private fun Choices(label: String, options: List<String>, value: String, onPick:
     }
 }
 
-/** "31/12/1999" → ISO date, or null. */
-private fun parseDob(s: String) = runCatching { val (dd, mm, yy) = s.split("/"); LocalDate.of(yy.toInt(), mm.toInt(), dd.toInt()) }.getOrNull()
-
 @Composable
 private fun AboutStep(d: JSONObject, progress: String, onBack: () -> Unit, onNext: () -> Unit) {
     var name by remember { mutableStateOf(d.optString("fullName")) }
     var nik by remember { mutableStateOf(d.optString("nik")) }
-    var dob by remember { mutableStateOf(d.optString("birthDate").takeIf { it.isNotEmpty() }?.let { LocalDate.parse(it) }?.let { "%02d/%02d/%d".format(it.dayOfMonth, it.monthValue, it.year) } ?: "") }
+    // Digits only ("17081990"); the slashes are drawn by DobTransformation (hotfix 0.8.1, H1).
+    var dob by remember { mutableStateOf(d.optString("birthDate").takeIf { it.isNotEmpty() }?.let { dobDigits(LocalDate.parse(it)) } ?: "") }
     var address by remember { mutableStateOf(d.optString("address")) }
     var work by remember { mutableStateOf(d.optString("occupation")) }
     var income by remember { mutableStateOf(d.optString("incomeRange")) }
     var purpose by remember { mutableStateOf(d.optString("purpose")) }
     var tried by remember { mutableStateOf(false) }
-    val date = parseDob(dob)
+    val date = parseDobDigits(dob)
     val age = date?.let { java.time.Period.between(it, LocalDate.now()).years }
     val errNik = if (tried && nik.length != 16) "NIK has 16 digits. You entered ${nik.length}." else null
     val errDob = if (tried && (date == null || age!! < 17)) (if (date == null) "Use the format DD/MM/YYYY." else "You need to be at least 17 to open an account.") else null
@@ -232,7 +234,7 @@ private fun AboutStep(d: JSONObject, progress: String, onBack: () -> Unit, onNex
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             OrvynTextField("Full name", name, { name = it }, error = if (tried && name.trim().length < 3) "Enter your full name." else null)
             OrvynTextField("NIK", nik, { nik = it.filter(Char::isDigit).take(16) }, keyboardType = KeyboardType.Number, error = errNik)
-            OrvynTextField("Date of birth", dob, { dob = it.filter { c -> c.isDigit() || c == '/' }.take(10) }, keyboardType = KeyboardType.Number, helper = "DD/MM/YYYY", error = errDob)
+            OrvynTextField("Date of birth", dob, { dob = dobInput(dob, it) }, keyboardType = KeyboardType.Number, helper = "DD/MM/YYYY", error = errDob, visualTransformation = DobTransformation)
             OrvynTextField("Address", address, { address = it }, error = if (tried && address.isBlank()) "Enter your address." else null)
             Choices("Work", WORK, work) { work = it }
             Choices("Monthly income", INCOME, income) { income = it }

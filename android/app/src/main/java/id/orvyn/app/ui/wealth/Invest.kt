@@ -55,6 +55,7 @@ import id.orvyn.app.data.Holding
 import id.orvyn.app.data.Invest
 import id.orvyn.app.data.InvestProduct
 import id.orvyn.app.ui.Money
+import id.orvyn.app.ui.investQuickAmounts
 import id.orvyn.app.ui.auth.FlowScreen
 import id.orvyn.app.ui.components.AmountDisplay
 import id.orvyn.app.ui.components.AmountKeypad
@@ -269,7 +270,7 @@ fun TradeFlow(id: String, buy: Boolean, onExit: () -> Unit, onQuiz: () -> Unit) 
     when (step) {
         0 -> FlowScreen("${if (buy) "Buy" else "Sell"} ${p.name}", if (buy) "From ORVYN Everyday." else "Into ORVYN Everyday. You have ${Money.format(h?.value ?: 0)} here.", onExit) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AmountDisplay(amount, null, error, onQuickPick = { amount = if (!buy && h != null) minOf(it, h.value) else it })
+                AmountDisplay(amount, null, error, onQuickPick = { amount = if (!buy && h != null) minOf(it, h.value) else it }, quickAmounts = investQuickAmounts(p.kind))
                 Text(when (p.kind) {
                     "gold" -> String.format(Locale.US, "About %.4f g at %s a gram", quantity, Money.format(unit.toLong()))
                     "fund" -> String.format(Locale.US, "About %,.4f units at %s", quantity, formatRate(unit))

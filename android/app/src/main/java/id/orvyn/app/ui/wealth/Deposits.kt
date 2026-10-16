@@ -44,6 +44,7 @@ import id.orvyn.app.data.ApiException
 import id.orvyn.app.data.DataVersion
 import id.orvyn.app.data.Deposit
 import id.orvyn.app.data.DepositQuote
+import id.orvyn.app.ui.DEPOSIT_QUICK_AMOUNTS
 import id.orvyn.app.ui.Money
 import id.orvyn.app.ui.auth.FlowScreen
 import id.orvyn.app.ui.components.AmountDisplay
@@ -149,7 +150,7 @@ fun OpenDepositFlow(onExit: () -> Unit) {
     when (step) {
         0 -> FlowScreen("Open a deposit", "How much? From ORVYN Everyday, at least Rp1,000,000.", onExit) {
             Column(Modifier.weight(1f)) {
-                AmountDisplay(amount, null, error, onQuickPick = { amount = it })
+                AmountDisplay(amount, null, error, onQuickPick = { amount = it }, quickAmounts = DEPOSIT_QUICK_AMOUNTS)
                 Spacer(Modifier.weight(1f))
                 AmountKeypad(amount, { amount = it; error = null })
             }

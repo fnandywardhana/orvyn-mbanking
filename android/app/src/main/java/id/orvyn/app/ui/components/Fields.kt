@@ -8,9 +8,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -44,7 +48,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -55,6 +61,8 @@ import androidx.compose.ui.unit.dp
 import id.orvyn.app.R
 import id.orvyn.app.ui.AmountKey
 import id.orvyn.app.ui.Money
+import id.orvyn.app.ui.QUICK_AMOUNTS
+import id.orvyn.app.ui.quickAmountLabel
 import id.orvyn.app.ui.pressAmountKey
 import id.orvyn.app.ui.theme.OrvynTheme
 import id.orvyn.app.ui.theme.OrvynType
@@ -70,6 +78,7 @@ fun OrvynTextField(
     error: String? = null,
     keyboardType: KeyboardType = KeyboardType.Text,
     password: Boolean = false,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
 ) {
     var visible by rememberSaveable { mutableStateOf(false) }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -82,7 +91,7 @@ fun OrvynTextField(
             textStyle = MaterialTheme.typography.bodyLarge,
             shape = RoundedCornerShape(10.dp),
             keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else keyboardType),
-            visualTransformation = if (password && !visible) PasswordVisualTransformation() else VisualTransformation.None,
+            visualTransformation = if (password && !visible) PasswordVisualTransformation() else visualTransformation,
             trailingIcon = if (password) {
                 {
                     IconButton(onClick = { visible = !visible }) {
@@ -111,9 +120,17 @@ fun OrvynTextField(
     }
 }
 
-/** Big formatted amount, quick chips, available balance and an inline error. Pair with [AmountKeypad]. */
+/** Big formatted amount, Quick Amounts, available balance and an inline error. Pair with [AmountKeypad]. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AmountDisplay(amount: Long, available: Long?, error: String?, onQuickPick: (Long) -> Unit, modifier: Modifier = Modifier) {
+fun AmountDisplay(
+    amount: Long,
+    available: Long?,
+    error: String?,
+    onQuickPick: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+    quickAmounts: List<Long> = QUICK_AMOUNTS,
+) {
     Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             Money.format(amount),
@@ -132,24 +149,39 @@ fun AmountDisplay(amount: Long, available: Long?, error: String?, onQuickPick: (
             style = MaterialTheme.typography.bodyMedium,
             color = OrvynTheme.colors.textSecondary,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (v in listOf(50_000L, 100_000L, 250_000L, 500_000L)) Chip("${v / 1000}k", selected = amount == v) { onQuickPick(v) }
+        // Wraps to a second row at large font sizes instead of running off screen (design.md 2.3).
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            for (v in quickAmounts) Chip(quickAmountLabel(v), selected = amount == v, contentDescription = Money.format(v)) { onQuickPick(v) }
         }
     }
 }
 
+/** [contentDescription] replaces what TalkBack reads, e.g. "Rp1,000,000" for a "1M" chip. */
 @Composable
-fun Chip(text: String, selected: Boolean, onClick: () -> Unit) {
+fun Chip(text: String, selected: Boolean, contentDescription: String? = null, onClick: () -> Unit) {
     val c = MaterialTheme.colorScheme
     Box(
         Modifier
             .clip(CircleShape)
             .background(if (selected) c.primary else c.primaryContainer)
+            .semantics { this.selected = selected; if (contentDescription != null) this.contentDescription = contentDescription }
             .clickable(onClick = onClick)
-            .height(48.dp)
+            .heightIn(min = 48.dp)
+            .widthIn(min = 48.dp)
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
-    ) { Text(text, style = MaterialTheme.typography.labelMedium, color = if (selected) c.onPrimary else c.onPrimaryContainer) }
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (selected) c.onPrimary else c.onPrimaryContainer,
+            modifier = if (contentDescription != null) Modifier.clearAndSetSemantics {} else Modifier,
+        )
+    }
 }
 
 /** 3×4 keypad with 64dp keys. [leftKey] is "000" for amounts and biometrics for PINs. */
