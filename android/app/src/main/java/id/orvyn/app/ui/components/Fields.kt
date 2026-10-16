@@ -53,6 +53,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -81,8 +82,7 @@ fun OrvynTextField(
     visualTransformation: VisualTransformation = VisualTransformation.None,
 ) {
     var visible by rememberSaveable { mutableStateOf(false) }
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+    FieldFrame(label, helper, error, modifier) {
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
@@ -102,14 +102,53 @@ fun OrvynTextField(
                     }
                 }
             } else null,
-            colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                focusedContainerColor = MaterialTheme.colorScheme.surface,
-            ),
+            colors = fieldColors(),
             modifier = Modifier.fillMaxWidth().semantics { if (error != null) error(error) },
         )
+    }
+}
+
+/** The same field on a [TextFieldValue], for input that must keep the cursor where it was when an edit is rejected (date of birth). */
+@Composable
+fun OrvynTextField(
+    label: String,
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    modifier: Modifier = Modifier,
+    helper: String? = null,
+    error: String? = null,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+) {
+    FieldFrame(label, helper, error, modifier) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            isError = error != null,
+            textStyle = MaterialTheme.typography.bodyLarge,
+            shape = RoundedCornerShape(10.dp),
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            visualTransformation = visualTransformation,
+            colors = fieldColors(),
+            modifier = Modifier.fillMaxWidth().semantics { if (error != null) error(error) },
+        )
+    }
+}
+
+@Composable
+private fun fieldColors() = OutlinedTextFieldDefaults.colors(
+    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+    focusedBorderColor = MaterialTheme.colorScheme.primary,
+    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+    focusedContainerColor = MaterialTheme.colorScheme.surface,
+)
+
+@Composable
+private fun FieldFrame(label: String, helper: String?, error: String?, modifier: Modifier, field: @Composable () -> Unit) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+        field()
         when {
             error != null -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(painterResource(R.drawable.ph_warning_circle), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)

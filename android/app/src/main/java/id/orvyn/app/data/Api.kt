@@ -138,21 +138,22 @@ object Api {
     /** Called when the server says the session is gone (idle timeout, signed in elsewhere, locked). */
     var onSignedOut: () -> Unit = {}
 
-    private suspend fun call(method: String, path: String, body: JSONObject? = null): JSONObject = withContext(Dispatchers.IO) {
+    /** Every network step, sending the body included, is inside the try, so a lost connection always ends as "offline". Tests swap [base]. */
+    internal suspend fun call(method: String, path: String, body: JSONObject? = null, base: String = BuildConfig.API_URL): JSONObject = withContext(Dispatchers.IO) {
         val hadSession = session != null
-        val conn = (URL(BuildConfig.API_URL + path).openConnection() as HttpURLConnection).apply {
+        val conn = (URL(base + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 10_000
             readTimeout = 15_000
             setRequestProperty("Accept", "application/json")
             session?.let { setRequestProperty("Authorization", "Bearer $it") }
-            if (body != null) {
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json")
-                outputStream.use { it.write(body.toString().toByteArray()) }
-            }
         }
         try {
+            if (body != null) {
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.outputStream.use { it.write(body.toString().toByteArray()) }
+            }
             val status = conn.responseCode
             val text = (if (status < 400) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
             val json = runCatching { JSONObject(text) }.getOrElse { JSONObject() }

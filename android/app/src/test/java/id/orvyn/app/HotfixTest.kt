@@ -1,6 +1,10 @@
 package id.orvyn.app
 
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import id.orvyn.app.data.Api
+import id.orvyn.app.data.ApiException
 import id.orvyn.app.ui.DEPOSIT_QUICK_AMOUNTS
 import id.orvyn.app.ui.DobTransformation
 import id.orvyn.app.ui.QUICK_AMOUNTS
@@ -12,10 +16,18 @@ import id.orvyn.app.ui.quickAmountLabel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.json.JSONObject
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 
-/** Hotfix 0.8.1: date of birth auto-slash (H1, H2) and Quick Amounts per screen (H3, H4, H5). */
+/** Hotfix 0.8.1: date of birth auto-slash (H1, H2), Quick Amounts per screen (H3, H4, H5), QA F1 and F2. Robolectric for org.json. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
 class HotfixTest {
     private fun shown(digits: String) = DobTransformation.filter(AnnotatedString(digits)).text.text
 
@@ -96,5 +108,34 @@ class HotfixTest {
         assertEquals(listOf("1M", "2M", "5M", "10M"), bond.map(::quickAmountLabel))
         assertTrue(bond.all { it >= 1_000_000 && it % 1_000_000 == 0L })
         assertEquals(QUICK_AMOUNTS, investQuickAmounts("gold"))
+    }
+
+    private fun tfv(text: String, cursor: Int) = TextFieldValue(text, TextRange(cursor))
+    private fun backspace(v: TextFieldValue) = tfv(v.text.removeRange(v.selection.end - 1, v.selection.end), v.selection.end - 1)
+
+    @Test fun `a rejected edit leaves text and cursor where they were (QA F1)`() {
+        // Full field, cursor after "17/", type "3": rejected, and the next delete removes the 7.
+        val full = tfv("17081990", 2)
+        val kept = dobInput(full, tfv("173081990", 3))
+        assertEquals(full, kept)
+        assertEquals("10/81/990", shown(dobInput(kept, backspace(kept)).text))
+        // 7 digits, "." typed mid-field: rejected the same way.
+        val seven = tfv("1708199", 2)
+        assertEquals(seven, dobInput(seven, tfv("17.08199", 3)))
+        // Accepted typing and plain cursor moves keep the new cursor.
+        assertEquals(tfv("170", 3), dobInput(tfv("17", 2), tfv("170", 3)))
+        assertEquals(tfv("1708", 1), dobInput(tfv("1708", 4), tfv("1708", 1)))
+        // A pasted date is cleaned to digits with the cursor after them.
+        assertEquals(tfv("17081990", 8), dobInput(tfv("", 0), tfv("17/08/1990", 10)))
+    }
+
+    @Test fun `a request with a body and no connection is the offline message, not a crash (QA F2)`() {
+        try {
+            runBlocking { Api.call("POST", "/auth/password", JSONObject().put("phone", "081200000000"), base = "http://127.0.0.1:1") }
+            fail("expected offline")
+        } catch (e: ApiException) {
+            assertEquals("offline", e.code)
+            assertEquals("You're offline. Check your connection and try again.", e.message)
+        }
     }
 }

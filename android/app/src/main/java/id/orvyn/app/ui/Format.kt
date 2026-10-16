@@ -1,6 +1,8 @@
 package id.orvyn.app.ui
 
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
@@ -84,6 +86,19 @@ fun quickAmountLabel(rupiah: Long) = if (rupiah >= 1_000_000) "${rupiah / 1_000_
 fun dobInput(old: String, new: String): String {
     val digits = new.filter(Char::isDigit)
     return if (digits.length <= 8) digits else if (old.length == 8) old else digits.take(8)
+}
+
+/**
+ * Same rule with the cursor (QA F1): an edit that is kept as typed keeps its cursor, a rejected one leaves text and cursor
+ * exactly as they were, and a cleaned-up paste puts the cursor after the digits that came before it.
+ */
+fun dobInput(old: TextFieldValue, new: TextFieldValue): TextFieldValue {
+    val digits = dobInput(old.text, new.text)
+    return when (digits) {
+        new.text -> new
+        old.text -> old
+        else -> TextFieldValue(digits, TextRange(new.text.take(new.selection.end).count(Char::isDigit).coerceAtMost(digits.length)))
+    }
 }
 
 fun dobDigits(date: java.time.LocalDate) = "%02d%02d%04d".format(date.dayOfMonth, date.monthValue, date.year)

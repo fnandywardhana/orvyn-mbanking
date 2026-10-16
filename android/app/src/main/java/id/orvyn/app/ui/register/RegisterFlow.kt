@@ -67,6 +67,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.NotificationCompat
@@ -220,13 +221,14 @@ private fun AboutStep(d: JSONObject, progress: String, onBack: () -> Unit, onNex
     var name by remember { mutableStateOf(d.optString("fullName")) }
     var nik by remember { mutableStateOf(d.optString("nik")) }
     // Digits only ("17081990"); the slashes are drawn by DobTransformation (hotfix 0.8.1, H1).
-    var dob by remember { mutableStateOf(d.optString("birthDate").takeIf { it.isNotEmpty() }?.let { dobDigits(LocalDate.parse(it)) } ?: "") }
+    // A TextFieldValue so a rejected digit leaves the cursor where it was (QA F1).
+    var dob by remember { mutableStateOf(TextFieldValue(d.optString("birthDate").takeIf { it.isNotEmpty() }?.let { dobDigits(LocalDate.parse(it)) } ?: "")) }
     var address by remember { mutableStateOf(d.optString("address")) }
     var work by remember { mutableStateOf(d.optString("occupation")) }
     var income by remember { mutableStateOf(d.optString("incomeRange")) }
     var purpose by remember { mutableStateOf(d.optString("purpose")) }
     var tried by remember { mutableStateOf(false) }
-    val date = parseDobDigits(dob)
+    val date = parseDobDigits(dob.text)
     val age = date?.let { java.time.Period.between(it, LocalDate.now()).years }
     val errNik = if (tried && nik.length != 16) "NIK has 16 digits. You entered ${nik.length}." else null
     val errDob = if (tried && (date == null || age!! < 17)) (if (date == null) "Use the format DD/MM/YYYY." else "You need to be at least 17 to open an account.") else null
