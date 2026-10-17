@@ -223,11 +223,14 @@ object Api {
 
     suspend fun homeJson(): JSONObject = call("GET", "/home")
 
-    suspend fun transactions(accountId: String, before: String? = null, direction: String? = null, query: String? = null, category: String? = null, from: Instant? = null): Page {
+    suspend fun transactions(accountId: String, before: String? = null, direction: String? = null, query: String? = null, category: String? = null, from: Instant? = null,
+                             to: Instant? = null, kinds: List<String> = emptyList()): Page {
         val params = listOfNotNull(
             "limit=30",
             category?.let { "category=$it" },
             from?.let { "from=" + enc(it.toString()) },
+            to?.let { "to=" + enc(it.toString()) },
+            kinds.takeIf { it.isNotEmpty() }?.let { "kinds=" + enc(it.joinToString(",")) },
             before?.let { "before=" + enc(it) },
             direction?.let { "direction=$it" },
             query?.takeIf { it.isNotBlank() }?.let { "q=" + enc(it) },

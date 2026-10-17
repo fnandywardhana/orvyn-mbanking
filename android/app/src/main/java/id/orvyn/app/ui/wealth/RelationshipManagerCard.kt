@@ -41,8 +41,8 @@ fun RelationshipManagerCard(rm: RelationshipManager, modifier: Modifier = Modifi
             }
             Column(Modifier.weight(1f)) {
                 Text(rm.name, style = MaterialTheme.typography.titleMedium)
-                Text(rm.title, style = MaterialTheme.typography.bodySmall, color = OrvynTheme.colors.textSecondary)
-                Text("${rm.phone} · ${rm.email}", style = MaterialTheme.typography.bodySmall, color = OrvynTheme.colors.textSecondary)
+                Text(rm.title, style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
+                Text("${rm.phone} · ${rm.email}", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

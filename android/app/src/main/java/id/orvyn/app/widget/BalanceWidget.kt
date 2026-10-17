@@ -53,7 +53,11 @@ class BalanceWidget : AppWidgetProvider() {
             val views = RemoteViews(context.packageName, R.layout.widget_orvyn).apply {
                 when {
                     total == null -> { setTextViewText(R.id.widget_balance, "Rp••••••"); setTextViewText(R.id.widget_hint, "Open ORVYN to see your balance") }
-                    reveal -> { setTextViewText(R.id.widget_balance, Money.format(total)); setTextViewText(R.id.widget_hint, "Last seen in ORVYN · hides in 10 seconds") }
+                    reveal -> {
+                        // Q-G11: when that balance was saved, not "last seen".
+                        val at = DeviceStore(context).lastHome?.first?.let { id.orvyn.app.ui.formatTime(java.time.Instant.ofEpochMilli(it)) } ?: ""
+                        setTextViewText(R.id.widget_balance, Money.format(total)); setTextViewText(R.id.widget_hint, "As of $at · hides in 10 seconds")
+                    }
                     else -> { setTextViewText(R.id.widget_balance, "Rp••••••"); setTextViewText(R.id.widget_hint, "Balance hidden") }
                 }
                 setOnClickPendingIntent(R.id.widget_show, if (total == null) openApp(context, null) else broadcast(context, SHOW))

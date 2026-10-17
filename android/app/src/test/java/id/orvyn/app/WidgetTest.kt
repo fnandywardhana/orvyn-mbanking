@@ -39,8 +39,11 @@ class WidgetTest(private val night: Boolean) {
         fun text(res: Int) = (view().findViewById<TextView>(res)).text.toString()
 
         assertEquals("Rp••••••", text(R.id.widget_balance))
+        assertEquals("Balance hidden", text(R.id.widget_hint))
+        assertEquals("Show balance", text(R.id.widget_show))
         BalanceWidget().onReceive(context, Intent(context, BalanceWidget::class.java).setAction("id.orvyn.app.widget.SHOW"))
         assertEquals("Rp14,030,166", text(R.id.widget_balance))
+        assertEquals("As of 07:00 · hides in 10 seconds", text(R.id.widget_hint)) // saved at epoch 0 = 07:00 WIB
         snapshot(view(), "widget-shown")
 
         BalanceWidget().onReceive(context, Intent(context, BalanceWidget::class.java).setAction("id.orvyn.app.widget.HIDE"))

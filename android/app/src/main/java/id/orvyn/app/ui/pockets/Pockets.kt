@@ -114,7 +114,7 @@ fun ruleSummary(rule: JSONObject?): String = when (rule?.optString("type")) {
 
 @Composable
 private fun PocketTile(@DrawableRes icon: Int, size: Int = 40) = Box(
-    Modifier.size(size.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primaryContainer),
+    Modifier.size(size.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.primaryContainer),
     contentAlignment = Alignment.Center,
 ) { Icon(painterResource(icon), null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size((size * 0.55f).dp)) }
 
@@ -149,7 +149,7 @@ fun PocketsStrip(pockets: List<Pocket>, hidden: Boolean, onOpen: (String) -> Uni
                 Text(if (hidden) "Rp••••••" else Money.format(p.balance), style = MaterialTheme.typography.titleMedium,
                     modifier = if (hidden) Modifier.semantics { contentDescription = "Balance hidden" } else Modifier)
                 p.progress?.let { GoalBar(it, Modifier.semantics { stateDescription = "${(it * 100).toInt()}% of goal" }) }
-                    ?: Text("No target", style = MaterialTheme.typography.bodySmall, color = OrvynTheme.colors.textSecondary)
+                    ?: Text("No target", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
             }
         }
         item {
@@ -160,7 +160,7 @@ fun PocketsStrip(pockets: List<Pocket>, hidden: Boolean, onOpen: (String) -> Uni
             ) {
                 Icon(painterResource(R.drawable.ph_plus), null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                 Text("New pocket", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                if (pockets.isEmpty()) Text("Put money aside for a trip, a laptop or a rainy day.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                if (pockets.isEmpty()) Text("Put money aside for a trip, a laptop or a rainy day.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
         }
     }

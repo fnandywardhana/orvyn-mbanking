@@ -30,7 +30,14 @@ fun shareReceipt(context: Context, t: Transaction) {
         t.accountNumber?.let { add("Account" to groupAccountNumber(it)) }
         t.reference?.let { add("Reference" to it) }
     }
-    val h = 620 + lines.size * 150 + 180
+    // Q-E13: a long name wraps to at most two lines, then ends with an ellipsis, inside the picture.
+    val titlePaint = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 52f; color = 0xFF0B1020.toInt() }
+    val base0 = ResourcesCompat.getFont(context, R.font.plus_jakarta_sans) ?: Typeface.DEFAULT
+    titlePaint.typeface = if (Build.VERSION.SDK_INT >= 28) Typeface.create(base0, 700, false) else Typeface.create(base0, Typeface.BOLD)
+    val titleLayout = android.text.StaticLayout.Builder.obtain(t.title, 0, t.title.length, titlePaint, w - 144)
+        .setMaxLines(2).setEllipsize(android.text.TextUtils.TruncateAt.END).build()
+    val extra = (titleLayout.height - 62).coerceAtLeast(0)
+    val h = 620 + extra + lines.size * 150 + 180
     val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
     val c = Canvas(bmp)
     val base = ResourcesCompat.getFont(context, R.font.plus_jakarta_sans) ?: Typeface.DEFAULT
@@ -46,8 +53,8 @@ fun shareReceipt(context: Context, t: Transaction) {
     c.drawText("ORVYN", 72f, 120f, paint(52f, 0xFFFFFFFF.toInt(), 800).apply { letterSpacing = 0.14f })
     c.drawText(if (t.reversed) "Reversed" else if (t.amount > 0) "Money in" else "Payment receipt", 72f, 230f, paint(40f, 0xFFC9D4F5.toInt(), 600))
     c.drawText(Money.signed(t.amount), 72f, 330f, paint(88f, 0xFFFFFFFF.toInt(), 800))
-    c.drawText(t.title, 72f, 520f, paint(52f, 0xFF0B1020.toInt(), 700))
-    var y = 640f
+    c.save(); c.translate(72f, 470f); titleLayout.draw(c); c.restore()
+    var y = 640f + extra
     for ((label, value) in lines) {
         c.drawText(label, 72f, y, paint(36f, 0xFF4D5872.toInt()))
         c.drawText(value, 72f, y + 56f, paint(42f, 0xFF0B1020.toInt(), 500))

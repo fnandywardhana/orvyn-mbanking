@@ -68,6 +68,12 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import id.orvyn.app.R
@@ -85,6 +91,7 @@ import java.util.Locale
 
 class VynaMessage(val fromVyna: Boolean, text: String, val actions: List<JSONObject> = emptyList(), val failed: Boolean = false) {
     var text by mutableStateOf(text)
+    var done by mutableStateOf(!fromVyna || failed)
     val liveActions = mutableStateListOf<JSONObject>().apply { addAll(actions) }
 }
 
@@ -119,6 +126,7 @@ fun VynaScreen(store: DeviceStore, onBack: () -> Unit, onAction: (JSONObject) ->
     val list = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val voice = rememberVoice(context)
+    var announce by remember { mutableStateOf("") } // Q-E6: the whole answer, said once when it's finished
     LaunchedEffect(Unit) { runCatching { Api.vyna() }.onSuccess { allowance = it; available = it != null } }
     LaunchedEffect(messages.size, messages.lastOrNull()?.text?.length) { if (messages.isNotEmpty()) list.animateScrollToItem(messages.lastIndex) }
 
@@ -140,6 +148,8 @@ fun VynaScreen(store: DeviceStore, onBack: () -> Unit, onAction: (JSONObject) ->
                 }
             }
             busy = false
+            reply.done = true
+            announce = reply.text
             allowance = allowance?.let { it.first to it.second + 1 }
             if (speaks && reply.text.isNotBlank()) voice.speak(reply.text)
         }
@@ -152,11 +162,13 @@ fun VynaScreen(store: DeviceStore, onBack: () -> Unit, onAction: (JSONObject) ->
             Column(Modifier.weight(1f).padding(start = 10.dp)) {
                 Text("Vyna", style = MaterialTheme.typography.titleMedium)
                 Text(allowance?.let { "${maxOf(0, it.first - it.second)} questions left today" } ?: "Your ORVYN assistant",
-                    style = MaterialTheme.typography.bodySmall, color = OrvynTheme.colors.textSecondary)
+                    style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
             }
-            IconButton(onClick = { speaks = !speaks; store.vynaSpeaks = speaks; if (!speaks) voice.stop() }) {
-                Icon(painterResource(R.drawable.ph_speaker_high), contentDescription = if (speaks) "Stop reading replies aloud" else "Read replies aloud",
-                    tint = if (speaks) MaterialTheme.colorScheme.primary else OrvynTheme.colors.textTertiary)
+            // A switch: "Read replies aloud, switch, on" (design.md 9.6).
+            Box(Modifier.size(48.dp).clip(CircleShape).toggleable(speaks, role = Role.Switch) { speaks = it; store.vynaSpeaks = it; if (!it) voice.stop() }
+                .semantics { contentDescription = "Read replies aloud" }, contentAlignment = Alignment.Center) {
+                Icon(painterResource(if (speaks) R.drawable.ph_speaker_high else R.drawable.ph_speaker_slash), contentDescription = null,
+                    tint = if (speaks) MaterialTheme.colorScheme.primary else OrvynTheme.colors.textSecondary)
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -169,10 +181,7 @@ fun VynaScreen(store: DeviceStore, onBack: () -> Unit, onAction: (JSONObject) ->
                  else "I'm not switched on yet. Try again later.",
                 style = MaterialTheme.typography.bodyLarge, color = OrvynTheme.colors.textSecondary)
             if (available) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (s in SUGGESTIONS) Box(Modifier.clip(RoundedCornerShape(50)).border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(50))
-                    .clickable { send(s) }.heightIn(min = 44.dp).padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
-                    Text(s, style = MaterialTheme.typography.bodyMedium)
-                }
+                for (s in SUGGESTIONS) id.orvyn.app.ui.components.Chip(s, selected = false, role = Role.Button) { send(s) }
             }
         } else LazyColumn(Modifier.weight(1f), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             itemsIndexed(messages) { i, m ->
@@ -183,10 +192,11 @@ fun VynaScreen(store: DeviceStore, onBack: () -> Unit, onAction: (JSONObject) ->
                     VynaAvatar(28)
                     Column(Modifier.widthIn(max = 300.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (m.text.isEmpty() && busy && i == messages.lastIndex && m.liveActions.isEmpty()) Thinking()
-                        if (m.text.isNotEmpty()) Text(m.text, style = MaterialTheme.typography.bodyLarge,
-                            color = if (m.failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.clip(RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)).background(MaterialTheme.colorScheme.surface)
-                                .padding(horizontal = 14.dp, vertical = 10.dp).semantics { liveRegion = LiveRegionMode.Polite })
+                        // No live region while it streams in, so TalkBack doesn't read every piece (Q-E6 AC1).
+                        if (m.text.isNotEmpty()) VynaText(m.text, if (m.failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                            Modifier.clip(RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)).background(MaterialTheme.colorScheme.surface)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp))
+                                .padding(horizontal = 14.dp, vertical = 10.dp).testTag("vyna-bubble"))
                         for (a in m.liveActions) ActionCard(a) { voice.stop(); onAction(a) }
                         if (m.failed && i == messages.lastIndex) id.orvyn.app.ui.components.OrvynTextButton("Try again", onClick = {
                             val lastQuestion = messages.lastOrNull { !it.fromVyna }?.text ?: return@OrvynTextButton
@@ -197,7 +207,8 @@ fun VynaScreen(store: DeviceStore, onBack: () -> Unit, onAction: (JSONObject) ->
             }
         }
 
-        Text("Vyna can get things wrong. You always check before money moves.", style = MaterialTheme.typography.bodySmall,
+        Box(Modifier.size(1.dp).testTag("vyna-announce").semantics { liveRegion = LiveRegionMode.Polite; contentDescription = announce })
+        Text("Vyna can get things wrong. Check the details before you send money.", style = MaterialTheme.typography.labelMedium,
             color = OrvynTheme.colors.textTertiary, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
@@ -215,11 +226,47 @@ fun VynaScreen(store: DeviceStore, onBack: () -> Unit, onAction: (JSONObject) ->
     }
 }
 
+/** Announced once when it appears; still with animations off (Q-E6 AC5). */
 @Composable
 private fun Thinking() {
-    val t = rememberInfiniteTransition(label = "thinking")
-    val a by t.animateFloat(0.3f, 1f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "dots")
-    Text("Vyna is thinking…", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary, modifier = Modifier.alpha(a).padding(vertical = 8.dp))
+    val reduced = id.orvyn.app.ui.components.rememberReducedMotion()
+    val a = if (reduced) 1f else {
+        val t = rememberInfiniteTransition(label = "thinking")
+        t.animateFloat(0.3f, 1f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "dots").value
+    }
+    Row(Modifier.padding(vertical = 8.dp).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        repeat(3) { Box(Modifier.size(6.dp).alpha(a).clip(CircleShape).background(OrvynTheme.colors.textSecondary)) }
+        Text("Vyna is thinking…", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
+    }
+}
+
+/**
+ * The small markdown Vyna uses (design.md 9.6): lines starting "- ", "* " or "1. " become a list with a hanging 16dp indent,
+ * and **text** is bold. Anything else shows as written.
+ */
+@Composable
+fun VynaText(text: String, color: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        for (line in text.split('\n')) {
+            val bullet = Regex("^\\s*([-*]|\\d+\\.)\\s+(.*)").find(line)
+            if (bullet != null) Row {
+                Text(if (bullet.groupValues[1].first().isDigit()) bullet.groupValues[1] else "•", style = MaterialTheme.typography.bodyLarge, color = color, modifier = Modifier.width(16.dp))
+                Text(bold(bullet.groupValues[2]), style = MaterialTheme.typography.bodyLarge, color = color)
+            } else if (line.isNotBlank()) Text(bold(line), style = MaterialTheme.typography.bodyLarge, color = color)
+        }
+    }
+}
+
+/** "**Rp1,000**" → bold 700; unmatched asterisks stay as they are. */
+fun bold(s: String) = androidx.compose.ui.text.buildAnnotatedString {
+    var rest = s
+    while (true) {
+        val m = Regex("\\*\\*(.+?)\\*\\*").find(rest) ?: break
+        append(rest.substring(0, m.range.first))
+        withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)) { append(m.groupValues[1]) }
+        rest = rest.substring(m.range.last + 1)
+    }
+    append(rest)
 }
 
 /** S2.14: what Vyna prepared. The button only opens the screen; nothing is sent from here. */

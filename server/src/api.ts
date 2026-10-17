@@ -210,6 +210,8 @@ export function apiRoutes(sql: Sql) {
     const [beforeAt, beforeId] = (q.before ?? '').split('|')
     const text = q.q?.trim()
     const digits = text?.replace(/\D/g, '')
+    // Q-F3: History's Type filter sends several kinds; a reversal shows under the type it reversed.
+    const kinds = (q.kinds ?? '').split(',').map(k => k.trim()).filter(Boolean).slice(0, 20)
     const rows = await sql`
       select ${txColumns(sql)} from postings p join journal_entries j on j.id = p.journal_id
       where p.account_id = ${account.id}
@@ -218,6 +220,7 @@ export function apiRoutes(sql: Sql) {
         ${q.to ? sql`and j.created_at < ${new Date(q.to)}` : sql``}
         ${q.direction === 'in' ? sql`and p.amount > 0` : q.direction === 'out' ? sql`and p.amount < 0` : sql``}
         ${q.kind ? sql`and j.kind = ${q.kind}` : sql``}
+        ${kinds.length ? sql`and (j.kind in ${sql(kinds)} or (j.kind = 'reversal' and (select o.kind from journal_entries o where o.id = j.reverses_id) in ${sql(kinds)}))` : sql``}
         ${q.category ? sql`and p.amount < 0 and j.kind in ${sql(SPEND_KINDS)} and ${categoryOf(sql)} = ${q.category}` : sql``}
         ${text ? sql`and (j.memo::text ilike ${'%' + text + '%'} ${digits ? sql`or abs(p.amount)::text = ${digits}` : sql``})` : sql``}
       order by j.created_at desc, j.id desc limit ${limit + 1}`

@@ -97,7 +97,7 @@ private fun monthLong(key: String) = YearMonth.parse(key).month.getDisplayName(T
 
 @Composable
 private fun CategoryTile(key: String) = Box(
-    Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center,
+    Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center,
 ) { Icon(painterResource(categoryIcon(key)), null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(22.dp)) }
 
 /** One series, one hue: this month in the brand colour, earlier months quieter. Tap a bar to read its total. */
