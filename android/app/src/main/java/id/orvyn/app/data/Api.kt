@@ -36,6 +36,8 @@ data class Transaction(
     val reference: String? = null,
     val accountNumber: String? = null,
     val spendCategory: String? = null,
+    /** The account this row is on, when a list mixes savings and cards (H91-2); its detail opens on that side. */
+    val accountId: String? = null,
 )
 
 /** Story S2.1. [rule] is the server's auto-save rule as-is, e.g. {"type":"weekly","day":1,"amount":100000}. */
@@ -243,6 +245,10 @@ object Api {
         val r = call("GET", "/accounts/$accountId/transactions?$params")
         return Page(r.getJSONArray("items").map(::parseTransaction), r.optString("next").takeIf { it.isNotEmpty() && it != "null" })
     }
+
+    /** H91-2: this month's spending in one category, savings and cards together, in one answer. */
+    suspend fun categoryTransactions(key: String): List<Transaction> =
+        call("GET", "/insights/categories/${enc(key)}/transactions").getJSONArray("items").map(::parseTransaction)
 
     suspend fun transaction(id: String, account: String? = null): Transaction =
         parseTransaction(call("GET", "/transactions/$id" + (account?.let { "?account=$it" } ?: "")))
@@ -550,6 +556,7 @@ object Api {
         AppConfig.features = f.keys().asSequence().associateWith { f.getBoolean(it) }
         val m = r.getJSONObject("maintenance")
         AppConfig.maintenance = if (m.getBoolean("on")) m.getString("message") else null
+        if (r.has("minTransfer")) AppConfig.minTransfer = r.getLong("minTransfer")
     }
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
@@ -587,6 +594,8 @@ fun parseRecipient(r: JSONObject) = Recipient(
 object AppConfig {
     var features by androidx.compose.runtime.mutableStateOf(mapOf<String, Boolean>())
     var maintenance by androidx.compose.runtime.mutableStateOf<String?>(null)
+    /** H-2: the one minimum for transfers, money requests and split shares and totals, from the server; the last one loaded, else Rp10,000. */
+    var minTransfer by androidx.compose.runtime.mutableLongStateOf(10_000L)
     fun on(feature: String) = features[feature] != false
 }
 
@@ -607,6 +616,7 @@ fun parseTransaction(t: JSONObject) = Transaction(
     reference = t.optStringOrNull("reference"),
     accountNumber = t.optStringOrNull("accountNumber"),
     spendCategory = t.optStringOrNull("spendCategory"),
+    accountId = t.optStringOrNull("accountId"),
 )
 
 private fun JSONObject.optStringOrNull(key: String) = if (isNull(key) || !has(key)) null else getString(key)

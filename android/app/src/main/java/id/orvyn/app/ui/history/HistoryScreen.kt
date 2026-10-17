@@ -366,8 +366,8 @@ fun TransactionDetailScreen(id: String, account: String? = null, onBack: () -> U
                 }
                 OrvynButton("Share receipt", kind = ButtonKind.Secondary,
                     onClick = { shareReceipt(context, tx) })
-                // S2.7 AC5: a purchase can be split straight from its receipt.
-                if (onSplit != null && tx.amount < 0 && tx.kind in setOf("qris_payment", "bill_payment", "card_spend") && AppConfig.on("requests"))
+                // S2.7 AC5: a purchase can be split straight from its receipt; H-11: only when every share could meet the minimum.
+                if (onSplit != null && -tx.amount >= AppConfig.minTransfer && tx.kind in setOf("qris_payment", "bill_payment", "card_spend") && AppConfig.on("requests"))
                     OrvynButton("Split this bill", kind = ButtonKind.Secondary, onClick = { onSplit(-tx.amount) }, modifier = Modifier.padding(top = 10.dp))
                 Spacer(Modifier.height(24.dp))
             }

@@ -48,6 +48,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import id.orvyn.app.R
 import id.orvyn.app.data.Api
+import id.orvyn.app.data.AppConfig
 import id.orvyn.app.data.ApiException
 import id.orvyn.app.data.Bank
 import id.orvyn.app.data.DataVersion
@@ -327,8 +328,6 @@ fun RecipientHeader(to: Recipient) {
     }
 }
 
-private const val MIN_TRANSFER = 10_000L
-
 /** design.md 4.7: the balance and today's limit load under the amount; if they can't, the screen says so and offers Try again. */
 @Composable
 private fun EnterAmount(to: Recipient, initial: Long, onBack: () -> Unit, onContinue: (Long) -> Unit) {
@@ -344,8 +343,8 @@ private fun EnterAmount(to: Recipient, initial: Long, onBack: () -> Unit, onCont
     val failed = opts.error?.let { if (it == OFFLINE) it else "Couldn't load your balance and daily limit." }
     AmountScreen("How much?", null, onBack, keypad = { AmountKeypad(amount, { amount = it }) }, button = {
         OrvynButton(
-            when { amount == 0L -> "Enter an amount"; amount < MIN_TRANSFER -> "Minimum ${Money.format(MIN_TRANSFER)}"; o == null && failed != null -> "Balance didn't load"; else -> "Continue" },
-            enabled = amount >= MIN_TRANSFER && error == null && o != null,
+            when { amount == 0L -> "Enter an amount"; amount < AppConfig.minTransfer -> "Minimum ${Money.format(AppConfig.minTransfer)}"; o == null && failed != null -> "Balance didn't load"; else -> "Continue" },
+            enabled = amount >= AppConfig.minTransfer && error == null && o != null, // H-2: the server's one minimum
             onClick = { onContinue(amount) },
         )
     }) {

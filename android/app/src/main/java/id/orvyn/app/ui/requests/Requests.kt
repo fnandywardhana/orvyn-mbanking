@@ -37,13 +37,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import id.orvyn.app.ui.QUICK_AMOUNTS
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import id.orvyn.app.R
 import id.orvyn.app.data.Api
+import id.orvyn.app.data.AppConfig
 import id.orvyn.app.data.ApiException
 import id.orvyn.app.data.DataVersion
 import id.orvyn.app.data.MoneyRequest
@@ -84,6 +90,27 @@ private fun statusOf(status: String, mine: Boolean) = when (status) {
     "open" -> if (mine) Status.Waiting else Status.ToPay
     "paid" -> Status.Paid; "declined" -> Status.Declined; "cancelled" -> Status.Cancelled; else -> Status.Expired
 }
+
+/** design.md 2.2 and 2.4 (H91-1): why the amount button is off, or null when the amount can be asked for. */
+internal fun belowMinimum(amount: Long, min: Long) = when { amount == 0L -> "Enter an amount"; amount < min -> "Minimum ${Money.format(min)}"; else -> null }
+
+/** MASTER Amount input: no Quick Amount under the minimum. */
+internal fun quickAmountsFrom(min: Long) = QUICK_AMOUNTS.filter { it >= min }
+
+/** design.md 2.3: the send button on "Check the shares", and whether it's on. */
+internal fun sendSharesButton(shares: List<Long>, total: Long, min: Long): Pair<String, Boolean> = when {
+    shares.any { it < min } -> "Minimum ${Money.format(min)} a share" to false
+    else -> "Send ${shares.size} ${if (shares.size == 1) "request" else "requests"}" to (shares.sum() <= total)
+}
+
+/** design.md 2.3: shown when no change of shares can reach the minimum for every friend. */
+internal fun tooSmallForFriends(total: Long, friends: Int, min: Long) =
+    if (total < friends * min) "This bill is too small for $friends friends at ${Money.format(min)} each. Go back and pick fewer friends." else null
+
+/** An icon and a sentence in `error`; [live] announces it once when it appears. */
+@Composable
+private fun Warning(text: String, live: Boolean = false) =
+    Box(Modifier.semantics(mergeDescendants = true) { if (live) liveRegion = LiveRegionMode.Polite }) { GroupError(text) }
 
 @Composable
 private fun Section(text: String) = Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = OrvynTheme.colors.textSecondary,
@@ -295,20 +322,22 @@ private fun PeoplePicker(title: String, body: String, multi: Boolean, initial: L
         if (chosen.any { it.accountNumber == r.accountNumber }) chosen.removeAll { it.accountNumber == r.accountNumber }
         else if (chosen.size < 9) chosen.add(r)
     }
+    fun find() {
+        scope.launch {
+            looking = true
+            try { val r = Api.lookup("ORVYN", number); toggle(r); if (multi) { known = listOf(r) + (known ?: emptyList()).filter { it.accountNumber != r.accountNumber }; number = "" } }
+            catch (e: ApiException) { lookupError = e.message }
+            looking = false
+        }
+    }
     FlowScreen(title, body, onBack) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OrvynTextField("ORVYN account number", number, { number = it.filter(Char::isDigit).take(10); lookupError = null },
-                    keyboardType = KeyboardType.Number, error = lookupError, modifier = Modifier.weight(1f))
+                    keyboardType = KeyboardType.Number, error = lookupError, modifier = Modifier.weight(1f),
+                    imeAction = ImeAction.Done, onImeAction = doneAction(number.length == 10 && !looking) { find() })
             }
-            OrvynButton("Find", loading = looking, enabled = number.length == 10, kind = ButtonKind.Secondary, onClick = {
-                scope.launch {
-                    looking = true
-                    try { val r = Api.lookup("ORVYN", number); toggle(r); if (multi) { known = listOf(r) + (known ?: emptyList()).filter { it.accountNumber != r.accountNumber }; number = "" } }
-                    catch (e: ApiException) { lookupError = e.message }
-                    looking = false
-                }
-            })
+            OrvynButton("Find", loading = looking, enabled = number.length == 10, kind = ButtonKind.Secondary, onClick = { find() })
             val k = known
             if (k == null) Skeleton(Modifier.fillMaxWidth().height(120.dp))
             else if (k.isNotEmpty()) Text("PEOPLE ON ORVYN", style = MaterialTheme.typography.labelSmall, color = OrvynTheme.colors.textSecondary, modifier = Modifier.padding(top = 12.dp))
@@ -351,10 +380,18 @@ fun AskFlow(onExit: () -> Unit) {
             s == 0 || w == null -> PeoplePicker("Ask for money", "From someone with an ORVYN account.", multi = false, initial = emptyList(), onBack = onExit) { who = it.first(); step = 1 }
             s == 1 -> AmountScreen("Ask ${w.name.substringBefore(' ')}", "They get a notification and pay with one tap and their PIN.", { step = 0 },
                 keypad = { AmountKeypad(amount, { amount = it }) },
-                button = { OrvynButton(if (amount >= 1_000) "Continue" else "Ask for at least Rp1,000", enabled = amount >= 1_000, onClick = { error = null; step = 2 }) }) {
-                AmountDisplay(amount, null, null, onQuickPick = { amount = it })
+                button = { OrvynButton(belowMinimum(amount, AppConfig.minTransfer) ?: "Continue", enabled = amount >= AppConfig.minTransfer, onClick = { error = null; step = 2 }) }) {
+                AmountDisplay(amount, null, null, onQuickPick = { amount = it }, quickAmounts = quickAmountsFrom(AppConfig.minTransfer))
             }
             s == 2 -> FlowScreen("Check the request", null, { step = 1 }) {
+                fun send() {
+                    sending = true
+                    scope.launch {
+                        try { sentAt = Api.askForMoney(w.accountNumber, amount, note.trim()) ?: java.time.Instant.now(); DataVersion.count++; step = 3 }
+                        catch (e: ApiException) { error = e.message; if (e.code == "BAD_AMOUNT") runCatching { Api.loadConfig() } } // the minimum may have changed (design.md 2.5)
+                        sending = false
+                    }
+                }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     OrvynCard {
                         ReviewRow("Ask", w.name)
@@ -362,19 +399,13 @@ fun AskFlow(onExit: () -> Unit) {
                         ReviewRow("Open for", "7 days")
                     }
                     Column {
-                        OrvynTextField("Note (optional)", note, { note = it.take(50) }, helper = "For example \"Lunch on Friday\". ${w.name.substringBefore(' ')} sees this.")
+                        OrvynTextField("Note (optional)", note, { note = it.take(50); error = null }, helper = "For example \"Lunch on Friday\". ${w.name.substringBefore(' ')} sees this.",
+                            imeAction = ImeAction.Done, onImeAction = doneAction(!sending) { send() })
                         Text("${note.length}/50", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary, modifier = Modifier.align(Alignment.End))
                     }
                 }
                 error?.let { ErrorBox(it, Modifier.padding(top = 12.dp)) }
-                OrvynButton("Ask for ${Money.format(amount)}", loading = sending, modifier = Modifier.padding(vertical = 16.dp), onClick = {
-                    sending = true
-                    scope.launch {
-                        try { sentAt = Api.askForMoney(w.accountNumber, amount, note.trim()) ?: java.time.Instant.now(); DataVersion.count++; step = 3 }
-                        catch (e: ApiException) { error = e.message }
-                        sending = false
-                    }
-                })
+                OrvynButton("Ask for ${Money.format(amount)}", loading = sending, modifier = Modifier.padding(vertical = 16.dp), onClick = { send() })
             }
             else -> SuccessScreen("Request sent", Money.format(amount), "asked of ${w.name}", date = sentAt, buzz = false,
                 details = { if (note.isNotBlank()) ReceiptLine("Note", note.trim()); ReceiptLine("Open for", "7 days") }, onPrimary = onExit)
@@ -397,8 +428,8 @@ fun SplitFlow(startTotal: Long?, onExit: () -> Unit) {
     BackHandler(step in 1..2) { step -= 1 }
     when (step) {
         0 -> AmountScreen("Split a bill", "How much was the whole bill?", onExit, keypad = { AmountKeypad(total, { total = it }) },
-            button = { OrvynButton("Next", enabled = total >= 2_000, onClick = { step = 1 }) }) {
-            AmountDisplay(total, null, null, onQuickPick = { total = it })
+            button = { OrvynButton(belowMinimum(total, AppConfig.minTransfer) ?: "Next", enabled = total >= AppConfig.minTransfer, onClick = { step = 1 }) }) {
+            AmountDisplay(total, null, null, onQuickPick = { total = it }, quickAmounts = quickAmountsFrom(AppConfig.minTransfer))
         }
         1 -> PeoplePicker("Who's in?", "Pick up to 9 friends on ORVYN. You pay your own share.", multi = true, initial = friends, onBack = { if (startTotal != null) onExit() else step = 0 }) {
             picked ->
@@ -407,14 +438,31 @@ fun SplitFlow(startTotal: Long?, onExit: () -> Unit) {
             step = 2
         }
         2 -> {
+            val min = AppConfig.minTransfer
             val friendsTotal = shares.sum()
+            val (sendLabel, sendOn) = sendSharesButton(shares, total, min)
+            fun send() {
+                scope.launch {
+                    sending = true
+                    try { Api.splitBill(total, note.trim(), friends.map { it.accountNumber }.zip(shares)); DataVersion.count++; step = 3 }
+                    catch (e: ApiException) { error = e.message; if (e.code == "BAD_AMOUNT") runCatching { Api.loadConfig() } } // the minimum may have changed (design.md 2.5)
+                    sending = false
+                }
+            }
             FlowScreen("Check the shares", "Total ${Money.format(total)}. Tap a share to change it.", { step = 1 }) {
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     friends.forEachIndexed { i, f ->
-                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface).clickable { editing = i }.padding(12.dp),
+                        val name = f.nickname ?: f.name
+                        val low = shares[i] < min
+                        val label = "$name, ${Money.format(shares[i])}" + if (low) ", Needs at least ${Money.format(min)}" else ""
+                        Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface)
+                            .clickable(role = Role.Button, onClickLabel = "Change share") { editing = i }.semantics { contentDescription = label }.padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             InitialsAvatar(f.name)
-                            Text(f.nickname ?: f.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(name, style = MaterialTheme.typography.titleMedium)
+                                if (low) GroupError("Needs at least ${Money.format(min)}")
+                            }
                             Text(Money.format(shares[i]), style = MaterialTheme.typography.titleMedium)
                         }
                     }
@@ -422,28 +470,25 @@ fun SplitFlow(startTotal: Long?, onExit: () -> Unit) {
                         Text("Your share", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                         Text((if (friendsTotal > total) "−" else "") + Money.format(total - friendsTotal), style = MaterialTheme.typography.titleMedium, color = if (friendsTotal > total) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground)
                     }
-                    OrvynTextField("What for (optional)", note, { note = it.take(50) }, helper = "Your friends see this, like \"Dinner at Bakmi 88\"")
-                    if (friendsTotal > total) Text("Your friends' shares add up to more than the bill.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                    OrvynTextField("What for (optional)", note, { note = it.take(50); error = null }, helper = "Your friends see this, like \"Dinner at Bakmi 88\"",
+                        imeAction = ImeAction.Done, onImeAction = doneAction(sendOn && !sending) { send() })
+                    tooSmallForFriends(total, friends.size, min)?.let { Warning(it, live = true) }
+                    if (friendsTotal > total) Warning("Your friends' shares add up to more than the bill.")
                     error?.let { ErrorBox(it) }
                 }
-                OrvynButton("Send ${friends.size} ${if (friends.size == 1) "request" else "requests"}", loading = sending,
-                    enabled = friendsTotal <= total && shares.all { it >= 1_000 }, modifier = Modifier.padding(vertical = 16.dp), onClick = {
-                        scope.launch {
-                            sending = true
-                            try { Api.splitBill(total, note.trim(), friends.map { it.accountNumber }.zip(shares)); DataVersion.count++; step = 3 }
-                            catch (e: ApiException) { error = e.message }
-                            sending = false
-                        }
-                    })
+                OrvynButton(sendLabel, loading = sending, enabled = sendOn, modifier = Modifier.padding(vertical = 16.dp), onClick = { send() })
             }
             editing?.let { i ->
                 var v by remember(i) { mutableLongStateOf(shares[i]) }
                 OrvynBottomSheet(onDismiss = { editing = null }) {
                     Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("${friends[i].name.substringBefore(' ')}'s share", style = MaterialTheme.typography.titleLarge)
-                        AmountDisplay(v, null, null, onQuickPick = { v = it })
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("${friends[i].name.substringBefore(' ')}'s share", style = MaterialTheme.typography.titleLarge)
+                            Text("The smallest share is ${Money.format(min)}.", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
+                        }
+                        AmountDisplay(v, null, null, onQuickPick = { v = it }, quickAmounts = quickAmountsFrom(min))
                         AmountKeypad(v, { v = it })
-                        OrvynButton("Save", enabled = v >= 1_000, onClick = { shares[i] = v; editing = null }, modifier = Modifier.fillMaxWidth())
+                        OrvynButton(belowMinimum(v, min) ?: "Save", enabled = v >= min, onClick = { shares[i] = v; error = null; editing = null }, modifier = Modifier.fillMaxWidth())
                     }
                 }
             }

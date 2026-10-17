@@ -171,6 +171,20 @@ fun OrvynTextField(
     }
 }
 
+/**
+ * MASTER Text field (0.9.1, Q-02-F1): Done on the last field runs the screen's primary [action] when its button is [enabled];
+ * otherwise it only closes the keyboard. Pass as `onImeAction`.
+ */
+@Composable
+fun doneAction(enabled: Boolean, action: () -> Unit): () -> Unit {
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    return { if (enabled) action() else keyboard?.hide() }
+}
+
+/** Search fields: the Search key only closes the keyboard, because results already filter as you type (H-4). */
+@Composable
+fun closeKeyboard(): () -> Unit = doneAction(false) {}
+
 /** The keyboard's action key (and Enter on a hardware keyboard) runs [onImeAction]; without one, Android's default (Next moves on, Done closes). */
 private fun imeActions(onImeAction: (() -> Unit)?) = if (onImeAction == null) KeyboardActions.Default else KeyboardActions(onAny = { onImeAction() })
 
