@@ -58,6 +58,8 @@ import id.orvyn.app.data.Recipient
 import id.orvyn.app.data.TransferOptions
 import id.orvyn.app.ui.Money
 import id.orvyn.app.ui.auth.FlowScreen
+import id.orvyn.app.ui.components.doneAction
+import id.orvyn.app.ui.components.closeKeyboard
 import id.orvyn.app.ui.components.AmountDisplay
 import id.orvyn.app.ui.components.AmountKeypad
 import id.orvyn.app.ui.components.AmountScreen
@@ -173,15 +175,17 @@ private fun PickRecipient(onBack: () -> Unit, onNew: () -> Unit, onScheduled: ()
             Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(r.name, style = MaterialTheme.typography.titleLarge)
                 Text("${r.bankName} · ${groupAccountNumber(r.accountNumber)}", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
-                OrvynTextField("Nickname", nick, { nick = it.take(30); error = null }, helper = "Only you see this, for example \"Mom\" or \"Rent\".")
-                error?.let { ErrorBox(it) }
-                OrvynButton("Save", loading = saving, onClick = {
+                fun save() {
                     saving = true
                     scope.launch {
                         try { Api.renameRecipient(r.id!!, nick); editing = null; list.reload() } catch (e: ApiException) { error = e.message }
                         saving = false
                     }
-                })
+                }
+                OrvynTextField("Nickname", nick, { nick = it.take(30); error = null }, helper = "Only you see this, for example \"Mom\" or \"Rent\".",
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Done, onImeAction = doneAction(!saving) { save() })
+                error?.let { ErrorBox(it) }
+                OrvynButton("Save", loading = saving, onClick = { save() })
                 Spacer(Modifier.height(12.dp)) // 24dp between the primary action and the destructive one (Q-C5 AC4)
                 OrvynButton("Remove from saved", kind = ButtonKind.DestructiveText, onClick = { confirm = true }, modifier = Modifier.align(Alignment.CenterHorizontally))
             }
@@ -209,6 +213,7 @@ private fun PickRecipient(onBack: () -> Unit, onNew: () -> Unit, onScheduled: ()
             value = query, onValueChange = { query = it }, singleLine = true,
             placeholder = { Text("Search name or account number") },
             leadingIcon = { Icon(painterResource(R.drawable.ph_magnifying_glass), null) },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search), keyboardActions = closeKeyboard().let { hide -> androidx.compose.foundation.text.KeyboardActions(onSearch = { hide() }) }, // H-4
             shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = MaterialTheme.colorScheme.outline, unfocusedContainerColor = MaterialTheme.colorScheme.surface, focusedContainerColor = MaterialTheme.colorScheme.surface),
         )
@@ -268,6 +273,12 @@ private fun NewRecipient(onBack: () -> Unit, onFound: (Recipient) -> Unit) {
     var picking by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { runCatching { banks = Api.banks() } }
+    fun check() {
+        busy = true
+        scope.launch {
+            try { onFound(Api.lookup(bank.code, number)) } catch (e: ApiException) { error = e.message } finally { busy = false }
+        }
+    }
 
     FlowScreen("New recipient", "We'll show you the account holder's name before you send anything.", onBack) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -285,18 +296,14 @@ private fun NewRecipient(onBack: () -> Unit, onFound: (Recipient) -> Unit) {
             }
             OrvynTextField("Account number", number, { number = it.filter(Char::isDigit).take(16); error = null },
                 keyboardType = KeyboardType.Number, error = error,
-                helper = if (bank.code == "ORVYN") "ORVYN account numbers have 10 digits." else "Usually 10 to 16 digits.")
+                helper = if (bank.code == "ORVYN") "ORVYN account numbers have 10 digits." else "Usually 10 to 16 digits.",
+                imeAction = androidx.compose.ui.text.input.ImeAction.Done, onImeAction = doneAction(number.length >= 10 && !busy) { check() })
         }
-        OrvynButton("Check account", enabled = number.length >= 10, loading = busy, modifier = Modifier.padding(vertical = 16.dp), onClick = {
-            busy = true
-            scope.launch {
-                try { onFound(Api.lookup(bank.code, number)) } catch (e: ApiException) { error = e.message } finally { busy = false }
-            }
-        })
+        OrvynButton("Check account", enabled = number.length >= 10, loading = busy, modifier = Modifier.padding(vertical = 16.dp), onClick = { check() })
     }
     if (picking) OrvynBottomSheet(onDismiss = { picking = false }) {
         var q by remember { mutableStateOf("") }
-        OrvynTextField("Find a bank", q, { q = it }, modifier = Modifier.padding(horizontal = 20.dp))
+        OrvynTextField("Find a bank", q, { q = it }, modifier = Modifier.padding(horizontal = 20.dp), imeAction = androidx.compose.ui.text.input.ImeAction.Search, onImeAction = closeKeyboard())
         LazyColumn(Modifier.padding(top = 8.dp, bottom = 24.dp)) {
             items(banks.filter { it.name.contains(q.trim(), ignoreCase = true) }, key = { it.code }) { b ->
                 Row(
@@ -380,6 +387,15 @@ private fun Review(
         } catch (e: ApiException) { loadError = e.message; false } finally { loading = false }
     }
     LaunchedEffect(Unit) { load() }
+    var sending by remember { mutableStateOf(false) }
+    fun confirm() {
+        if (error == null) chosen?.let(onConfirm)
+        else {
+            // After a failed send (offline, server): fetch the details again first, then ask for the PIN.
+            sending = true
+            scope.launch { if (load()) { onClearError(); chosen?.let(onConfirm) }; sending = false }
+        }
+    }
     val fee = chosen?.fee ?: 0
     FlowScreen("Check the details", null, onBack) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -424,7 +440,8 @@ private fun Review(
                         style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
                 }
             }
-            OrvynTextField("Note (optional)", note, { onNote(it.take(50)) }, helper = "${note.length}/50 · The recipient sees this.")
+            OrvynTextField("Note (optional)", note, { onNote(it.take(50)) }, helper = "${note.length}/50 · The recipient sees this.",
+                imeAction = androidx.compose.ui.text.input.ImeAction.Done, onImeAction = doneAction(opts != null && chosen != null && !sending) { confirm() }) // H-3: opens the PIN pad, like the button
             error?.let { ErrorBox(it) }
         }
         val label = when {
@@ -432,15 +449,7 @@ private fun Review(
             loadError != null && !loading -> "Details didn't load"
             else -> "Loading the details…"
         }
-        var sending by remember { mutableStateOf(false) }
-        OrvynButton(label, enabled = opts != null && chosen != null, loading = sending, modifier = Modifier.padding(vertical = 16.dp), onClick = {
-            if (error == null) chosen?.let(onConfirm)
-            else {
-                // After a failed send (offline, server): fetch the details again first, then ask for the PIN.
-                sending = true
-                scope.launch { if (load()) { onClearError(); chosen?.let(onConfirm) }; sending = false }
-            }
-        })
+        OrvynButton(label, enabled = opts != null && chosen != null, loading = sending, modifier = Modifier.padding(vertical = 16.dp), onClick = { confirm() })
     }
     if (picking) {
         val tomorrow = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Jakarta")).plusDays(1)

@@ -176,6 +176,7 @@ fun HistoryScreen(accountId: String?, onOpen: (String) -> Unit, onInsights: (() 
         OutlinedTextField(
             value = query, onValueChange = { query = it }, singleLine = true,
             placeholder = { Text("Search name, note or amount") },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search), keyboardActions = closeKeyboard().let { hide -> androidx.compose.foundation.text.KeyboardActions(onSearch = { hide() }) }, // H-4
             leadingIcon = { Icon(painterResource(R.drawable.ph_magnifying_glass), contentDescription = null) },
             trailingIcon = if (query.isNotEmpty()) { { IconButton(onClick = { query = "" }) { Icon(painterResource(R.drawable.ph_x), contentDescription = "Clear search") } } } else null,
             shape = RoundedCornerShape(12.dp),

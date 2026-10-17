@@ -184,7 +184,8 @@ private fun EnterNumber(b: Biller, myPhone: String?, onBack: () -> Unit, onFound
             OrvynTextField(numberLabel(b.kind), number, { number = it.filter(Char::isDigit).take(16); error = null }, keyboardType = KeyboardType.Number,
                 error = error ?: if (unknown) "We don't know this operator. Check the first 4 digits." else null,
                 helper = when { !mobile -> null; op != null -> "Operator: $op"; else -> "For example 0812 3456 7890" },
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                imeAction = androidx.compose.ui.text.input.ImeAction.Done, onImeAction = doneAction(number.length >= 10 && !unknown && !busy) { check(number) })
             if (b.saved.isNotEmpty()) {
                 Text("Paid before", style = MaterialTheme.typography.titleMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

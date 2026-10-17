@@ -243,7 +243,7 @@ fun ChangePasswordScreen(onDone: () -> Unit) {
             OrvynTextField("Current password", old, { old = it; oldError = null; boxError = null }, password = true, error = oldError,
                 imeAction = androidx.compose.ui.text.input.ImeAction.Next, onImeAction = { newFocus.requestFocus() }, fieldModifier = Modifier.focusRequester(oldFocus))
             OrvynTextField("New password", new, { new = it; newError = null; boxError = null }, password = true, helper = "At least 8 characters, with letters and numbers.",
-                error = newError, imeAction = androidx.compose.ui.text.input.ImeAction.Done, onImeAction = { save() }, fieldModifier = Modifier.focusRequester(newFocus))
+                error = newError, imeAction = androidx.compose.ui.text.input.ImeAction.Done, onImeAction = doneAction(old.isNotEmpty() && new.isNotEmpty() && !busy) { save() }, fieldModifier = Modifier.focusRequester(newFocus))
         }
         boxError?.let { ErrorBox(it, Modifier.padding(top = 12.dp)) }
         OrvynButton("Save password", enabled = old.isNotEmpty() && new.isNotEmpty(), loading = busy, modifier = Modifier.padding(vertical = 16.dp), onClick = { save() })
@@ -261,7 +261,7 @@ fun HelpScreen(onBack: () -> Unit, onAskVyna: (() -> Unit)? = null) {
     var open by remember { mutableStateOf<String?>(null) }
     val reduced = id.orvyn.app.ui.components.rememberReducedMotion()
     FlowScreen("Questions and answers", null, onBack) {
-        OrvynTextField("Search", query, { query = it })
+        OrvynTextField("Search", query, { query = it }, imeAction = androidx.compose.ui.text.input.ImeAction.Search, onImeAction = closeKeyboard())
         Column(Modifier.verticalScroll(rememberScrollState()).padding(top = 8.dp)) {
             LoadContent(faqs, "Couldn't load help", skeleton = { Column { repeat(4) { Skeleton(Modifier.padding(vertical = 8.dp).fillMaxWidth().height(48.dp)) } } }) { all ->
                 val list = all.filter { query.isBlank() || (it.question + it.answer).contains(query.trim(), ignoreCase = true) }

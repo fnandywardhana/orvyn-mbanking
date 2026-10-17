@@ -6,6 +6,16 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Column
+import id.orvyn.app.ui.components.OrvynTextField
+import id.orvyn.app.ui.components.closeKeyboard
+import id.orvyn.app.ui.components.doneAction
 import id.orvyn.app.data.Api
 import id.orvyn.app.ui.components.spokenCard
 import id.orvyn.app.ui.insights.CategoryScreen
@@ -111,5 +121,27 @@ class Hotfix091Test {
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("Try again")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Couldn't load these").assertExists()
         compose.onNodeWithText("You're offline. Check your connection and try again.").assertExists()
+    }
+
+    // ---- H91-4: Done runs the primary action only when it's on; Search only closes the keyboard (MASTER Text field)
+
+    @Test fun `H91-4 Done runs the button when it is enabled, and Search never runs anything`() {
+        var ran = 0
+        var number by mutableStateOf("12345")
+        set {
+            Column {
+                OrvynTextField("Account number", number, { number = it }, imeAction = ImeAction.Done, onImeAction = doneAction(number.length >= 10) { ran++ })
+                OrvynTextField("Find a bank", "", {}, imeAction = ImeAction.Search, onImeAction = closeKeyboard())
+            }
+        }
+        val fields = compose.onAllNodes(hasSetTextAction())
+        fields[0].performImeAction()
+        compose.runOnIdle { assertEquals("too short: Done only closes the keyboard", 0, ran) }
+        number = "1234567890"
+        compose.waitForIdle()
+        fields[0].performImeAction()
+        compose.runOnIdle { assertEquals("valid: Done is the same as tapping Check account", 1, ran) }
+        fields[1].performImeAction()
+        compose.runOnIdle { assertEquals(1, ran) }
     }
 }
