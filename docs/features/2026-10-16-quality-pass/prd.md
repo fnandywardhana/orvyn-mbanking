@@ -353,3 +353,15 @@ QA memeriksa buku besar dev (`checkLedger`) di awal, setelah setiap transaksi uj
 - **QA akhir:** regresi penuh pada build gabungan, termasuk render 200% dan smoke APK 0.8.1 terhadap server 0.9.0. Target: 0 blocker, 0 major, putusan READY FOR RELEASE.
 - **Rilis:** hanya orkestrator, dan hanya setelah QA READY **dan tim bisnis setuju** (requirement, CLAUDE.md langkah 7). Urutan: migrasi dan deploy server, lalu APK dan `releases/orvyn-0.9.0.txt` (daftar izin sama dengan 0.8.1), cek link unduhan, perbarui `docs/PROGRESS.md`. PO memperbarui `docs/stories/` sesuai bagian 8.
 - Tidak ada migrasi data di HP. Nasabah cukup memasang APK baru. Passkey yang dibuat sebelum Reset demo tidak berlaku lagi setelah reset.
+
+## 14. Catatan CX yang diputuskan orkestrator (17 Okt)
+
+Delapan catatan di `design.md` bagian 15 diterima apa adanya dan berlaku sebagai AC:
+1. Q-A1 AC4: judul satu baris, kecuali nama yang tidak muat pada 18sp; judul lalu membungkus, tidak pernah dipotong.
+2. Q-A5 AC1: grid aksi cepat tanpa memotong kata; dua baris di 411dp, boleh tiga baris (2+2+1) di 360dp.
+3. Label bottom nav berhenti membesar di 1,5× (keputusan desain, AC3 tetap: label terbaca utuh).
+4. Pencairan deposito lebih awal mendapat layar periksa sebelum PIN (design.md 6.2).
+5. Q-F3: pembatalan (reversal) ikut Type transaksi yang dibatalkannya; inflow, adjustment, dan opening hanya tampil tanpa filter Type (inflow juga di "Money in").
+6. Q-D6: setelah Forgot PIN, snackbar "Your PIN is changed" di beranda.
+7. Q-B9: IT memilih cara mengecek status kunci tanpa PIN, asalkan tidak membocorkan apa pun selain status kunci perangkat yang sudah terdaftar.
+8. Q-B5 AC4: semua jalur PIN pembayaran di server mengirim sisa percobaan, termasuk kartu.
