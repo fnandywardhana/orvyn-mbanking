@@ -104,3 +104,15 @@ Helper baru di `ui/components/Fields.kt`: `doneAction(enabled) { … }` (aktif: 
 ## Yang belum dikerjakan
 
 - Uji di HP (200%, terang/gelap, TalkBack, smoke APK 0.9.0) diserahkan ke QA. Saya tidak menyentuh HP, produksi, `releases/`, atau build release, dan tidak menjalankan dev server.
+
+## Perbaikan QA putaran 1
+
+Sumber: `qa-report.md` (NOT READY, 3 temuan IT). Commit `72c499b`.
+
+| Temuan | Perbaikan | File | Test |
+|---|---|---|---|
+| H91-F2 (minor) | `PeoplePicker`: teman di `initial` yang bukan penerima tersimpan/terakhir (hasil `Find`) ditaruh di atas daftar saat layar dibuat ulang, jadi setiap teman yang terhitung di `Next: n friends` terlihat dan bisa dilepas (H91-1 AC4) | `ui/requests/Requests.kt` | `Hotfix091Test`: split Rp15,000, Sinta + Hendra lewat `Find`, kembali dari `Check the shares`, Hendra tampil dan dilepas → `Next: 1 friend`. Dicek gagal tanpa perbaikan |
+| H91-F3 (minor) | Baris bagian dipindah ke `ShareRow`. Di font besar (≥ 1,5) bertumpuk sesuai `design.md` 2.3: nama, `Needs at least {minimum}`, lalu nominal di barisnya sendiri. `InitialsAvatar` tumbuh dengan skala font (40dp × maks(1, skala × 0,75), 60dp di 200%) sehingga inisial tidak terpotong; tanpa batas skala font, karena MASTER hanya membatasi keypad dan bottom nav. Perubahan avatar berlaku di semua tempat yang memakainya | `Requests.kt`, `ui/components/Success.kt` | `FontScaleTest.checkShares` (360dp dan 411dp, terang dan gelap, 200%): `Rp10,000` utuh dalam satu baris (Q-A4), nama tidak patah di tengah kata (termasuk nama 29 huruf), inisial satu baris, nominal di bawah nama |
+| H91-F1 (polish) | Nilai baris di detail transaksi (`Type` dan lainnya) yang berisi nomor kartu bertopeng dibacakan `{kartu} card ending {4 digit}` lewat `spokenCard` | `ui/history/HistoryScreen.kt` | `spokenCard` sudah diuji di `Hotfix091Test` |
+
+**Hasil:** `npm test` 118/118 lolos. `./gradlew --rerun-tasks testDebugUnitTest assembleDebug` dua kali: keduanya 111/111 lolos, APK debug ter-build. Izin APK tetap sama persis dengan `releases/orvyn-0.9.0.apk`. Tanpa HP, produksi, rilis, atau dev server.
