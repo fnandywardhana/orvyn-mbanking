@@ -384,7 +384,7 @@ Dipakai di: nominal Transfer, QRIS (nominal diketik), tagihan kartu "Another amo
 │     ... baris lain ...                       │
 ├───────────────────────────────────────────┤
 │ AREA MENEMPEL (di atas inset navigasi)       │
-│   [Save {Sinta} as a recipient]  teks putih  │
+│   [Save as a recipient]   teks putih         │
 │   [Share receipt]   bergaris putih           │
 │   [Done]            isi putih                │
 └───────────────────────────────────────────┘
@@ -403,7 +403,7 @@ Dipakai di: nominal Transfer, QRIS (nominal diketik), tagihan kartu "Another amo
 
 | Layar | Headline | Subline | Baris rincian | Aksi |
 |---|---|---|---|---|
-| Transfer sekarang | `Sent` | `to {Sinta Maharani}` | Date, To, Method, Note (bila ada), Reference | `Save {Sinta} as a recipient` (penerima baru), `Share receipt`, `Done` |
+| Transfer sekarang | `Sent` | `to {Sinta Maharani}` | Date, To, Method, Note (bila ada), Reference | `Save as a recipient` (penerima baru, 17.1), `Share receipt`, `Done` |
 | Transfer terjadwal | `Scheduled` | `to {nama}` | Date, To, Method, Note, First send, Repeats | `Done` |
 | QRIS | `Paid` | `to {merchant}` | Date, Merchant, Method, Reference | `Share receipt`, `Done` |
 | Bill Payment | `Paid` | sama dengan 0.8.1 | Date, baris 0.8.1 (Your token, Name, Reference) | `Copy token` (PLN token, tetap), `Share receipt`, `Done` |
@@ -612,7 +612,7 @@ Tidak ada copy baru selain yang disebut. **Aksesibilitas:** urutan baca: judul, 
 
 ### 5.3 Q-A3 Layar sukses tahan font besar
 
-**Layar:** semua layar sukses, dibangun dengan 4.8. Di 360×640dp font 2,0, sukses transfer terjadwal dengan 6 baris (Date, To, Method, Note, First send, Repeats): rincian digulir, `Done` menempel di atas navigasi. Tombol sekunder (`Save {Sinta} as a recipient`, `Share receipt`) tetap di area menempel dan boleh membungkus 2 baris.
+**Layar:** semua layar sukses, dibangun dengan 4.8. Di 360×640dp font 2,0, sukses transfer terjadwal dengan 6 baris (Date, To, Method, Note, First send, Repeats): rincian digulir, `Done` menempel di atas navigasi. Tombol sekunder (`Save as a recipient`, `Share receipt`) tetap di area menempel dan boleh membungkus 2 baris.
 
 State: default dan berbagi bukti di 4.8. Loading, kosong, offline: tidak berlaku (layar ini tampil setelah server berhasil). Menyimpan penerima offline: snackbar offline, tombol tetap (6.1).
 
@@ -1578,6 +1578,7 @@ Setiap edit tercatat sebagai Audit Entry `banner.edit` dengan nilai sebelum dan 
 | Passkey yang sudah dihapus | (baru) | `This passkey doesn't work anymore. Sign in with your phone number and password.` |
 | Periode tagihan PLN/BPJS | `2026-10` | `Oct 2026` (atau aplikasi yang memformat) |
 | Judul riwayat kantong | `ORVYN Everyday` | `Added from ORVYN Everyday` / `Moved to ORVYN Everyday` |
+| Judul riwayat pembayaran kartu di sisi rekening kartu kredit (17.2) | `Your savings` | `Payment from your savings` |
 | Admin reject tanpa alasan | (baru) | `Write a reason first. The applicant sees it in the app.` |
 
 ---
@@ -1625,3 +1626,96 @@ Ikon lain sudah ada di `res/drawable`. Tidak ada library ikon baru.
 - [x] Konsisten dengan `design-system/MASTER.md`, dan MASTER sudah diperbarui (3.1).
 - [x] Grafik dicek dengan `dataviz` dan warna batang divalidasi dengan skripnya (9.11, 11.8).
 - [x] Tidak ada izin Android baru, tidak ada data HP baru, tidak ada nomor HP atau email asli.
+
+---
+
+## 17. Perbaikan QA putaran 1
+
+Tiga temuan polish untuk CX dari `qa-report.md` putaran 1. Bagian ini menggantikan teks lama yang disebut di bawah; tempat lama di 4.8 dan 5 sudah disesuaikan.
+
+### 17.1 Q-01-F5 Tombol simpan penerima tanpa nama
+
+**Masalah:** templat `Save {nama depan} as a recipient` mengambil kata pertama nama rekening. Untuk badan usaha hasilnya `Save PT as a recipient`. Hal yang sama terjadi pada nama yang diawali gelar (`H.`, `Hj.`, `Dr.`) dan pada konfirmasi `{nama depan} is in your saved recipients`.
+
+**Keputusan:** tombol dan konfirmasi **tidak memuat nama sama sekali**. Nama lengkap penerima sudah tampil tepat di atasnya pada subline (`to PT Griya Properti Utama`) dan sudah dibacakan TalkBack saat layar sukses muncul. Aplikasi tidak mencoba menebak apakah penerima orang atau usaha, dan tidak memotong nama apa pun.
+
+| Bagian | Sebelum | Sesudah |
+|---|---|---|
+| Tombol tersier (penerima baru) | `Save {Sinta} as a recipient` | `Save as a recipient` |
+| Setelah tersimpan (teks, bukan tombol) | `{Sinta} is in your saved recipients` | `Saved to your recipients` |
+| Gagal menyimpan | snackbar pesan server/offline (tetap) | tetap, tombol kembali ke `Save as a recipient` |
+
+- **Tempat:** layar sukses Transfer kirim sekarang (4.8), area menempel, di atas `Share receipt`. Hanya untuk penerima yang belum tersimpan (tetap). Transfer terjadwal tidak punya tombol ini (tetap).
+- **Sibuk:** spinner putih menggantikan label di tempat yang sama, tombol tidak bisa diketuk lagi (tetap).
+- **Offline:** sama dengan B1 (`qb1-save-recipient-offline.png`): snackbar error offline, tombol tetap.
+- **Terang dan gelap:** sama di dua tema, karena berada di hero gelap: teks putih `labelLarge` di gradien hero, sama dengan aksi tersier lain di 4.8. Teks `Saved to your recipients` juga putih, rata tengah, dengan ikon `ph_check` 16dp putih di depannya supaya keadaan tersimpan tidak hanya dibedakan oleh hilangnya bentuk tombol.
+- **TalkBack:** tombol dibaca `Save as a recipient, button` (label sama dengan teks yang terlihat, supaya Voice Access juga bisa memakainya). Setelah berhasil, `Saved to your recipients` diumumkan sekali (live region polite) dan fokus tidak berpindah.
+- **Font 200%:** label pendek ini muat satu baris di 360dp; aturan boleh membungkus 2 baris (bagian 5) tetap berlaku.
+- **Di luar perubahan:** layar Requests dan Split (`Ask {Sinta}`, `{Sinta} sees this.`, `{Sinta}'s share`) tetap memakai nama depan, karena lawannya selalu nasabah ORVYN perorangan dengan nama depan dari profil.
+
+### 17.2 Q-01-F7 Tanda nominal pembayaran kartu kredit
+
+**Masalah:** pembayaran tagihan Rp100,000 tampil `+Rp100,000` di daftar `RECENT CARD PAYMENTS` (sisi kartu) tetapi `−Rp100,000` di detail yang dibuka dari baris itu (sisi tabungan).
+
+**Aturan (ditambahkan ke MASTER, Money colors):** tanda selalu mengikuti arah uang **untuk rekening yang sedang dilihat**. Detail transaksi yang dibuka dari sebuah daftar menampilkan sisi yang sama dengan baris yang diketuk, jadi judul, tanda, dan warna tidak pernah berubah antara daftar dan detail. Ini pola yang sudah dipakai kantong (`Added from ORVYN Everyday` / `Moved to ORVYN Everyday`).
+
+Dengan aturan ini, di daftar kartu kredit pembelian bertanda `−` (memakai limit) dan pembayaran bertanda `+` (mengurangi yang terutang). Di tabungan, pembayaran yang sama bertanda `−` (uang keluar). Keduanya benar menurut buku besar dan menurut tempat nasabah melihat.
+
+| Dibuka dari | Judul (daftar dan detail) | Type | Nominal | Warna |
+|---|---|---|---|---|
+| Cards → kartu kredit → `RECENT CARD PAYMENTS` | `Payment from your savings` | `Credit card payment` | `+Rp100,000` | `success` |
+| History, Recent di beranda, detail rekening ORVYN Everyday, pesan Inbox | `ORVYN Voyage bill` (nama produk + ` bill`) | `Credit card payment` | `−Rp100,000` | `text` |
+
+- **Judul sisi kartu:** `Payment from your savings` menggantikan `Your savings` (lihat tabel teks server di bawah). Judul sisi tabungan tetap.
+- **Navigasi:** Cards membuka detail dengan rekening kartu, seperti kantong membuka `tx/{id}?account={id}`. Cara mendapatkan id rekening kartu (misalnya `accountId` di respons kartu) diserahkan ke IT.
+- **Baris `Account` di detail:** mengikuti sisi yang tampil (tetap, sama dengan pembelian kartu yang sudah dibuka dari Cards).
+- **`Share receipt` di detail:** gambar bukti mengikuti sisi yang tampil, sama dengan kantong. Tidak ada aturan khusus.
+- **Pembelian kartu** (`card_spend`) tidak berubah: `−` di daftar dan detail.
+- **Kartu debit** tidak terdampak: daftar debit tidak menampilkan pembayaran tagihan (`Debit card payments show in your History.`).
+- **Terang dan gelap:** `success` untuk `+` dan `text` untuk `−` sesuai token MASTER di kedua tema (kontras AA sudah dihitung di 3.3). Tanda `+` / `−` (U+2212) selalu tertulis, jadi arti tidak hanya dibawa warna.
+- **TalkBack:** baris dan detail membaca tanda dari teks yang sama, misalnya `Payment from your savings, Credit card payment, +Rp100,000`. Detail dan baris membaca nilai yang sama.
+- **Memuat, error, offline:** tetap (skeleton dan `Couldn't load this transaction` di detail, `Couldn't load these` di Cards).
+
+**Teks yang dikirim server (tambahan untuk tabel bagian 13):**
+
+| Tempat di server | Sebelum | Sesudah |
+|---|---|---|
+| Judul riwayat pembayaran kartu (`card_payment`) di sisi rekening kartu kredit | `Your savings` | `Payment from your savings` |
+
+### 17.3 Q-01-F11 Aksi keyboard di form pendaftaran
+
+**Aturan umum (ditambahkan ke MASTER, Text field):**
+- Setiap field teks kecuali yang terakhir di layar: aksi keyboard **Next**, memindahkan fokus ke field teks berikutnya. Layar menggulir supaya field itu dan pesannya terlihat di atas keyboard (perilaku komponen yang sudah ada).
+- Field teks terakhir: aksi keyboard **Done**.
+  - Bila tidak ada pertanyaan lain di bawahnya dan tombol utama aktif: Done sama dengan mengetuk tombol utama (termasuk keadaan sibuk dan pesan errornya).
+  - Bila tombol utama belum aktif: Done hanya menutup keyboard. Tidak ada pesan baru.
+  - Bila masih ada pertanyaan bukan teks di bawahnya (chip, pilihan): Done menutup keyboard dan menggulir pertanyaan berikutnya ke layar. Done tidak mengirim form.
+- Enter di keyboard fisik (atau `input keyevent 66` dari adb) melakukan hal yang sama dengan aksi keyboard di field satu baris.
+- Tombol utama tetap ada dan tetap bekerja seperti biasa; aksi keyboard hanya jalan pintas.
+
+**Per langkah pendaftaran:**
+
+| Langkah | Field | Keyboard | Aksi keyboard | Yang terjadi |
+|---|---|---|---|---|
+| `Open an account` | `Phone number` | telepon (tetap) | Done | `Send code` bila aktif (10 digit atau lebih), selain itu tutup keyboard |
+| `Enter the code` | `6-digit code` | angka tersembunyi (tetap) | Done | `Confirm` bila 6 digit, selain itu tutup keyboard |
+| `About you` | `Full name` | teks, huruf besar tiap kata, tanpa koreksi otomatis | Next | fokus ke `NIK` |
+| `About you` | `NIK` | angka (tetap) | Next | fokus ke `Date of birth` |
+| `About you` | `Date of birth` | angka (tetap) | Next | fokus ke `Address` |
+| `About you` | `Address` | teks, huruf besar awal kalimat | Done | tutup keyboard, lepas fokus, gulir kelompok `Work` ke layar. Tidak menjalankan `Continue` (cek NIK baru jalan saat `Continue` diketuk) |
+| `Create a password` | `Password` | password (tetap) | Done | `Continue` bila password cukup kuat, selain itu tutup keyboard |
+
+- **Next tidak memvalidasi.** Error tetap muncul seperti 8.2, yaitu setelah `Continue` diketuk. Pindah field dengan Next tidak memunculkan error baru.
+- **Setelah error (8.2):** field pertama yang salah mendapat fokus; Next dari sana tetap mengikuti urutan tabel di atas.
+- **Copy:** tidak ada teks baru. Label tombol keyboard berasal dari keyboard Android.
+- **Terang dan gelap:** tidak ada perubahan tampilan.
+- **TalkBack:** keyboard Android membacakan tombol aksinya sendiri (`Next`, `Done`). Saat fokus pindah ke field berikutnya, TalkBack membacakan label field itu dan helper-nya (misalnya `Date of birth, DD/MM/YYYY`). Setelah Done di `Address`, fokus aksesibilitas tidak dipaksa pindah; kelompok `Work` hanya digulir ke layar.
+- **Font 200%:** setiap field yang mendapat fokus lewat Next digulir ke atas keyboard bersama pesannya (komponen Text field). `Work` yang digulir setelah Done terlihat mulai dari judulnya.
+- **Catatan untuk IT:** varian `OrvynTextField` dengan `TextFieldValue` (dipakai `Date of birth`) belum menerima `imeAction` dan `onImeAction`.
+
+### 17.4 Cek Gerbang 2 untuk bagian ini
+
+- [x] Ketiga temuan punya keputusan, layar yang terdampak, dan state (sibuk, offline, error, tersimpan).
+- [x] Copy baru (`Save as a recipient`, `Saved to your recipients`, `Payment from your savings`) sudah melewati `humanizer`: pendek, kata sehari-hari, tanpa tanda pisah panjang.
+- [x] Terang dan gelap, TalkBack, 200%, dan arti tanpa warna tercakup.
+- [x] MASTER diperbarui: Money colors (tanda per rekening yang dilihat), Text field (aksi keyboard), Success screen (contoh tombol).
