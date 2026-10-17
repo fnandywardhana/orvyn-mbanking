@@ -98,6 +98,7 @@ import id.orvyn.app.ui.components.LocalSnacks
 import id.orvyn.app.ui.components.OFFLINE
 import id.orvyn.app.ui.components.OrvynButton
 import id.orvyn.app.ui.components.OrvynSnackbarHost
+import id.orvyn.app.ui.components.snackAnchor
 import id.orvyn.app.ui.components.StateIcon
 import id.orvyn.app.ui.components.backEnter
 import id.orvyn.app.ui.components.backExit
@@ -318,7 +319,7 @@ fun OrvynApp(store: DeviceStore) {
         nav.navigate(if (Api.session != null) "main" else if (store.deviceToken != null) "unlock" else "welcome") { popUpTo(0) }
     }
     // One snackbar for the whole app, above the sticky buttons and the bottom nav (design.md 4.11).
-    OrvynSnackbarHost(snacks, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 76.dp))
+    OrvynSnackbarHost(snacks)
     }
     }
 }
@@ -424,7 +425,7 @@ private fun Modifier.raise(by: androidx.compose.ui.unit.Dp) = layout { measurabl
 
 @Composable
 private fun BottomBar(current: Tab, onSelect: (Tab) -> Unit) {
-    Column(Modifier.background(MaterialTheme.colorScheme.surface).navigationBarsPadding()) {
+    Column(Modifier.snackAnchor().background(MaterialTheme.colorScheme.surface).navigationBarsPadding()) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         CapFontScale { // labels stop growing at 1.5×, so "Profile" never breaks in its fifth of the width (design.md 4.1)
             Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.Bottom) {

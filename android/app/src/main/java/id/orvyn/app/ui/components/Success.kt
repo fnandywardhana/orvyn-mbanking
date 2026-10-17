@@ -141,7 +141,7 @@ fun SuccessScreen(
             }
         }
         if (scroll.canScrollForward) HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
-        Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxWidth().snackAnchor().padding(top = 8.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             textAction?.invoke()
             if (onShare != null) ShareReceiptButton(onShare)
             OrvynButtonFrame(primaryLabel, rememberOnce(onPrimary), Modifier, ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Brand.Nerazzurro),

@@ -149,9 +149,9 @@ fun VynaScreen(store: DeviceStore, onBack: () -> Unit, onAction: (JSONObject) ->
             }
             busy = false
             reply.done = true
-            announce = reply.text
+            announce = spoken(reply.text)
             allowance = allowance?.let { it.first to it.second + 1 }
-            if (speaks && reply.text.isNotBlank()) voice.speak(reply.text)
+            if (speaks && reply.text.isNotBlank()) voice.speak(spoken(reply.text))
         }
     }
 
@@ -255,6 +255,12 @@ fun VynaText(text: String, color: androidx.compose.ui.graphics.Color, modifier: 
             } else if (line.isNotBlank()) Text(bold(line), style = MaterialTheme.typography.bodyLarge, color = color)
         }
     }
+}
+
+/** What TalkBack and the reader voice say (Q-E6 AC3): the same text as [VynaText] shows, without "- ", "* " or "**". */
+fun spoken(text: String) = text.split('\n').filter { it.isNotBlank() }.joinToString("\n") { line ->
+    val bullet = Regex("^\\s*([-*]|\\d+\\.)\\s+(.*)").find(line)
+    bold(if (bullet == null) line else if (bullet.groupValues[1].first().isDigit()) "${bullet.groupValues[1]} ${bullet.groupValues[2]}" else bullet.groupValues[2]).text
 }
 
 /** "**Rp1,000**" → bold 700; unmatched asterisks stay as they are. */

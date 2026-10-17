@@ -198,7 +198,7 @@ fun OpenDepositFlow(onExit: () -> Unit) {
         when (s) {
             0 -> AmountScreen("Open a deposit", "How much? From ORVYN Everyday, at least Rp1,000,000.", onExit,
                 keypad = { AmountKeypad(amount, { amount = it; error = null }) },
-                button = { OrvynButton("Next", enabled = amount >= 1_000_000, onClick = { step = 1 }) }) {
+                button = { OrvynButton(when { amount == 0L -> "Enter an amount"; amount < 1_000_000 -> "Minimum Rp1,000,000"; else -> "Next" }, enabled = amount >= 1_000_000, onClick = { step = 1 }) }) {
                 AmountDisplay(amount, null, error, onQuickPick = { amount = it }, quickAmounts = DEPOSIT_QUICK_AMOUNTS)
             }
             1 -> FlowScreen("For how long?", "${Money.format(amount)} at a fixed rate.", { step = 0 }) {

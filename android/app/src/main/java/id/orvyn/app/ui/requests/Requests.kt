@@ -251,7 +251,7 @@ private fun PayReview(q: MoneyRequest, refused: String?, onBack: () -> Unit, onP
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 ReviewRow("Total", Money.format(q.amount), strong = true)
                 when {
-                    o != null -> ReviewRow("Balance after", Money.format(o.balance - q.amount))
+                    o != null -> if (o.balance >= q.amount) ReviewRow("Balance after", Money.format(o.balance - q.amount)) // short: the error box says by how much (Q-01-F8)
                     opts.error != null -> InlineLoadError(opts.error!!, opts.busy, opts::reload)
                     else -> Skeleton(Modifier.fillMaxWidth().height(24.dp))
                 }

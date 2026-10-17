@@ -131,9 +131,11 @@ fun AmountScreen(
             Column(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
             Spacer(Modifier.height(0.dp))
         }
-        keypad()
-        Spacer(Modifier.height(12.dp))
-        button()
-        Spacer(Modifier.height(16.dp))
+        Column(Modifier.snackAnchor()) {
+            keypad()
+            Spacer(Modifier.height(12.dp))
+            button()
+            Spacer(Modifier.height(16.dp))
+        }
     }
 }

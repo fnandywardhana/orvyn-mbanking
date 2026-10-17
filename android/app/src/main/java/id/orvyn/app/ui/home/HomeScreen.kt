@@ -396,7 +396,7 @@ private fun Banners(banners: List<Banner>, onAction: (String) -> Unit) {
             BannerArt(b, Modifier.heightIn(min = 156.dp).semantics { stateDescription = "Banner ${i + 1} of ${banners.size}" }
                 .clickable(role = Role.Button, onClickLabel = "Read more") { open = b }, fade = true, full = large) {
                 Column(Modifier.fillMaxWidth(if (large) 1f else 0.66f).heightIn(min = 156.dp).padding(16.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                    Column(Modifier.semantics(mergeDescendants = true) { contentDescription = "${b.title}. ${b.body}" }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(Modifier.semantics(mergeDescendants = true) { contentDescription = bannerLabel(b.title, b.body) }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(b.title, style = MaterialTheme.typography.titleMedium, color = Color.White, maxLines = if (large) Int.MAX_VALUE else 2)
                         Text(b.body, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.88f), maxLines = if (large) Int.MAX_VALUE else 2)
                     }
@@ -507,3 +507,6 @@ private fun Modifier.pullUp(by: androidx.compose.ui.unit.Dp) = layout { measurab
     val dy = by.roundToPx()
     layout(p.width, p.height - dy) { p.place(0, -dy) }
 }
+
+/** "{title}. {body}" (design.md 11.1), without a second stop when the title already ends in one ("Scan. Pay. Done."). */
+fun bannerLabel(title: String, body: String) = if (title.trimEnd().lastOrNull() in listOf('.', '!', '?')) "${title.trimEnd()} $body" else "$title. $body"

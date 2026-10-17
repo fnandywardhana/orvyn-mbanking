@@ -63,6 +63,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -211,7 +215,8 @@ fun AmountText(
         val said = contentDescription ?: if (shown != text) text else null
         Text(
             shown, style = style.copy(fontSize = size, lineHeight = (size.value * ratio).sp), color = color, textAlign = textAlign,
-            modifier = if (said != null) Modifier.semantics { this.contentDescription = said } else Modifier,
+            // A set alignment needs the full width to act on, or a full-width amount sits left (Q-01-F10).
+            modifier = (if (textAlign != null) Modifier.fillMaxWidth() else Modifier).then(if (said != null) Modifier.semantics { this.contentDescription = said } else Modifier),
         )
     }
 }
@@ -395,6 +400,8 @@ class OrvynSnack(
 
 /** One snackbar at a time for the whole app. Errors start with a warning icon; with an action it stays 10 seconds, or until dismissed under TalkBack. */
 class Snacks(val host: SnackbarHostState, private val scope: CoroutineScope, private val talkBack: () -> Boolean) {
+    /** Window top of each sticky action area on screen ([snackAnchor]); the snackbar sits just above the highest one. */
+    val anchors = androidx.compose.runtime.mutableStateMapOf<Any, Float>()
     fun show(message: String, error: Boolean = false, action: String? = null, onAction: () -> Unit = {}) {
         scope.launch {
             host.currentSnackbarData?.dismiss()
@@ -422,8 +429,32 @@ fun rememberSay(): (String, Boolean) -> Unit {
     return remember(s) { { m, err -> s?.show(m, err) } }
 }
 
+/**
+ * Marks a sticky action area (keypad, bottom buttons, bottom nav) so the snackbar never covers it (design.md 4.11).
+ * Screens without a marked area keep the default spot, 76dp above the bottom, clear of one sticky button.
+ */
 @Composable
-fun OrvynSnackbarHost(snacks: Snacks, modifier: Modifier = Modifier) {
+fun Modifier.snackAnchor(): Modifier {
+    val s = LocalSnacks.current ?: return this
+    val key = remember { Any() }
+    DisposableEffect(s) { onDispose { s.anchors.remove(key) } }
+    return onGloballyPositioned { s.anchors[key] = it.boundsInWindow().top }
+}
+
+/** Fills the window; the snackbar sits at the bottom, just above the highest [snackAnchor]. */
+@Composable
+fun OrvynSnackbarHost(snacks: Snacks) {
+    var bottom by remember { mutableStateOf(0f) }
+    val top = snacks.anchors.values.minOrNull()
+    val density = LocalDensity.current
+    Box(Modifier.fillMaxSize().onGloballyPositioned { bottom = it.boundsInWindow().bottom }) {
+        val place = if (top == null) Modifier.navigationBarsPadding().padding(bottom = 76.dp) else Modifier.padding(bottom = with(density) { (bottom - top).coerceAtLeast(0f).toDp() })
+        SnackbarBox(snacks, Modifier.align(Alignment.BottomCenter).then(place))
+    }
+}
+
+@Composable
+private fun SnackbarBox(snacks: Snacks, modifier: Modifier) {
     SnackbarHost(snacks.host, modifier) { data ->
         val v = data.visuals as? OrvynSnack
         Snackbar(

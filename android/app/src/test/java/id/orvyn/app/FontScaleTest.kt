@@ -133,7 +133,7 @@ class FontScaleTest(private val night: Boolean, private val qualifiers: String) 
 
     @Test fun depositAmount() {
         render("deposit-amount") { OpenDepositFlow(onExit = {}) }
-        inside("deposit-amount", *keys, "Next" to hasText("Next"))
+        inside("deposit-amount", *keys, "button" to hasText("Enter an amount"))
     }
 
     @Test fun transferSuccess() {

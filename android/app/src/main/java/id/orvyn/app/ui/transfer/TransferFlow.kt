@@ -397,12 +397,12 @@ private fun Review(
                         chosen?.let { ReviewRow("Arrives", it.note) }
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         ReviewRow("Total", Money.format(amount + fee), strong = true)
-                        if (later == null) ReviewRow("Balance after", Money.format(o.balance - amount - fee))
+                        if (later == null && o.balance >= amount + fee) ReviewRow("Balance after", Money.format(o.balance - amount - fee))
                     }
                 }
                 loadError != null && !loading -> Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface).padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    InlineLoadError("Couldn't load the fee and arrival time.", retrying = loading, onRetry = { scope.launch { load() } })
+                    InlineLoadError("Couldn't load the fee and arrival time.", retrying = loading, onRetry = { scope.launch { if (load()) onClearError() } }) // fresh details: the old error box goes (4.12, Q-01-F4)
                     Text(loadError!!, style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
                 }
                 else -> Skeleton(Modifier.fillMaxWidth().height(180.dp))

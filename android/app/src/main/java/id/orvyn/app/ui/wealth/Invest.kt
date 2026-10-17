@@ -337,7 +337,12 @@ fun TradeFlow(id: String, buy: Boolean, onExit: () -> Unit, onQuiz: () -> Unit) 
                         }, enabled = gramValue >= 0.01 && pay >= p.minBuy && riskOk, onClick = { step = 1 })
                         else {
                             val ok = amount > 0 && (if (buy) amount >= p.minBuy && (p.kind != "bond" || amount % 1_000_000 == 0L) && riskOk else h != null)
-                            OrvynButton(if (buy) "Buy ${Money.format(amount)}" else "Sell ${Money.format(amount)}", enabled = ok, onClick = { step = 1 })
+                            OrvynButton(when { // design.md 4.7: a disabled button says why
+                                amount == 0L -> "Enter an amount"
+                                buy && amount < p.minBuy -> "Minimum ${Money.format(p.minBuy)}"
+                                buy -> "Buy ${Money.format(amount)}"
+                                else -> "Sell ${Money.format(amount)}"
+                            }, enabled = ok, onClick = { step = 1 })
                         }
                     }
                 }) {

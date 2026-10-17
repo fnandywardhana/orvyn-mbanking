@@ -49,6 +49,16 @@ import id.orvyn.app.ui.theme.OrvynTheme
 import id.orvyn.app.ui.theme.OrvynType
 import id.orvyn.app.ui.vyna.VynaScreen
 import id.orvyn.app.ui.vyna.bold
+import id.orvyn.app.ui.vyna.spoken
+import id.orvyn.app.ui.home.bannerLabel
+import id.orvyn.app.ui.components.LocalSnacks
+import id.orvyn.app.ui.components.OrvynSnackbarHost
+import id.orvyn.app.ui.components.ReceiptLine
+import id.orvyn.app.ui.components.SuccessScreen
+import id.orvyn.app.ui.components.WhiteTextButton
+import id.orvyn.app.ui.components.rememberSnacks
+import id.orvyn.app.ui.wealth.OpenDepositFlow
+import androidx.compose.foundation.layout.Box
 import id.orvyn.app.ui.wealth.goldRupiah
 import id.orvyn.app.ui.wealth.rateLine
 import id.orvyn.app.ui.wealth.signedPercent
@@ -117,6 +127,44 @@ class QualityPassTest {
         val s = bold("Your balance is **Rp1,000** today")
         assertEquals("Your balance is Rp1,000 today", s.text)
         assertEquals(FontWeight.Bold, s.spanStyles.single().item.fontWeight)
+    }
+
+    @Test fun `TalkBack and the reader voice get Vyna's answer without markdown symbols (Q-01-F3)`() {
+        assertEquals("Savings Rp16,528,466\nPockets Rp107,000\n1. Ask me anything", spoken("- Savings **Rp16,528,466**\n\n* Pockets **Rp107,000**\n1. Ask me anything"))
+        assertEquals("A * star stays", spoken("A * star stays"))
+    }
+
+    @Test fun `banner labels get one stop between title and body (Q-01-F9)`() {
+        assertEquals("Scan. Pay. Done. Pay at any QRIS sticker with your camera.", bannerLabel("Scan. Pay. Done.", "Pay at any QRIS sticker with your camera."))
+        assertEquals("Flying soon? Switch on overseas payments before you go.", bannerLabel("Flying soon?", "Switch on overseas payments before you go."))
+        assertEquals("Save more. Every day.", bannerLabel("Save more", "Every day."))
+    }
+
+    @Test fun `the open-deposit button says why it is off (Q-01-F6, design 4_7)`() {
+        set { OpenDepositFlow(onExit = {}) }
+        compose.onNodeWithText("Enter an amount").assertExists()
+        compose.mainClock.advanceTimeBy(1_000) // past the screen's input guard (4.3)
+        compose.onNodeWithContentDescription("1").performClick()
+        compose.onNodeWithText("Minimum Rp1,000,000").assertExists()
+    }
+
+    @Test fun `a snackbar sits above the success screen's buttons, never on them (Q-01-F2, design 4_11)`() {
+        var snacks: id.orvyn.app.ui.components.Snacks? = null
+        set {
+            val s = rememberSnacks().also { snacks = it }
+            CompositionLocalProvider(LocalSnacks provides s) {
+                Box {
+                    SuccessScreen("Sent", "Rp50,000", "to Sinta Maharani", details = { ReceiptLine("To", "ORVYN Bank") }, onPrimary = {}, onShare = {},
+                        textAction = { WhiteTextButton("Save Sinta as a recipient") {} }, buzz = false)
+                    OrvynSnackbarHost(s)
+                }
+            }
+        }
+        compose.runOnIdle { snacks!!.show("You're offline. Check your connection and try again.", error = true) }
+        compose.waitForIdle()
+        val snack = compose.onNodeWithText("You're offline. Check your connection and try again.").fetchSemanticsNode().boundsInRoot
+        val save = compose.onNodeWithText("Save Sinta as a recipient").fetchSemanticsNode().boundsInRoot
+        assertTrue("snackbar $snack overlaps $save", snack.bottom <= save.top)
     }
 
     // ---- Components
