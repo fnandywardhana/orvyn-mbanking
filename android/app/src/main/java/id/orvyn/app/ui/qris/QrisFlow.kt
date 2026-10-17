@@ -75,6 +75,12 @@ import id.orvyn.app.data.Merchant
 import id.orvyn.app.data.MyQr
 import id.orvyn.app.data.Recipient
 import id.orvyn.app.data.Scan
+import id.orvyn.app.data.Paid
+import id.orvyn.app.ui.components.*
+import id.orvyn.app.ui.shareTransaction
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import id.orvyn.app.ui.Money
 import id.orvyn.app.ui.auth.FlowScreen
 import id.orvyn.app.ui.components.AmountDisplay
@@ -96,43 +102,52 @@ import java.util.UUID
 import java.util.concurrent.Executors
 
 private sealed interface QStep {
-    data object Scan : QStep
-    data class Pay(val merchant: Merchant, val fixed: Long?) : QStep
-    data class Pin(val merchant: Merchant, val amount: Long) : QStep
-    data class Done(val merchant: Merchant, val amount: Long, val reference: String) : QStep
-    data object Mine : QStep
+    val index: Int
+    data object Scan : QStep { override val index = 0 }
+    data class Pay(val merchant: Merchant, val fixed: Long?, val error: String? = null) : QStep { override val index = 1 }
+    data class Pin(val merchant: Merchant, val fixed: Long?, val amount: Long) : QStep { override val index = 2 }
+    data class Done(val merchant: Merchant, val amount: Long, val paid: Paid) : QStep { override val index = 3 }
+    data object Mine : QStep { override val index = 1 }
+    data object MineAmount : QStep { override val index = 2 }
 }
 
 /** Stories S1.15 and S1.16. A friend's My QR hands over to the transfer flow via [onSendTo]. */
 @Composable
 fun QrisFlow(onExit: () -> Unit, onSendTo: (Recipient, Long?) -> Unit) {
     var step by remember { mutableStateOf<QStep>(QStep.Scan) }
+    var myAmount by remember { mutableStateOf<Long?>(null) }
     val key = remember { UUID.randomUUID().toString() }
+    val context = LocalContext.current
     BackHandler(step !is QStep.Done) {
         step = when (val s = step) {
             QStep.Scan -> { onExit(); QStep.Scan }
-            is QStep.Pin -> QStep.Pay(s.merchant, null)
+            is QStep.Pin -> QStep.Pay(s.merchant, s.fixed)
+            QStep.MineAmount -> QStep.Mine
             else -> QStep.Scan
         }
     }
-    when (val s = step) {
-        QStep.Scan -> Scanner(onExit, onMine = { step = QStep.Mine }) { scan ->
-            when (scan) {
-                is Scan.Pay -> step = QStep.Pay(scan.merchant, scan.amount)
-                is Scan.Send -> onSendTo(scan.recipient, scan.amount)
+    FlowSteps(step, index = { it.index }, success = { it is QStep.Done }) { s ->
+        when (s) {
+            QStep.Scan -> Scanner(onExit, onMine = { step = QStep.Mine }) { scan ->
+                when (scan) {
+                    is Scan.Pay -> step = QStep.Pay(scan.merchant, scan.amount)
+                    is Scan.Send -> onSendTo(scan.recipient, scan.amount)
+                }
             }
+            is QStep.Pay -> PayMerchant(s.merchant, s.fixed, s.error, onBack = { step = QStep.Scan }) { step = QStep.Pin(s.merchant, s.fixed, it) }
+            is QStep.Pin -> PayPin(s.merchant, s.amount, key, onBack = { step = QStep.Pay(s.merchant, s.fixed) },
+                onRefused = { step = QStep.Pay(s.merchant, s.fixed ?: s.amount, it) }) { paid ->
+                DataVersion.count++
+                step = QStep.Done(s.merchant, s.amount, paid)
+            }
+            is QStep.Done -> SuccessScreen(
+                headline = "Paid", amount = Money.format(s.amount), subline = "to ${s.merchant.name}", date = s.paid.at,
+                details = { ReceiptLine("Merchant", "${s.merchant.name} · ${s.merchant.city}"); ReceiptLine("Method", "QRIS"); ReceiptLine("Reference", s.paid.reference) },
+                onPrimary = onExit, onShare = s.paid.transactionId?.let { id -> { shareTransaction(context, id) } },
+            )
+            QStep.Mine -> MyQrScreen(myAmount, onBack = { step = QStep.Scan }, onAddAmount = { step = QStep.MineAmount }, onRemove = { myAmount = null })
+            QStep.MineAmount -> MyQrAmount(myAmount ?: 0L, onBack = { step = QStep.Mine }) { myAmount = it; step = QStep.Mine }
         }
-        is QStep.Pay -> PayMerchant(s.merchant, s.fixed, onBack = { step = QStep.Scan }) { step = QStep.Pin(s.merchant, it) }
-        is QStep.Pin -> PayPin(s.merchant, s.amount, key, onBack = { step = QStep.Pay(s.merchant, null) }) { ref ->
-            DataVersion.count++
-            step = QStep.Done(s.merchant, s.amount, ref)
-        }
-        is QStep.Done -> SuccessScreen(
-            headline = "Paid", amount = Money.format(s.amount), subline = "to ${s.merchant.name}",
-            details = { ReceiptLine("Merchant", "${s.merchant.name} · ${s.merchant.city}"); ReceiptLine("Method", "QRIS"); ReceiptLine("Reference", s.reference) },
-            primaryLabel = "Done", onPrimary = onExit,
-        )
-        QStep.Mine -> MyQrScreen(onBack = { step = QStep.Scan })
     }
 }
 
@@ -144,6 +159,8 @@ private fun Scanner(onExit: () -> Unit, onMine: () -> Unit, onScanned: (Scan) ->
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var attempt by remember { mutableIntStateOf(0) } // restarts the analyzer after a bad code
+    var camera by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
+    var torch by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it; asked = true }
 
@@ -165,10 +182,12 @@ private fun Scanner(onExit: () -> Unit, onMine: () -> Unit, onScanned: (Scan) ->
 
     if (!granted) {
         FlowScreen("Scan to pay", "ORVYN uses your camera only to read QR codes. Nothing is recorded or sent anywhere.", onExit) {
-            Spacer(Modifier.weight(1f))
-            MessageState(R.drawable.ph_qr_code, if (asked) "Camera is off for ORVYN" else "Point your camera at a QRIS code",
-                if (asked) "Turn it on in Settings, or pick a QR picture from your gallery." else "We'll ask Android for camera access first.")
-            Spacer(Modifier.weight(1f))
+            FitArea(bottom = false) {
+                Spacer(Modifier.height(0.dp))
+                MessageState(R.drawable.ph_qr_code, if (asked) "Camera is off for ORVYN" else "Point your camera at a QRIS code",
+                    if (asked) "Turn it on in Settings, or pick a QR picture from your gallery." else "We'll ask Android for camera access first.")
+                Spacer(Modifier.height(0.dp))
+            }
             if (asked) OrvynButton("Open Settings", onClick = {
                 context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
             }) else OrvynButton("Allow camera", onClick = { permission.launch(Manifest.permission.CAMERA) })
@@ -177,9 +196,11 @@ private fun Scanner(onExit: () -> Unit, onMine: () -> Unit, onScanned: (Scan) ->
         }
         return
     }
+    // Q-G2: the flashlight goes off when the scanner closes.
+    DisposableEffect(Unit) { onDispose { runCatching { camera?.cameraControl?.enableTorch(false) } } }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        CameraPreview(attempt, ::handle)
+        CameraPreview(attempt, { camera = it }, ::handle)
         // Dim everything except the square viewfinder.
         Canvas(Modifier.fillMaxSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
             val side = size.width * 0.68f
@@ -190,14 +211,24 @@ private fun Scanner(onExit: () -> Unit, onMine: () -> Unit, onScanned: (Scan) ->
         }
         Column(Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onExit) { Icon(painterResource(R.drawable.ph_x), contentDescription = "Close", tint = Color.White) }
-                Text("Scan QRIS", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                IconButton(onClick = onExit) { CircleIcon(R.drawable.ph_x, "Close") }
+                Text("Scan QRIS", style = MaterialTheme.typography.titleLarge, color = Color.White, modifier = Modifier.weight(1f))
+                if (camera?.cameraInfo?.hasFlashUnit() == true) IconButton(onClick = {
+                    torch = !torch; camera?.cameraControl?.enableTorch(torch)
+                }) { CircleIcon(if (torch) R.drawable.ph_flashlight_fill else R.drawable.ph_flashlight, if (torch) "Turn off the flashlight" else "Turn on the flashlight") }
             }
             Spacer(Modifier.weight(1f))
-            Text(
-                when { busy -> "Reading the code…"; error != null -> error!!; else -> "Point your camera at the QRIS code" },
-                style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center,
-                color = if (error != null && !busy) Brand.Giallo else Color.White,
+            val message = when { busy -> "Reading the code…"; error != null -> error; else -> null }
+            if (error != null && !busy) Row(
+                Modifier.align(Alignment.CenterHorizontally).padding(bottom = 16.dp).clip(RoundedCornerShape(50)).background(Color.White)
+                    .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(painterResource(R.drawable.ph_warning_circle), null, Modifier.size(20.dp), tint = Color(0xFFC62828))
+                Text(error!!, style = MaterialTheme.typography.bodyMedium, color = Color(0xFF0B1020))
+            } else Text(
+                message ?: "Point your camera at the QRIS code",
+                style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, color = Color.White,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(bottom = 16.dp)) {
@@ -208,8 +239,14 @@ private fun Scanner(onExit: () -> Unit, onMine: () -> Unit, onScanned: (Scan) ->
     }
 }
 
+/** White icon on a 40% Nero circle, readable over any camera picture (design.md 11.2). */
 @Composable
-private fun CameraPreview(attempt: Int, onText: (String) -> Unit) {
+private fun CircleIcon(icon: Int, label: String) = Box(Modifier.size(40.dp).clip(CircleShape).background(Brand.Nero.copy(alpha = 0.4f)), contentAlignment = Alignment.Center) {
+    Icon(painterResource(icon), contentDescription = label, tint = Color.White)
+}
+
+@Composable
+private fun CameraPreview(attempt: Int, onCamera: (androidx.camera.core.Camera) -> Unit, onText: (String) -> Unit) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current
     val executor = remember { Executors.newSingleThreadExecutor() }
@@ -217,6 +254,7 @@ private fun CameraPreview(attempt: Int, onText: (String) -> Unit) {
     AndroidView(
         factory = { PreviewView(it).apply { scaleType = PreviewView.ScaleType.FILL_CENTER } },
         update = { view ->
+            attempt.let { }
             val future = ProcessCameraProvider.getInstance(context)
             future.addListener({
                 val provider = future.get()
@@ -224,10 +262,10 @@ private fun CameraPreview(attempt: Int, onText: (String) -> Unit) {
                 val analysis = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
                     .also { it.setAnalyzer(executor, QrAnalyzer { text -> view.post { onText(text) } }) }
                 provider.unbindAll()
-                provider.bindToLifecycle(lifecycle, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+                onCamera(provider.bindToLifecycle(lifecycle, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis))
             }, ContextCompat.getMainExecutor(context))
         },
-        modifier = Modifier.fillMaxSize().semantics { contentDescription = "Camera viewfinder (attempt ${attempt + 1})" },
+        modifier = Modifier.fillMaxSize().semantics { contentDescription = "Camera. Point it at a QRIS code." },
     )
 }
 
@@ -245,51 +283,64 @@ private fun MerchantHeader(m: Merchant) {
     }
 }
 
+/** The QRIS amount, and the screen a failed payment comes back to with its message ([refused]). */
 @Composable
-private fun PayMerchant(m: Merchant, fixed: Long?, onBack: () -> Unit, onPay: (Long) -> Unit) {
+private fun PayMerchant(m: Merchant, fixed: Long?, refused: String?, onBack: () -> Unit, onPay: (Long) -> Unit) {
     var amount by remember { mutableLongStateOf(fixed ?: 0L) }
-    var balance by remember { mutableStateOf<Long?>(null) }
-    LaunchedEffect(Unit) { runCatching { balance = Api.transferOptions("ORVYN", 0).balance } }
-    val error = balance?.let { if (amount > it) "You're ${Money.format(amount - it)} short." else null }
-    FlowScreen(if (fixed != null) "Pay ${m.name}" else "How much?", if (fixed != null) "The merchant set this amount." else null, onBack) {
-        MerchantHeader(m)
-        Spacer(Modifier.weight(1f))
-        if (fixed != null) {
-            Text(Money.format(fixed), style = OrvynType.displayBalance, modifier = Modifier.align(Alignment.CenterHorizontally))
-            balance?.let { Text("Available ${Money.format(it)}", style = MaterialTheme.typography.bodyMedium, color = error?.let { MaterialTheme.colorScheme.error } ?: OrvynTheme.colors.textSecondary, modifier = Modifier.align(Alignment.CenterHorizontally)) }
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.align(Alignment.CenterHorizontally)) }
-            Spacer(Modifier.weight(1f))
-        } else {
-            AmountDisplay(amount, balance, error, onQuickPick = { amount = it })
-            Spacer(Modifier.weight(1f))
-            AmountKeypad(amount, { amount = it })
-        }
+    val balance = rememberLoad { Api.transferOptions("ORVYN", 0).balance }
+    val b = balance.value
+    val error = b?.let { if (amount > it) "You're ${Money.format(amount - it)} short." else null }
+    val failed = balance.error?.let { if (it == OFFLINE) it else "Couldn't load your balance and daily limit." }
+    val button: @Composable () -> Unit = {
+        if (refused != null) ErrorBox(refused, Modifier.padding(bottom = 12.dp))
         OrvynButton(when { amount == 0L -> "Enter an amount"; amount < 1_000 -> "Minimum Rp1,000"; else -> "Pay ${Money.format(amount)}" },
-            enabled = amount >= 1_000 && error == null, onClick = { onPay(amount) }, modifier = Modifier.padding(vertical = 16.dp))
+            enabled = amount >= 1_000 && error == null, onClick = { onPay(amount) })
+    }
+    if (fixed != null) FlowScreen("Pay ${m.name}", "The merchant set this amount.", onBack) {
+        FitArea(bottom = false) {
+            MerchantHeader(m)
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                AmountText(Money.format(fixed), OrvynType.displayBalance, textAlign = TextAlign.Center)
+                when {
+                    error != null -> Text(error, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
+                    b != null -> Text("Available ${Money.format(b)}", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
+                    failed != null -> InlineLoadError(failed, balance.busy, balance::reload)
+                }
+            }
+            Spacer(Modifier.height(0.dp))
+        }
+        Column(Modifier.padding(vertical = 16.dp)) { button() }
+    } else AmountScreen("How much?", null, onBack, keypad = { AmountKeypad(amount, { amount = it }) }, button = { Column { button() } }) {
+        MerchantHeader(m)
+        AmountDisplay(amount, b, error, onQuickPick = { amount = it }, loading = b == null && balance.busy,
+            loadError = if (b == null) failed else null, retrying = balance.busy, onRetry = balance::reload)
     }
 }
 
 @Composable
-private fun PayPin(m: Merchant, amount: Long, key: String, onBack: () -> Unit, onPaid: (String) -> Unit) {
+private fun PayPin(m: Merchant, amount: Long, key: String, onBack: () -> Unit, onRefused: (String) -> Unit, onPaid: (Paid) -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var errors by remember { mutableIntStateOf(0) }
+    var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    FlowScreen("Enter your PIN", "To pay ${Money.format(amount)} to ${m.name}.", onBack) {
-        Spacer(Modifier.weight(1f))
-        PinPad(
-            onComplete = { pin -> scope.launch { try { onPaid(Api.qrisPay(m.id, amount, pin, key).reference) } catch (e: ApiException) { error = e.message; errors++ } } },
-            errorCount = errors, errorText = error, onBiometric = null, modifier = Modifier.padding(bottom = 24.dp),
-        )
-    }
+    PinScreen("Enter your PIN", "To pay ${Money.format(amount)} to ${m.name}.", onBack, errorCount = errors, errorText = error,
+        busyText = if (busy) "Paying ${Money.format(amount)}…" else null,
+        onComplete = { pin ->
+            busy = true; error = null
+            scope.launch {
+                try { onPaid(Api.qrisPay(m.id, amount, pin, key)) }
+                catch (e: ApiException) {
+                    when (e.code) { "WRONG_PIN" -> { error = e.message; errors++ }; "LOCKED", "signed_out" -> {}; else -> onRefused(e.message) }
+                } finally { busy = false }
+            }
+        })
 }
 
-/** Story S1.16: a QR other ORVYN customers scan to send money here. Screen goes full brightness while shown. */
+/** Story S1.16: a QR other ORVYN customers scan to send money here, with an optional amount (Q-F4). Full brightness while shown. */
 @Composable
-private fun MyQrScreen(onBack: () -> Unit) {
+private fun MyQrScreen(amount: Long?, onBack: () -> Unit, onAddAmount: () -> Unit, onRemove: () -> Unit) {
     val activity = LocalContext.current as ComponentActivity
-    var qr by remember { mutableStateOf<MyQr?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) { try { qr = Api.myQr(null) } catch (e: ApiException) { error = e.message } }
+    val qr = rememberLoad(amount) { Api.myQr(amount) }
     DisposableEffect(Unit) {
         val w = activity.window
         val before = w.attributes.screenBrightness
@@ -297,22 +348,41 @@ private fun MyQrScreen(onBack: () -> Unit) {
         onDispose { w.attributes = w.attributes.apply { screenBrightness = before } }
     }
     FlowScreen("My QR", "Other ORVYN customers scan this to send you money.", onBack) {
-        Spacer(Modifier.weight(1f))
-        val q = qr
-        when {
-            error != null -> MessageState(R.drawable.ph_warning_circle, "Couldn't make your QR", error!!)
-            q == null -> Skeleton(Modifier.size(280.dp).align(Alignment.CenterHorizontally))
-            else -> Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color.White).padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                val bitmap = remember(q.payload) { drawQr(q.payload).asImageBitmap() }
-                Image(bitmap, contentDescription = "QR code for ${q.name}", modifier = Modifier.size(260.dp))
-                Text(q.name, style = MaterialTheme.typography.titleLarge, color = Brand.Nero)
-                Text("ORVYN Bank · ${groupAccountNumber(q.accountNumber)}", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF4D5872))
+        FitArea(bottom = false) {
+            Spacer(Modifier.height(0.dp))
+            val q = qr.value?.takeIf { !qr.busy }
+            when {
+                q != null -> Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color.White).padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    val bitmap = remember(q.payload) { drawQr(q.payload).asImageBitmap() }
+                    Image(bitmap, contentDescription = "QR code for ${q.name}" + (amount?.let { ", ${Money.format(it)}" } ?: ""), modifier = Modifier.size(260.dp))
+                    Text(q.name, style = MaterialTheme.typography.titleLarge, color = Brand.Nero, textAlign = TextAlign.Center)
+                    Text("ORVYN Bank · ${groupAccountNumber(q.accountNumber)}", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF4D5872), textAlign = TextAlign.Center)
+                }
+                qr.error != null && !qr.busy -> LoadError("Couldn't make your QR", qr.error!!, qr.busy, qr::reload)
+                else -> Skeleton(Modifier.size(280.dp).align(Alignment.CenterHorizontally), shape = RoundedCornerShape(20.dp))
+            }
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (amount == null) OrvynButton("Add an amount", onClick = onAddAmount, kind = ButtonKind.Secondary)
+                else {
+                    Text(Money.format(amount), style = MaterialTheme.typography.titleLarge)
+                    val buttons: @Composable () -> Unit = { OrvynTextButton("Change amount", onClick = onAddAmount); OrvynTextButton("Remove amount", onClick = onRemove) }
+                    if (isLargeFont()) Column(horizontalAlignment = Alignment.CenterHorizontally) { buttons() } else Row { buttons() }
+                }
             }
         }
-        Spacer(Modifier.weight(1f))
         Spacer(Modifier.height(16.dp))
     }
+}
+
+/** Q-F4 (PO-25): at least Rp10,000, because whoever scans it makes an ORVYN transfer. */
+@Composable
+private fun MyQrAmount(initial: Long, onBack: () -> Unit, onDone: (Long) -> Unit) {
+    var amount by remember { mutableLongStateOf(initial) }
+    AmountScreen("Add an amount", "Whoever scans this QR pays this amount.", onBack, keypad = { AmountKeypad(amount, { amount = it }) }, button = {
+        OrvynButton(when { amount == 0L -> "Enter an amount"; amount < 10_000 -> "Minimum Rp10,000"; else -> "Show QR for ${Money.format(amount)}" },
+            enabled = amount >= 10_000, onClick = { onDone(amount) })
+    }) { AmountDisplay(amount, null, null, onQuickPick = { amount = it }) }
 }

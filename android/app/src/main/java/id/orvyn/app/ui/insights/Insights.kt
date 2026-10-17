@@ -289,11 +289,9 @@ fun CategoryScreen(key: String, accountId: String?, onBack: () -> Unit, onOpen: 
 
 /** S2.11: one sentence on the home screen. Closing it hides it until next week. */
 @Composable
-fun InsightCard(store: DeviceStore, onOpen: () -> Unit) {
+fun InsightCard(store: DeviceStore, text: String?, onOpen: () -> Unit) {
     val week = remember { LocalDate.now(ZoneId.of("Asia/Jakarta")).let { "${it.get(IsoFields.WEEK_BASED_YEAR)}-W${it.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)}" } }
     var dismissed by remember { mutableStateOf(store.insightDismissedWeek == week) }
-    var text by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(DataVersion.count) { if (!dismissed) text = runCatching { Api.insightCard() }.getOrNull() }
     val t = text ?: return
     if (dismissed) return
     Row(

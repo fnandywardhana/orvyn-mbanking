@@ -136,15 +136,18 @@ private fun goalLine(p: Pocket) = p.target?.let { t ->
 fun PocketsStrip(pockets: List<Pocket>, hidden: Boolean, onOpen: (String) -> Unit, onCreate: () -> Unit) {
     LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         items(pockets, key = { it.id }) { p ->
+            val large = id.orvyn.app.ui.components.isLargeFont()
+            // Q-A5 AC4: at large font sizes the card is wider and a 24-letter name wraps instead of being cut.
             Column(
-                Modifier.width(164.dp).height(144.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+                Modifier.width(if (large) 216.dp else 164.dp).heightIn(min = 144.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
                     .clickable(role = Role.Button) { onOpen(p.id) }.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 PocketTile(pocketIcon(p.image), 36)
-                Text(p.name, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                Text(if (hidden) "Rp••••••" else Money.format(p.balance), style = MaterialTheme.typography.titleMedium)
+                Text(p.name, style = MaterialTheme.typography.titleSmall)
+                Text(if (hidden) "Rp••••••" else Money.format(p.balance), style = MaterialTheme.typography.titleMedium,
+                    modifier = if (hidden) Modifier.semantics { contentDescription = "Balance hidden" } else Modifier)
                 p.progress?.let { GoalBar(it, Modifier.semantics { stateDescription = "${(it * 100).toInt()}% of goal" }) }
                     ?: Text("No target", style = MaterialTheme.typography.bodySmall, color = OrvynTheme.colors.textSecondary)
             }

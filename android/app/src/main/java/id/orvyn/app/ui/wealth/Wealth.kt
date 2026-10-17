@@ -136,10 +136,7 @@ fun Chevron() = Icon(painterResource(R.drawable.ph_caret_right), null, tint = Or
 
 /** Home screen card: the total and the bar, tap for the full view. */
 @Composable
-fun WealthCard(onOpen: () -> Unit) {
-    var w by remember { mutableStateOf<Wealth?>(null) }
-    LaunchedEffect(DataVersion.count) { w = runCatching { Api.wealth() }.getOrNull() }
-    val x = w ?: return
+fun WealthCard(x: Wealth, onOpen: () -> Unit) {
     Column(
         Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface)
             .clickable(onClickLabel = "Open wealth", onClick = onOpen).padding(16.dp),
