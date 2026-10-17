@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { Sql } from './db.ts'
-import { lookupRecipient, transferOptions, BANKS, TransferError } from './transfers.ts'
+import { lookupRecipient, transferOptions, BANKS, TransferError, MINIMUM, SMALLEST_TRANSFER } from './transfers.ts'
 import { listPockets } from './pockets.ts'
 import { listSchedules } from './scheduled.ts'
 import { listRequests } from './requests.ts'
@@ -155,7 +155,7 @@ async function runTool(sql: Sql, me: Customer, name: string, input: any): Promis
       const amount = Math.floor(Number(input.amount))
       try {
         const to = await lookupRecipient(sql, me.id, String(input.bank ?? ''), String(input.account_number ?? ''))
-        if (!(amount >= 10_000)) return { result: { error: 'The smallest transfer is Rp10,000.' } }
+        if (!(amount >= MINIMUM.transfer)) return { result: { error: SMALLEST_TRANSFER() } }
         const o = await transferOptions(sql, me, to.internal, amount)
         if (!o.methods.length) return { result: { error: 'No transfer method fits this amount.' } }
         const m = o.methods[0]

@@ -4,7 +4,7 @@ import type { Sql } from './db.ts'
 import {
   signInWithPassword, signInWithPin, signInWithDevice, setPin, customerForSession, signOut, CustomerError, deviceStatus, countWrongTry, triesLeft,
 } from './customers.ts'
-import { BANKS, lookupRecipient, transferOptions, sendTransfer, payMerchant, TransferError, checkPin, LOCKED_MESSAGE } from './transfers.ts'
+import { BANKS, lookupRecipient, transferOptions, sendTransfer, payMerchant, TransferError, checkPin, LOCKED_MESSAGE, MINIMUM } from './transfers.ts'
 import { parseQris, buildQris } from './qris.ts'
 import { ratesFor, listFx, openFx, closeFx, quote, exchange } from './fx.ts'
 import { depositRates, depositQuote, listDeposits, openDeposit, breakDeposit, setInstruction } from './deposits.ts'
@@ -118,7 +118,7 @@ export function apiRoutes(sql: Sql) {
   app.get('/config', async c => {
     const rows = await sql`select key, value from settings where key in ('features', 'maintenance')`
     const v = Object.fromEntries(rows.map(r => [r.key, r.value]))
-    return c.json({ features: v.features, maintenance: v.maintenance })
+    return c.json({ features: v.features, maintenance: v.maintenance, minTransfer: MINIMUM.transfer }) // H-2: one minimum, read by the app
   })
 
   // Opening an account (stories S1.1–S1.3) happens before there is a customer.

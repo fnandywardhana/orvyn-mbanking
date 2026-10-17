@@ -1,5 +1,5 @@
 import type { Sql } from './db.ts'
-import { lookupRecipient, sendTransfer, TransferError } from './transfers.ts'
+import { lookupRecipient, sendTransfer, TransferError, MINIMUM } from './transfers.ts'
 import { notify } from './inbox.ts'
 
 // Stories S2.6–S2.7: Money Requests between ORVYN customers, and Split Bills built from them.
@@ -24,9 +24,10 @@ async function checkDailyCount(sql: Sql, requesterId: string, adding: number) {
   if (n + adding > MAX_PER_DAY) throw new TransferError('OVER_LIMIT', `You can send up to ${MAX_PER_DAY} requests a day. Try again tomorrow.`)
 }
 
-function cleanAmount(v: any) {
+/** H91-1: a request or share under the Transfer minimum could never be paid, so it can't be made. [message] gets the minimum. */
+function cleanAmount(v: any, message: (min: string) => string) {
   const amount = Math.floor(Number(v))
-  if (!(amount >= 1_000)) throw new TransferError('BAD_AMOUNT', 'Ask for at least Rp1,000.')
+  if (!(amount >= MINIMUM.transfer)) throw new TransferError('BAD_AMOUNT', message(rp(MINIMUM.transfer)))
   return amount
 }
 
@@ -39,7 +40,7 @@ async function insertRequest(sql: Sql, requester: Customer, payer: { id: string 
 }
 
 export async function createRequest(sql: Sql, requester: Customer, input: { accountNumber: string, amount: any, note?: string }) {
-  const amount = cleanAmount(input.amount)
+  const amount = cleanAmount(input.amount, min => `Ask for at least ${min}.`)
   const payer = await payerFor(sql, requester.id, input.accountNumber)
   await checkDailyCount(sql, requester.id, 1)
   return insertRequest(sql, requester, payer, amount, input.note?.trim().slice(0, 50) || null, null)
@@ -47,11 +48,11 @@ export async function createRequest(sql: Sql, requester: Customer, input: { acco
 
 /** S2.7: one request per friend. The creator's own share is whatever the friends don't cover. */
 export async function createSplit(sql: Sql, creator: Customer, input: { total: any, note?: string, shares: { accountNumber: string, amount: any }[] }) {
-  const total = cleanAmount(input.total)
+  const total = cleanAmount(input.total, min => `The smallest bill you can split is ${min}.`)
   const shares = (input.shares ?? []).slice(0, 10)
   if (shares.length < 1 || shares.length > 9) throw new TransferError('BAD_AMOUNT', 'Split with 1 to 9 friends.')
   const payers = []
-  for (const s of shares) payers.push({ ...(await payerFor(sql, creator.id, s.accountNumber)), amount: cleanAmount(s.amount) })
+  for (const s of shares) payers.push({ ...(await payerFor(sql, creator.id, s.accountNumber)), amount: cleanAmount(s.amount, min => `The smallest share is ${min}.`) })
   if (new Set(payers.map(p => p.id)).size !== payers.length) throw new TransferError('BAD_AMOUNT', 'Each friend can only be in the split once.')
   if (payers.reduce((sum, p) => sum + p.amount, 0) > total) throw new TransferError('BAD_AMOUNT', "Your friends' shares add up to more than the total.")
   await checkDailyCount(sql, creator.id, payers.length)
@@ -106,7 +107,7 @@ export async function payRequest(sql: Sql, payer: Customer, id: string, pin: str
   if (!r) throw new TransferError('NOT_FOUND', "We couldn't find that request.")
   if (r.state !== 'open') throw new TransferError('ALREADY_PAID', r.state === 'paid' ? 'This request is already paid.' : `This request was ${r.state}.`)
   const j = await sendTransfer(sql, payer, {
-    bank: 'ORVYN', accountNumber: r.number, amount: Number(r.amount), method: 'internal', note: r.note ?? 'Money request', pin, idempotencyKey: `request:${id}`,
+    bank: 'ORVYN', accountNumber: r.number, amount: Number(r.amount), method: 'internal', note: r.note ?? 'Money request', pin, idempotencyKey: `request:${id}`, anyAmount: true,
   })
   const [done] = await sql`update money_requests set status = 'paid', journal_id = ${j.id} where id = ${id} and status = 'open' returning requester_id`
   if (done) await notify(sql, r.requester_id, 'Request paid', `${payer.full_name} paid your request for ${rp(Number(r.amount))}.`, `tx:${j.id}`)

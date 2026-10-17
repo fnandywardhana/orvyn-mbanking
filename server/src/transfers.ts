@@ -149,12 +149,18 @@ export type TransferInput = {
   note?: string
   pin: string | null
   idempotencyKey: string
+  anyAmount?: boolean // H-9: paying a Money Request, which met the minimum when it was made
 }
+
+/** H-2 (0.9.1): the one minimum for Transfers, Money Requests and Split Bill shares and totals. The app reads it from /config.
+ *  ponytail: a constant, not a setting; move it to `settings` when an officer needs to change it. */
+export const MINIMUM = { transfer: 10_000 }
+export const SMALLEST_TRANSFER = () => `The smallest transfer is Rp${MINIMUM.transfer.toLocaleString('en-US')}.`
 
 /** Story S1.12 / S1.13: validates everything, then posts one Journal Entry. */
 export async function sendTransfer(sql: Sql, customer: { id: string; tier: string; full_name: string }, input: TransferInput) {
   const amount = Math.floor(Number(input.amount))
-  if (!Number.isFinite(amount) || amount < 10_000) throw new TransferError('BAD_AMOUNT', 'The smallest transfer is Rp10,000.')
+  if (!Number.isFinite(amount) || amount < (input.anyAmount ? 1 : MINIMUM.transfer)) throw new TransferError('BAD_AMOUNT', SMALLEST_TRANSFER())
   const to = await lookupRecipient(sql, customer.id, input.bank, input.accountNumber)
   const opts = await transferOptions(sql, customer, to.internal, amount)
   const method = opts.methods.find(m => m.method === input.method)

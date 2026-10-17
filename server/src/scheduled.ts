@@ -1,5 +1,5 @@
 import type { Sql } from './db.ts'
-import { lookupRecipient, transferOptions, sendTransfer, checkPin, TransferError, type Method } from './transfers.ts'
+import { lookupRecipient, transferOptions, sendTransfer, checkPin, TransferError, MINIMUM, SMALLEST_TRANSFER, type Method } from './transfers.ts'
 import { notify } from './inbox.ts'
 
 // Stories S2.4–S2.5: Scheduled Transfers. The PIN is checked once, when the schedule is made.
@@ -43,7 +43,7 @@ export async function createSchedule(sql: Sql, customer: { id: string, tier: str
   bank: string, accountNumber: string, amount: number, method: Method, note?: string, repeat: Repeat, firstDate: string, pin: string,
 }) {
   const amount = Math.floor(Number(input.amount))
-  if (!(amount >= 10_000)) throw new TransferError('BAD_AMOUNT', 'The smallest transfer is Rp10,000.')
+  if (!(amount >= MINIMUM.transfer)) throw new TransferError('BAD_AMOUNT', SMALLEST_TRANSFER())
   if (!['once', 'weekly', 'monthly'].includes(input.repeat)) throw new TransferError('BAD_AMOUNT', 'Pick once, every week or every month.')
   const today = jakarta(new Date()).date
   const first = String(input.firstDate ?? '').slice(0, 10)

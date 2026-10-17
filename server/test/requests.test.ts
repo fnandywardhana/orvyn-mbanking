@@ -4,7 +4,8 @@ import { connect, migrate } from '../src/db.ts'
 import { createCustomer, setPin } from '../src/customers.ts'
 import { postJournal, houseAccount, balanceOf, checkLedger } from '../src/ledger.ts'
 import { createRequest, createSplit, listRequests, listSplits, payRequest, declineRequest, cancelRequest, equalShares } from '../src/requests.ts'
-import { TransferError } from '../src/transfers.ts'
+import { TransferError, MINIMUM } from '../src/transfers.ts'
+import { apiRoutes } from '../src/api.ts'
 
 const sql = connect()
 let raka: any, sinta: any, dimas: any
@@ -71,6 +72,41 @@ test('a split sends one request per friend and tracks who paid', async () => {
 
 test('twenty requests a day at most', async () => {
   await sql`delete from money_requests`
-  for (let i = 0; i < 20; i++) await createRequest(sql, dimas, { accountNumber: raka.savings.number, amount: 1_000 })
-  await assert.rejects(createRequest(sql, dimas, { accountNumber: raka.savings.number, amount: 1_000 }), code('OVER_LIMIT'))
+  for (let i = 0; i < 20; i++) await createRequest(sql, dimas, { accountNumber: raka.savings.number, amount: 10_000 })
+  await assert.rejects(createRequest(sql, dimas, { accountNumber: raka.savings.number, amount: 10_000 }), code('OVER_LIMIT'))
+})
+
+// Hotfix 0.9.1, H91-1 (Q-02-F2): every request can be paid. One minimum, the Transfer minimum, checked only when a request is made.
+const rejects = (p: Promise<unknown>, message: string) => assert.rejects(p, (e: TransferError) => e.code === 'BAD_AMOUNT' && e.message === message)
+
+test('H91-1 AC5: requests, split totals and shares under the minimum are refused with no request and no inbox', async () => {
+  await sql`delete from money_requests`; await sql`delete from inbox_messages`
+  await rejects(createRequest(sql, raka, { accountNumber: sinta.savings.number, amount: 9_999 }), 'Ask for at least Rp10,000.')
+  await rejects(createSplit(sql, raka, { total: 9_999, shares: [{ accountNumber: sinta.savings.number, amount: 5_000 }] }), 'The smallest bill you can split is Rp10,000.')
+  await rejects(createSplit(sql, raka, { total: 30_000, shares: [{ accountNumber: sinta.savings.number, amount: 9_999 }] }), 'The smallest share is Rp10,000.')
+  assert.equal((await sql`select count(*)::int as n from money_requests`)[0].n, 0)
+  assert.deepEqual(await titles(sinta), [])
+  await createRequest(sql, raka, { accountNumber: sinta.savings.number, amount: 10_000 })
+  await createSplit(sql, raka, { total: 10_000, shares: [{ accountNumber: sinta.savings.number, amount: 10_000 }] })
+  assert.equal((await sql`select count(*)::int as n from money_requests`)[0].n, 2)
+})
+
+test('H91-1 AC6: a Rp10,000 request pays as one internal transfer, even after the minimum goes up', async () => {
+  const id = await createRequest(sql, raka, { accountNumber: sinta.savings.number, amount: 10_000 })
+  const later = await createRequest(sql, raka, { accountNumber: sinta.savings.number, amount: 10_000 })
+  const before = await balanceOf(sql, raka.savings.id)
+  const j = await payRequest(sql, sinta, id, '482915')
+  assert.equal(j.kind, 'internal_transfer')
+  assert.deepEqual((await sql`select amount from postings where journal_id = ${j.id} order by amount`).map(p => Number(p.amount)), [-10_000, 10_000])
+  assert.equal((await listRequests(sql, raka.id)).find(r => r.id === id)!.status, 'paid')
+
+  MINIMUM.transfer = 15_000
+  try {
+    await rejects(createRequest(sql, raka, { accountNumber: sinta.savings.number, amount: 10_000 }), 'Ask for at least Rp15,000.')
+    const api = apiRoutes(sql)
+    assert.equal((await (await api.request('/config')).json() as any).minTransfer, 15_000)
+    await payRequest(sql, sinta, later, '482915') // H-9: made under the old minimum, still payable at its own amount
+    assert.equal(await balanceOf(sql, raka.savings.id), before + 20_000)
+  } finally { MINIMUM.transfer = 10_000 }
+  assert.ok((await checkLedger(sql)).ok)
 })
