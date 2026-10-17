@@ -197,7 +197,7 @@ private fun PhoneStep(initial: String, progress: String, onBack: () -> Unit, onS
 }
 
 @Composable
-private fun CodeStep(phone: String, shownCode: String?, progress: String, onBack: () -> Unit, onVerified: (String) -> Unit) {
+internal fun CodeStep(phone: String, shownCode: String?, progress: String, onBack: () -> Unit, onVerified: (String) -> Unit) {
     var code by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }

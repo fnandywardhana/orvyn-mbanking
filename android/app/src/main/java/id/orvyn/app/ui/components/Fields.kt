@@ -204,7 +204,7 @@ fun GroupError(text: String) = Row(horizontalArrangement = Arrangement.spacedBy(
  * [AmountKeypad] in an [AmountScreen]. [shown] replaces the Rupiah text (e.g. "0.05 g"). While [loading] the "Available" line
  * is a skeleton; [loadError] replaces it with the message and a Try again (design.md 4.7).
  */
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun AmountDisplay(
     amount: Long,
@@ -219,7 +219,10 @@ fun AmountDisplay(
     retrying: Boolean = false,
     onRetry: (() -> Unit)? = null,
 ) {
-    Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    // The amount (and an error under it) scrolls into view, even when a long recipient name sits above it at large font sizes.
+    val bring = remember { BringIntoViewRequester() }
+    LaunchedEffect(error, loadError) { androidx.compose.runtime.withFrameNanos { }; runCatching { bring.bringIntoView() } }
+    Column(modifier.fillMaxWidth().bringIntoViewRequester(bring), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         AmountText(
             shown ?: Money.format(amount),
             style = OrvynType.displayBalance,
