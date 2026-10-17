@@ -1,0 +1,28 @@
+ORVYN 0.9.0
+
+What's new
+- Large text works everywhere. At the biggest font size on a small phone, the PIN pad, the amount keypad and the Done button always fit on screen, and balances never break in the middle of a number.
+- Nothing fails quietly. If something doesn't go through, the app says so and offers Try again. While your PIN is being checked, the pad shows it's working. Withdrawing a deposit early now has its own review and success screens.
+- Share receipt right after you send money, pay by QRIS, pay a bill or pay a request. Every success screen shows the date and time.
+- Tap your account on the home screen to see its details, then share your account number in one tap.
+- History has Date and Type filters, and you can pull it down to refresh.
+- Forgot PIN? Sign in with your password and choose a new one.
+- Wrong PINs in Change PIN and Change password count toward the same 5 tries as everywhere else.
+- Sign-up tells you about a NIK that's already registered, or a PIN that's too easy to guess, on the step where you type it, not at the end.
+- My QR can ask for an amount. Mobile top-up fills in your own number. You can buy gold in grams.
+- A flashlight in the QRIS scanner.
+- Promos now sit below your recent transactions.
+- Clearer chips in dark mode, one typeface throughout, better contrast, and TalkBack reads every switch as on or off.
+
+Permissions this app asks for
+No change from 0.8.1. The flashlight uses the camera permission you already give for scanning.
+- INTERNET: to talk to the ORVYN server.
+- CAMERA: only while scanning a QR code or taking the sign-up photos. Nothing is uploaded.
+- POST_NOTIFICATIONS: to show your sign-up code and account activity (Android 13 and newer ask first).
+- RECEIVE (Firebase), WAKE_LOCK, ACCESS_NETWORK_STATE: added by Firebase so push notifications arrive. None of them reads anything about you or your phone.
+- USE_BIOMETRIC / USE_FINGERPRINT: only if you turn on fingerprint sign-in.
+- RECORD_AUDIO: only while you hold Vyna's microphone open, on phones that can recognise speech by themselves. Your voice never leaves the phone. Android asks the first time.
+No contacts, location, SMS, storage, device IDs, analytics or ads.
+
+How to update
+Open the download link on your phone, download, tap the file, then Update.
