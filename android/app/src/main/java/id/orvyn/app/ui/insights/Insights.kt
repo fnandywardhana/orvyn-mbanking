@@ -268,18 +268,15 @@ private fun BudgetSheet(initialCategory: String?, current: Long?, onDismiss: () 
         destructive = true, busy = busy, onDismiss = { confirm = false }, onConfirm = { save(null) })
 }
 
-/** S2.9 AC3: this month's transactions in one category. */
+/** S2.9 AC3 (changed 0.9.1, H91-2): this month's transactions in one category, savings and cards in one list from the server. */
 @Composable
-fun CategoryScreen(key: String, accountId: String?, onBack: () -> Unit, onOpen: (String) -> Unit) {
-    val load = rememberLoad(key) {
-        val start = LocalDate.now(ZoneId.of("Asia/Jakarta")).withDayOfMonth(1).atStartOfDay(ZoneId.of("Asia/Jakarta")).toInstant()
-        Api.transactions(accountId ?: "", category = key, from = start).items
-    }
-    FlowScreen(categoryLabel(key), "This month, from ORVYN Everyday.", onBack) {
+fun CategoryScreen(key: String, onBack: () -> Unit, onOpen: (id: String, account: String?) -> Unit) {
+    val load = rememberLoad(key) { Api.categoryTransactions(key) }
+    FlowScreen(categoryLabel(key), "This month, from ORVYN Everyday and your cards.", onBack) {
         LoadContent(load, "Couldn't load these", skeleton = { Skeleton(Modifier.fillMaxWidth().height(160.dp)) }) { l ->
             // Q-E11 AC3: says which category, and nothing about credit cards.
             if (l.isEmpty()) MessageState(R.drawable.ph_tray, "No ${categoryLabel(key)} spending this month.", "")
-            else LazyColumn { items(l, key = { it.id }) { t -> TransactionRow(t) { onOpen(t.id) }; HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) } }
+            else LazyColumn { items(l, key = { it.id + it.accountId }) { t -> TransactionRow(t) { onOpen(t.id, t.accountId) }; HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) } }
         }
     }
 }

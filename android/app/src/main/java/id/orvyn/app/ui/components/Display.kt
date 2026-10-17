@@ -122,7 +122,8 @@ fun ListRow(
         .padding(horizontal = 20.dp, vertical = 12.dp)
     val texts: @Composable () -> Unit = {
         Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-        if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
+        if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary,
+            modifier = if (subtitle.contains("•")) Modifier.semantics { contentDescription = spokenCard(subtitle) } else Modifier)
     }
     if (stack && large) Row(frame, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         IconTile(icon)
@@ -136,6 +137,9 @@ fun ListRow(
         }
     }
 }
+
+/** MASTER List row (0.9.1): "ORVYN Voyage ·••• 4821" is read "ORVYN Voyage card ending 4821", never as dots or bullets. */
+fun spokenCard(text: String) = text.replace(Regex("""\s*·?•+\s*(\d{4})"""), " card ending $1")
 
 enum class Status(val label: String, @DrawableRes val icon: Int) {
     Success("Successful", R.drawable.ph_check_circle),

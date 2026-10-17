@@ -60,7 +60,7 @@ fun InboxScreen(onBack: () -> Unit, onOpenTransaction: (String) -> Unit, onOpenR
                 items(list, key = { it.id }) { m ->
                     val link = m.link?.takeIf { it.startsWith("tx:") || it.startsWith("request:") }
                     val time = "${dayLabel(m.at)}, ${formatTime(m.at)}"
-                    val label = (if (!m.read) "Unread, " else "") + (if (link?.startsWith("request:") == true) requestLabel(m.body) else "${m.title}, ${m.body}") + ", $time"
+                    val label = (if (!m.read) "Unread, " else "") + (if (link?.startsWith("request:") == true) requestLabel(m.body) else spokenCard("${m.title}, ${m.body}")) + ", $time"
                     Row(
                         Modifier.fillMaxWidth()
                             .then(if (link != null) Modifier.clickable(role = Role.Button, onClick = rememberOnce {

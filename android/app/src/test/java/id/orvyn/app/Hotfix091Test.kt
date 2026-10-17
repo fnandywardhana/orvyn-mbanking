@@ -1,7 +1,15 @@
 package id.orvyn.app
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import id.orvyn.app.data.Api
+import id.orvyn.app.ui.components.spokenCard
+import id.orvyn.app.ui.insights.CategoryScreen
+import java.net.ServerSocket
 import id.orvyn.app.data.AppConfig
 import id.orvyn.app.ui.requests.belowMinimum
 import id.orvyn.app.ui.requests.quickAmountsFrom
@@ -10,6 +18,8 @@ import id.orvyn.app.ui.requests.tooSmallForFriends
 import id.orvyn.app.ui.theme.OrvynTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -49,5 +59,57 @@ class Hotfix091Test {
         assertEquals("This bill is too small for 2 friends at Rp10,000 each. Go back and pick fewer friends.", tooSmallForFriends(15_000, 2, 10_000))
         assertNull(tooSmallForFriends(15_000, 1, 10_000))
         assertNull(tooSmallForFriends(20_000, 2, 10_000))
+    }
+
+    // ---- H91-2: category detail with savings and cards (design.md 3)
+
+    private var server: ServerSocket? = null
+    private val realUrl = Api.url
+    @After fun restore() { server?.close(); Api.url = realUrl }
+
+    /** Answers every request with [json], like the server's category endpoint. Plain sockets: no test libraries. */
+    private fun serve(json: String) {
+        val socket = ServerSocket(0).also { server = it }
+        Thread {
+            while (!socket.isClosed) runCatching {
+                socket.accept().use { c ->
+                    val input = c.getInputStream().bufferedReader()
+                    while (input.readLine()?.isNotEmpty() == true) Unit // request line and headers
+                    val body = json.toByteArray()
+                    c.getOutputStream().apply {
+                        write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n".toByteArray()); write(body); flush()
+                    }
+                }
+            }
+        }.apply { isDaemon = true }.start()
+        Api.url = "http://127.0.0.1:${socket.localPort}/api"
+    }
+
+    @Test fun `H91-2 AC2 a masked card number is read as card ending`() {
+        assertEquals("ORVYN Voyage card ending 4821 · Thu, 15 Oct, 20:12", spokenCard("ORVYN Voyage ·••• 4821 · Thu, 15 Oct, 20:12"))
+        assertEquals("Rp850,000 at Tokopedia with your ORVYN Voyage card ending 4821.", spokenCard("Rp850,000 at Tokopedia with your ORVYN Voyage ·••• 4821."))
+        assertEquals("QRIS · Sun, 11 Oct, 11:40", spokenCard("QRIS · Sun, 11 Oct, 11:40"))
+    }
+
+    @Test fun `H91-2 AC1-3 the detail lists card and savings rows, and a card row opens on the card side`() {
+        serve("""{"items":[
+          {"id":"j1","at":"2026-10-15T13:12:00Z","amount":-850000,"title":"Tokopedia","subtitle":"ORVYN Voyage ·••• 4821","kind":"card_spend","status":"success","accountId":"card-acc"},
+          {"id":"j2","at":"2026-10-11T04:40:00Z","amount":-240000,"title":"Minimarket Sejahtera","subtitle":"QRIS","kind":"qris_payment","status":"success","accountId":"sav-acc"}]}""")
+        var opened: Pair<String, String?>? = null
+        set { CategoryScreen("shopping", onBack = {}, onOpen = { id, account -> opened = id to account }) }
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Tokopedia")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("This month, from ORVYN Everyday and your cards.").assertExists()
+        compose.onNodeWithText("Minimarket Sejahtera").assertExists()
+        assertTrue(compose.onAllNodes(hasContentDescription("card ending 4821", substring = true)).fetchSemanticsNodes().isNotEmpty())
+        compose.onNodeWithText("Tokopedia").performClick()
+        assertEquals("j1" to "card-acc", opened)
+    }
+
+    @Test fun `H91-2 AC5 offline shows the error state with Try again, not a cached list`() {
+        Api.url = "http://127.0.0.1:1/api"
+        set { CategoryScreen("shopping", onBack = {}, onOpen = { _, _ -> }) }
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Try again")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Couldn't load these").assertExists()
+        compose.onNodeWithText("You're offline. Check your connection and try again.").assertExists()
     }
 }

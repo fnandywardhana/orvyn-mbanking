@@ -248,7 +248,7 @@ fun OrvynApp(store: DeviceStore) {
         screen("inbox") { InboxScreen(onBack = { nav.popBackStack() }, onOpenTransaction = { nav.navigate("tx/$it") }, onOpenRequest = { nav.navigate("request/$it") }) }
         screen("insights") { InsightsScreen(onBack = { nav.popBackStack() }, onCategory = { nav.navigate("insights/$it") }) }
         screen("insights/{key}") { entry ->
-            CategoryScreen(entry.arguments!!.getString("key")!!, savingsId(store), onBack = { nav.popBackStack() }, onOpen = { nav.navigate("tx/$it") })
+            CategoryScreen(entry.arguments!!.getString("key")!!, onBack = { nav.popBackStack() }, onOpen = { id, account -> nav.navigate(if (account == null) "tx/$id" else "tx/$id?account=$account") })
         }
         screen("requests") { RequestsScreen(onBack = { nav.popBackStack() }, onAsk = { nav.navigate("request/new") }, onSplit = { nav.navigate("split/new") }, onOpen = { nav.navigate("request/$it") }) }
         screen("request/new") { AskFlow(onExit = { nav.popBackStack() }) }
