@@ -18,7 +18,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import id.orvyn.app.data.ApiException
 import id.orvyn.app.ui.auth.FlowScreen
-import id.orvyn.app.ui.components.PinPad
+import id.orvyn.app.ui.components.PinScreen
 import id.orvyn.app.ui.theme.OrvynTheme
 import kotlinx.coroutines.launch
 import java.text.DecimalFormat
@@ -49,28 +49,24 @@ fun ReviewLine(label: String, value: String, strong: Boolean = false) = Row(vert
 }
 
 /**
- * The PIN step every money action ends with. [action] gets the PIN; a wrong PIN stays here with the count,
- * anything else goes back with its message.
+ * The PIN step every money action ends with. [action] gets the PIN; a wrong PIN stays here with the count, anything else
+ * goes back with its message. [busy] is the status while the server works ("Buying Rp100,000…", Q-B5).
  */
 @Composable
-fun PinConfirm(body: String, onBack: () -> Unit, onRefused: (String) -> Unit, action: suspend (String) -> Unit) {
+fun PinConfirm(body: String, busy: String, onBack: () -> Unit, onRefused: (String) -> Unit, action: suspend (String) -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var errors by remember { mutableIntStateOf(0) }
-    var busy by remember { mutableStateOf(false) }
+    var working by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    FlowScreen("Enter your PIN", body, onBack) {
-        Spacer(Modifier.weight(1f))
-        if (busy) Text("One moment…", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.align(Alignment.CenterHorizontally))
-        PinPad(onComplete = { pin ->
-            if (busy) return@PinPad
-            busy = true
-            scope.launch {
-                try { action(pin) } catch (e: ApiException) {
-                    if (e.code == "WRONG_PIN" || e.code == "LOCKED" || e.code == "signed_out") { error = e.message; errors++ } else onRefused(e.message)
-                } finally { busy = false }
-            }
-        }, errorCount = errors, errorText = error, onBiometric = null, modifier = Modifier.padding(bottom = 24.dp))
-    }
+    PinScreen("Enter your PIN", body, onBack, errorCount = errors, errorText = error, busyText = if (working) busy else null, onComplete = { pin ->
+        if (working) return@PinScreen
+        working = true; error = null
+        scope.launch {
+            try { action(pin) } catch (e: ApiException) {
+                when (e.code) { "WRONG_PIN" -> { error = e.message; errors++ }; "LOCKED", "signed_out" -> {}; else -> onRefused(e.message) }
+            } finally { working = false }
+        }
+    })
 }
 
 @Composable

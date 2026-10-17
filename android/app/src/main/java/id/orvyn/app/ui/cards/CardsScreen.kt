@@ -64,7 +64,7 @@ import id.orvyn.app.data.CardSecret
 import id.orvyn.app.data.DataVersion
 import id.orvyn.app.data.Transaction
 import id.orvyn.app.ui.Money
-import id.orvyn.app.ui.components.MessageState
+import id.orvyn.app.ui.components.*
 import id.orvyn.app.ui.components.OrvynBottomSheet
 import id.orvyn.app.ui.components.OrvynButton
 import id.orvyn.app.ui.components.PinPad
@@ -79,20 +79,11 @@ import org.json.JSONObject
 /** Stories S1.23–S1.25. */
 @Composable
 fun CardsScreen(onPayBill: (Card) -> Unit, onOpenTransaction: (String) -> Unit) {
-    val snacks = id.orvyn.app.ui.components.LocalSnacks.current
-    val say: (String) -> Unit = { snacks?.show(it) }
-    var cards by remember { mutableStateOf<List<Card>?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(DataVersion.count) { try { cards = Api.cards() } catch (e: ApiException) { error = e.message } }
-
+    val cards = rememberLoad(DataVersion.count) { Api.cards() }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().verticalScroll(rememberScrollState())) {
         Text("Cards", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 16.dp).semantics { heading() })
-        val list = cards
-        when {
-            error != null && list == null -> MessageState(R.drawable.ph_warning_circle, "Couldn't load your cards", error!!)
-            list == null -> Skeleton(Modifier.padding(horizontal = 20.dp).fillMaxWidth().aspectRatio(1.586f))
-            else -> {
+        LoadContent(cards, "Couldn't load your cards", skeleton = { Skeleton(Modifier.padding(horizontal = 20.dp).fillMaxWidth().aspectRatio(1.586f), shape = RoundedCornerShape(18.dp)) }) { list ->
+            Column {
                 val pager = rememberPagerState { list.size }
                 HorizontalPager(pager, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp), pageSpacing = 12.dp) { i ->
                     CardVisual(list[i])
@@ -103,12 +94,8 @@ fun CardsScreen(onPayBill: (Card) -> Unit, onOpenTransaction: (String) -> Unit) 
                             .background(if (i == pager.currentPage) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline))
                     }
                 }
-                val card = list[pager.currentPage]
-                CardControls(card, onChange = { patch ->
-                    scope.launch {
-                        try { cards = Api.updateCard(card.id, patch) } catch (e: ApiException) { say(e.message) }
-                    }
-                }, onPayBill = { onPayBill(card) }, say = say)
+                val card = list[pager.currentPage.coerceAtMost(list.lastIndex)]
+                CardControls(card, onUpdated = { cards.value = it }, onPayBill = { onPayBill(card) }, onOpenTransaction = onOpenTransaction)
             }
         }
         Spacer(Modifier.height(24.dp))
@@ -150,19 +137,40 @@ fun CardVisual(card: Card, secret: CardSecret? = null) {
     }
 }
 
+/** Q-C6 (design.md 7.6): what each switch says once the server agreed. */
+private fun switchedMessage(key: String, on: Boolean) = when (key) {
+    "frozen" -> if (on) "Card frozen" else "Card unfrozen"
+    "online" -> if (on) "Online payments are on" else "Online payments are off"
+    "overseas" -> if (on) "Overseas payments are on" else "Overseas payments are off"
+    else -> if (on) "Contactless is on" else "Contactless is off"
+}
+
 @Composable
-private fun CardControls(card: Card, onChange: (JSONObject) -> Unit, onPayBill: () -> Unit, say: (String) -> Unit) {
+private fun CardControls(card: Card, onUpdated: (List<Card>) -> Unit, onPayBill: () -> Unit, onOpenTransaction: (String) -> Unit) {
     var showDetails by remember(card.id) { mutableStateOf(false) }
     var limitSheet by remember { mutableStateOf(false) }
-    var txs by remember(card.id) { mutableStateOf<List<Transaction>?>(null) }
-    LaunchedEffect(card.id, DataVersion.count) { runCatching { txs = Api.cardTransactions(card.id) } }
+    val txs = rememberLoad(card.id, DataVersion.count) { Api.cardTransactions(card.id) }
+    val snacks = LocalSnacks.current
+    val scope = rememberCoroutineScope()
+    // The switch moves at once; a spinner shows until the server answers. No to: it moves back and says why.
+    var pending by remember(card.id) { mutableStateOf<Pair<String, Boolean>?>(null) }
+    fun change(key: String, value: Boolean) {
+        if (pending != null) return
+        pending = key to value
+        scope.launch {
+            try { onUpdated(Api.updateCard(card.id, JSONObject().put(key, value))); snacks?.show(switchedMessage(key, value)) }
+            catch (e: ApiException) { snacks?.show(e.message, error = true) }
+            pending = null
+        }
+    }
+    fun shown(key: String, actual: Boolean) = pending?.takeIf { it.first == key }?.second ?: actual
 
     Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         card.credit?.let { c ->
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("This month's bill", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
-                Text(Money.format(c.owed), style = id.orvyn.app.ui.theme.OrvynType.displayBalance.copy(fontSize = MaterialTheme.typography.headlineLarge.fontSize))
+                AmountText(Money.format(c.owed), id.orvyn.app.ui.theme.OrvynType.displayBalance.copy(fontSize = MaterialTheme.typography.headlineLarge.fontSize))
                 LinearProgressIndicator(progress = { (c.owed.toFloat() / c.limit).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
                     color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.outlineVariant)
                 Text("${Money.format(c.available)} available of ${Money.format(c.limit)}", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
@@ -171,26 +179,25 @@ private fun CardControls(card: Card, onChange: (JSONObject) -> Unit, onPayBill: 
             }
         }
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface)) {
-            SwitchRow("Freeze card", "Stops every payment until you unfreeze it", card.frozen) { onChange(JSONObject().put("frozen", it)); say(if (it) "Card frozen" else "Card unfrozen") }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            SwitchRow("Online payments", null, card.online) { onChange(JSONObject().put("online", it)) }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            SwitchRow("Overseas payments", null, card.overseas) { onChange(JSONObject().put("overseas", it)) }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            SwitchRow("Contactless", null, card.contactless) { onChange(JSONObject().put("contactless", it)) }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            for ((key, title, sub, value) in listOf(
+                Quad("frozen", "Freeze card", "Stops every payment until you unfreeze it", card.frozen),
+                Quad("online", "Online payments", null, card.online),
+                Quad("overseas", "Overseas payments", null, card.overseas),
+                Quad("contactless", "Contactless", null, card.contactless),
+            )) {
+                SwitchRow(title, sub, shown(key, value), { change(key, it) }, saving = pending?.first == key, enabled = pending == null || pending?.first == key)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
             ActionRow("Daily limit", Money.format(card.dailyLimit)) { limitSheet = true }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             ActionRow("Show card details", "Needs your PIN") { showDetails = true }
         }
         Text("RECENT CARD PAYMENTS", style = MaterialTheme.typography.labelSmall, color = OrvynTheme.colors.textSecondary)
-        val t = txs
-        when {
-            t == null -> Skeleton(Modifier.fillMaxWidth().height(48.dp))
-            t.isEmpty() -> Text(if (card.kind == "debit") "Debit card payments show in your History." else "No card payments yet.",
+        LoadContent(txs, "Couldn't load these", skeleton = { Skeleton(Modifier.fillMaxWidth().height(48.dp)) }) { t ->
+            if (t.isEmpty()) Text(if (card.kind == "debit") "Debit card payments show in your History." else "No card payments yet.",
                 style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
-            else -> Column(Modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface)) {
-                t.take(10).forEach { TransactionRow(it, onClick = {}) }
+            else Column(Modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface)) {
+                t.take(10).forEach { tx -> TransactionRow(tx, onClick = { onOpenTransaction(tx.id) }) } // Q-E8 AC1
             }
         }
     }
@@ -198,24 +205,17 @@ private fun CardControls(card: Card, onChange: (JSONObject) -> Unit, onPayBill: 
     if (limitSheet) OrvynBottomSheet(onDismiss = { limitSheet = false }) {
         Text("Daily limit", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 20.dp))
         val options = if (card.kind == "credit") listOf(1_000_000L, 5_000_000L, 10_000_000L, 20_000_000L, 50_000_000L) else listOf(1_000_000L, 2_500_000L, 5_000_000L, 10_000_000L, 20_000_000L)
-        for (o in options) ActionRow(Money.format(o), if (o == card.dailyLimit) "Current" else null) { onChange(JSONObject().put("dailyLimit", o)); limitSheet = false }
+        for (o in options) ActionRow(Money.format(o), if (o == card.dailyLimit) "Current" else null) {
+            limitSheet = false
+            scope.launch { try { onUpdated(Api.updateCard(card.id, JSONObject().put("dailyLimit", o))) } catch (e: ApiException) { snacks?.show(e.message, error = true) } }
+        }
         Spacer(Modifier.height(24.dp))
     }
 }
 
-private fun monthName(iso: String) = java.time.LocalDate.parse(iso).month.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.US)
+private data class Quad(val a: String, val b: String, val c: String?, val d: Boolean)
 
-@Composable
-private fun SwitchRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(role = Role.Switch) { onChange(!checked) }.heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary) }
-        }
-        Switch(checked, onCheckedChange = null, colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary))
-    }
-}
+private fun monthName(iso: String) = java.time.LocalDate.parse(iso).month.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.US)
 
 @Composable
 private fun ActionRow(title: String, value: String?, onClick: () -> Unit) {
@@ -232,22 +232,24 @@ private fun DetailsSheet(card: Card, onClose: () -> Unit) {
     var secret by remember { mutableStateOf<CardSecret?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var errors by remember { mutableIntStateOf(0) }
+    var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val activity = LocalContext.current as ComponentActivity
     val lifecycle = LocalLifecycleOwner.current
+    SecureWhileShown() // counted with the PIN pad's own, so the number stays uncapturable after the pad goes (Q-C4 AC3)
     DisposableEffect(Unit) {
-        activity.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         val hideOnLeave = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_STOP) onClose() }
         lifecycle.lifecycle.addObserver(hideOnLeave)
-        onDispose { activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE); lifecycle.lifecycle.removeObserver(hideOnLeave) }
+        onDispose { lifecycle.lifecycle.removeObserver(hideOnLeave) }
     }
     LaunchedEffect(secret) { if (secret != null) { delay(30_000); onClose() } }
     OrvynBottomSheet(onDismiss = onClose) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             if (secret == null) {
                 Text("Enter your PIN to see the card number", style = MaterialTheme.typography.titleLarge)
-                PinPad(onComplete = { pin -> scope.launch { try { secret = Api.cardDetails(card.id, pin) } catch (e: ApiException) { error = e.message; errors++ } } },
-                    errorCount = errors, errorText = error, onBiometric = null)
+                PinPad(onComplete = { pin ->
+                    busy = true; error = null
+                    scope.launch { try { secret = Api.cardDetails(card.id, pin) } catch (e: ApiException) { error = e.message; if (e.code == "WRONG_PIN") errors++ } finally { busy = false } }
+                }, errorCount = errors, errorText = error, onBiometric = null, busyText = if (busy) "Checking your PIN…" else null)
             } else {
                 CardVisual(card, secret)
                 Text("Hidden again in 30 seconds, or when you leave ORVYN.", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)

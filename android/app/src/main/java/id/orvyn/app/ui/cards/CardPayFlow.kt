@@ -35,7 +35,10 @@ import id.orvyn.app.data.Card
 import id.orvyn.app.data.DataVersion
 import id.orvyn.app.ui.Money
 import id.orvyn.app.ui.auth.FlowScreen
-import id.orvyn.app.ui.components.AmountDisplay
+import id.orvyn.app.ui.components.*
+import id.orvyn.app.data.Paid
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import id.orvyn.app.ui.components.AmountKeypad
 import id.orvyn.app.ui.components.OrvynButton
 import id.orvyn.app.ui.components.PinPad
@@ -45,55 +48,75 @@ import id.orvyn.app.ui.theme.OrvynTheme
 import kotlinx.coroutines.launch
 import java.util.UUID
 
-/** Story S1.25: pay the credit card bill in full, the minimum, or another amount, from savings. */
+/**
+ * Story S1.25: pay the credit card bill in full, the minimum, or another amount, from savings. This choice screen is the
+ * review: a failed payment comes back here with the message above Pay, with the choice kept (Q-B1 AC2).
+ */
 @Composable
 fun CardPayFlow(card: Card, onExit: () -> Unit) {
     val credit = card.credit ?: return onExit()
     var step by remember { mutableIntStateOf(0) } // 0 choose, 1 PIN, 2 done
     var choice by remember { mutableStateOf("full") }
     var other by remember { mutableLongStateOf(0L) }
-    var reference by remember { mutableStateOf("") }
+    var paid by remember { mutableStateOf<Paid?>(null) }
+    var refused by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var errors by remember { mutableIntStateOf(0) }
+    var busy by remember { mutableStateOf(false) }
     val key = remember { UUID.randomUUID().toString() }
     val scope = rememberCoroutineScope()
     val amount = when (choice) { "full" -> credit.owed; "minimum" -> credit.minimum; else -> other }
     BackHandler(step != 2) { if (step == 0) onExit() else step = 0 }
 
-    when (step) {
-        0 -> FlowScreen("Pay ${card.name} bill", "From your ORVYN Everyday savings.", onExit) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                for ((id, label, value) in listOf(Triple("full", "Full bill", credit.owed), Triple("minimum", "Minimum", credit.minimum), Triple("other", "Another amount", null))) {
-                    val sel = id == choice
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface)
-                            .border(if (sel) 2.dp else 1.dp, if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
-                            .clickable(role = Role.RadioButton) { choice = id }.semantics { selected = sel }.heightIn(min = 56.dp).padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                        value?.let { Text(Money.format(it), style = MaterialTheme.typography.bodyLarge, color = OrvynTheme.colors.textSecondary) }
+    FlowSteps(step, index = { it }, success = { it == 2 }) { s ->
+        when (s) {
+            0 -> {
+                val choices: @Composable () -> Unit = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        for ((id, label, value) in listOf(Triple("full", "Full bill", credit.owed), Triple("minimum", "Minimum", credit.minimum), Triple("other", "Another amount", null))) {
+                            val sel = id == choice
+                            Row(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface)
+                                    .border(if (sel) 2.dp else 1.dp, if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+                                    .clickable(role = Role.RadioButton) { choice = id; refused = null }.semantics { selected = sel }.heightIn(min = 56.dp).padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                                value?.let { Text(Money.format(it), style = MaterialTheme.typography.bodyLarge, color = OrvynTheme.colors.textSecondary) }
+                            }
+                        }
                     }
                 }
-                if (choice == "other") {
+                val button: @Composable () -> Unit = {
+                    Column {
+                        refused?.let { ErrorBox(it, Modifier.padding(bottom = 12.dp)) }
+                        OrvynButton(if (amount >= 10_000) "Pay ${Money.format(amount)}" else "Minimum Rp10,000", enabled = amount in 10_000..credit.owed,
+                            onClick = { refused = null; step = 1 })
+                    }
+                }
+                if (choice == "other") AmountScreen("Pay ${card.name} bill", "From your ORVYN Everyday savings.", onExit,
+                    keypad = { AmountKeypad(other, { other = it; refused = null }) }, button = button) {
+                    choices()
                     AmountDisplay(other, null, if (other > credit.owed) "That's more than you owe (${Money.format(credit.owed)})." else null, onQuickPick = { other = it })
-                    AmountKeypad(other, { other = it })
+                } else FlowScreen("Pay ${card.name} bill", "From your ORVYN Everyday savings.", onExit) {
+                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { choices() }
+                    Column(Modifier.padding(vertical = 16.dp)) { button() }
                 }
             }
-            OrvynButton(if (amount >= 10_000) "Pay ${Money.format(amount)}" else "Minimum Rp10,000", enabled = amount in 10_000..credit.owed,
-                onClick = { step = 1 }, modifier = Modifier.padding(vertical = 16.dp))
+            1 -> PinScreen("Enter your PIN", "To pay ${Money.format(amount)} toward your ${card.name} bill.", { step = 0 }, errorCount = errors, errorText = error,
+                busyText = if (busy) "Paying ${Money.format(amount)}…" else null,
+                onComplete = { pin ->
+                    busy = true; error = null
+                    scope.launch {
+                        try { paid = Api.payCard(card.id, amount, pin, key); DataVersion.count++; step = 2 }
+                        catch (e: ApiException) {
+                            when (e.code) { "WRONG_PIN" -> { error = e.message; errors++ }; "LOCKED", "signed_out" -> {}; else -> { refused = e.message; step = 0 } }
+                        } finally { busy = false }
+                    }
+                })
+            else -> SuccessScreen("Paid", Money.format(amount), "toward your ${card.name} bill", date = paid?.at,
+                details = { ReceiptLine("Paid from", "ORVYN Everyday"); ReceiptLine("Still owed", Money.format(credit.owed - amount)); ReceiptLine("Reference", paid?.reference ?: "") },
+                onPrimary = onExit)
         }
-        1 -> FlowScreen("Enter your PIN", "To pay ${Money.format(amount)} toward your ${card.name} bill.", { step = 0 }) {
-            Spacer(Modifier.weight(1f))
-            PinPad(onComplete = { pin ->
-                scope.launch {
-                    try { reference = Api.payCard(card.id, amount, pin, key).reference; DataVersion.count++; step = 2 }
-                    catch (e: ApiException) { if (e.code == "WRONG_PIN") { error = e.message; errors++ } else { error = e.message; step = 0 } }
-                }
-            }, errorCount = errors, errorText = error, onBiometric = null, modifier = Modifier.padding(bottom = 24.dp))
-        }
-        else -> SuccessScreen("Paid", Money.format(amount), "toward your ${card.name} bill",
-            details = { ReceiptLine("Paid from", "ORVYN Everyday"); ReceiptLine("Still owed", Money.format(credit.owed - amount)); ReceiptLine("Reference", reference) },
-            primaryLabel = "Done", onPrimary = onExit)
     }
 }
