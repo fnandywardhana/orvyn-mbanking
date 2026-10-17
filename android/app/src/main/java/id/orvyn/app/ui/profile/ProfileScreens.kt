@@ -50,6 +50,19 @@ import id.orvyn.app.ui.auth.FlowScreen
 import id.orvyn.app.ui.auth.canUseBiometrics
 import id.orvyn.app.ui.auth.promptBiometric
 import id.orvyn.app.ui.components.ConfirmDialog
+import id.orvyn.app.ui.components.*
+import id.orvyn.app.ui.auth.PIN_MISMATCH
+import id.orvyn.app.ui.auth.WEAK_PIN
+import id.orvyn.app.ui.isAcceptablePin
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.collapse
+import androidx.compose.ui.semantics.expand
+import androidx.compose.ui.semantics.stateDescription
 import id.orvyn.app.ui.components.MessageState
 import id.orvyn.app.ui.components.OrvynButton
 import id.orvyn.app.ui.components.OrvynTextField
@@ -110,10 +123,10 @@ fun ProfileScreen(store: DeviceStore, onSignedOut: () -> Unit, onRoute: (String)
             SettingRow("Change password") { onRoute("profile/password") }
             if (canUseBiometrics(activity)) {
                 Divider()
-                SettingRow("Sign in with fingerprint", role = Role.Switch, trailing = { Switch(biometric, onCheckedChange = null) }) {
+                id.orvyn.app.ui.components.SwitchRow("Sign in with fingerprint", null, biometric, onChange = {
                     if (biometric) { biometric = false; store.biometricEnabled = false }
                     else promptBiometric(activity, "Confirm your fingerprint") { biometric = true; store.biometricEnabled = true }
-                }
+                })
             }
         }
         Section("Appearance") {
@@ -149,85 +162,135 @@ fun ProfileScreen(store: DeviceStore, onSignedOut: () -> Unit, onRoute: (String)
     )
 }
 
-/** Story S1.30 AC1: current PIN, new PIN, new PIN again. */
+/**
+ * Story S1.30 AC1 and Q-C1 (design.md 7.1): the current PIN is checked by the server first and counts toward the same 5
+ * tries; then the new PIN twice, weak ones refused at once and a mismatch back to step 2.
+ */
 @Composable
 fun ChangePinFlow(onDone: () -> Unit) {
-    var old by remember { mutableStateOf<String?>(null) }
-    var first by remember { mutableStateOf<String?>(null) }
+    var step by remember { mutableIntStateOf(0) }
+    var old by remember { mutableStateOf("") }
+    var first by remember { mutableStateOf("") }
+    var errors0 by remember { mutableIntStateOf(0) }
+    var errors1 by remember { mutableIntStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
-    var errors by remember { mutableIntStateOf(0) }
-    var done by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    if (done) {
-        FlowScreen("PIN changed", "Use your new PIN from now on.", null) {
-            Spacer(Modifier.weight(1f)); OrvynButton("Done", onClick = onDone, modifier = Modifier.padding(vertical = 16.dp))
+    BackHandler(step in 1..2 && !busy) { step = 0; old = ""; first = ""; error = null }
+    FlowSteps(step, index = { it }, success = { it == 3 }) { s ->
+        when (s) {
+            3 -> DoneScreen("Your PIN is changed", "Use your new PIN from now on.", onDone)
+            0 -> PinScreen("Enter your current PIN", "We check it before you choose a new one.", onDone, errorCount = errors0, errorText = error,
+                busyText = if (busy) "Checking your PIN…" else null,
+                onComplete = { pin ->
+                    busy = true; error = null
+                    scope.launch {
+                        try { Api.checkPin(pin); old = pin; step = 1 }
+                        catch (e: ApiException) {
+                            when (e.code) { "WRONG_PIN" -> { error = e.message; errors0++ }; "LOCKED", "signed_out" -> {}; else -> error = e.message }
+                        } finally { busy = false }
+                    }
+                })
+            1 -> PinScreen("Choose a new PIN", "Avoid 123456 or your birthday.", { step = 0; old = ""; error = null }, errorCount = errors1, errorText = error,
+                onComplete = { pin -> if (!isAcceptablePin(pin)) { error = WEAK_PIN; errors1++ } else { error = null; first = pin; step = 2 } })
+            else -> PinScreen("Enter the new PIN again", "Just to be sure you remember it.", { step = 0; old = ""; first = ""; error = null }, errorCount = 0,
+                errorText = error, busyText = if (busy) "Saving your new PIN…" else null,
+                onComplete = { pin ->
+                    if (pin != first) { first = ""; error = PIN_MISMATCH; errors1++; step = 1; return@PinScreen }
+                    busy = true; error = null
+                    scope.launch {
+                        try { Api.changePin(old, pin); step = 3 }
+                        catch (e: ApiException) {
+                            when (e.code) { "WRONG_PIN" -> { old = ""; error = e.message; errors0++; step = 0 }; "LOCKED", "signed_out" -> {}; else -> error = e.message }
+                        } finally { busy = false }
+                    }
+                })
         }
-        return
-    }
-    FlowScreen(
-        when { old == null -> "Enter your current PIN"; first == null -> "Choose a new PIN"; else -> "Enter the new PIN again" },
-        if (old != null && first == null) "Avoid 123456 or your birthday." else null, onDone,
-    ) {
-        Spacer(Modifier.weight(1f))
-        PinPad(onComplete = { pin ->
-            when {
-                old == null -> { old = pin; error = null }
-                first == null -> { first = pin; error = null }
-                pin != first -> { first = null; error = "Those PINs didn't match. Choose your new PIN again."; errors++ }
-                else -> scope.launch {
-                    try { Api.changePin(old!!, pin); done = true }
-                    catch (e: ApiException) { if (e.code == "WRONG_PIN") old = null; first = null; error = e.message; errors++ }
-                }
-            }
-        }, errorCount = errors, errorText = error, onBiometric = null, modifier = Modifier.padding(bottom = 24.dp))
     }
 }
 
+/** Q-C2 (design.md 7.2): a wrong current password shows under that field with the tries left; a weak new one under its own. */
 @Composable
 fun ChangePasswordScreen(onDone: () -> Unit) {
     var old by remember { mutableStateOf("") }
     var new by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
+    var oldError by remember { mutableStateOf<String?>(null) }
+    var newError by remember { mutableStateOf<String?>(null) }
+    var boxError by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var done by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    FlowScreen(if (done) "Password changed" else "Change password", if (done) "Use your new password the next time you sign in on a phone." else null, onDone) {
-        if (done) { Spacer(Modifier.weight(1f)); OrvynButton("Done", onClick = onDone, modifier = Modifier.padding(vertical = 16.dp)); return@FlowScreen }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            OrvynTextField("Current password", old, { old = it; error = null }, password = true)
-            OrvynTextField("New password", new, { new = it; error = null }, password = true, helper = "At least 8 characters, with letters and numbers.", error = error)
+    val oldFocus = remember { FocusRequester() }
+    val newFocus = remember { FocusRequester() }
+    if (done) return DoneScreen("Your password is changed", "Use your new password the next time you sign in on a phone.", onDone)
+    fun save() {
+        if (old.isEmpty() || new.isEmpty() || busy) return
+        busy = true
+        scope.launch {
+            try { Api.changePassword(old, new); done = true }
+            catch (e: ApiException) {
+                when (e.code) {
+                    "WRONG_PASSWORD" -> { oldError = e.message; runCatching { oldFocus.requestFocus() } }
+                    "WEAK_PASSWORD" -> { newError = e.message; runCatching { newFocus.requestFocus() } }
+                    "LOCKED", "signed_out" -> {}
+                    else -> boxError = e.message
+                }
+            } finally { busy = false }
         }
-        OrvynButton("Save password", enabled = old.isNotEmpty() && new.isNotEmpty(), loading = busy, modifier = Modifier.padding(vertical = 16.dp), onClick = {
-            busy = true
-            scope.launch { try { Api.changePassword(old, new); done = true } catch (e: ApiException) { error = e.message } finally { busy = false } }
-        })
+    }
+    FlowScreen("Change password", null, onDone) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            OrvynTextField("Current password", old, { old = it; oldError = null; boxError = null }, password = true, error = oldError,
+                imeAction = androidx.compose.ui.text.input.ImeAction.Next, onImeAction = { newFocus.requestFocus() }, fieldModifier = Modifier.focusRequester(oldFocus))
+            OrvynTextField("New password", new, { new = it; newError = null; boxError = null }, password = true, helper = "At least 8 characters, with letters and numbers.",
+                error = newError, imeAction = androidx.compose.ui.text.input.ImeAction.Done, onImeAction = { save() }, fieldModifier = Modifier.focusRequester(newFocus))
+        }
+        boxError?.let { ErrorBox(it, Modifier.padding(top = 12.dp)) }
+        OrvynButton("Save password", enabled = old.isNotEmpty() && new.isNotEmpty(), loading = busy, modifier = Modifier.padding(vertical = 16.dp), onClick = { save() })
     }
 }
 
-/** Story S1.31 AC1: FAQs by category, searchable. */
+/**
+ * Story S1.31 AC1 and Q-G3: FAQs by category, searchable; each one says it can open (chevron, expanded or collapsed for
+ * TalkBack). "Still need help?" offers Vyna, and is gone when Vyna is switched off (PO-17). No phone number (K3).
+ */
 @Composable
 fun HelpScreen(onBack: () -> Unit, onAskVyna: (() -> Unit)? = null) {
-    var faqs by remember { mutableStateOf<List<Faq>?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    val faqs = rememberLoad { Api.content().faqs }
     var query by remember { mutableStateOf("") }
     var open by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) { try { faqs = Api.content().faqs } catch (e: ApiException) { error = e.message } }
+    val reduced = id.orvyn.app.ui.components.rememberReducedMotion()
     FlowScreen("Questions and answers", null, onBack) {
         OrvynTextField("Search", query, { query = it })
         Column(Modifier.verticalScroll(rememberScrollState()).padding(top = 8.dp)) {
-            val list = faqs?.filter { query.isBlank() || (it.question + it.answer).contains(query.trim(), ignoreCase = true) }
-            when {
-                error != null -> MessageState(R.drawable.ph_warning_circle, "Couldn't load help", error!!)
-                list == null -> repeat(4) { Skeleton(Modifier.padding(vertical = 8.dp).fillMaxWidth().height(48.dp)) }
-                list.isEmpty() -> MessageState(R.drawable.ph_magnifying_glass, "No answers match", "Try another word, like transfer or card.")
-                else -> list.groupBy { it.category }.forEach { (cat, items) ->
-                    Text(cat.uppercase(), style = MaterialTheme.typography.labelSmall, color = OrvynTheme.colors.textSecondary, modifier = Modifier.padding(top = 16.dp, bottom = 4.dp))
-                    items.forEach { f ->
-                        Column(Modifier.fillMaxWidth().clickable { open = if (open == f.id) null else f.id }.padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(f.question, style = MaterialTheme.typography.titleMedium)
-                            if (open == f.id) Text(f.answer, style = MaterialTheme.typography.bodyLarge, color = OrvynTheme.colors.textSecondary)
+            LoadContent(faqs, "Couldn't load help", skeleton = { Column { repeat(4) { Skeleton(Modifier.padding(vertical = 8.dp).fillMaxWidth().height(48.dp)) } } }) { all ->
+                val list = all.filter { query.isBlank() || (it.question + it.answer).contains(query.trim(), ignoreCase = true) }
+                Column {
+                    if (list.isEmpty()) MessageState(R.drawable.ph_magnifying_glass, "No answers match", "Try another word, like transfer or card.")
+                    else list.groupBy { it.category }.forEach { (cat, items) ->
+                        Text(cat.uppercase(), style = MaterialTheme.typography.labelSmall, color = OrvynTheme.colors.textSecondary, modifier = Modifier.padding(top = 16.dp, bottom = 4.dp))
+                        items.forEach { f ->
+                            val isOpen = open == f.id
+                            val turn by androidx.compose.animation.core.animateFloatAsState(if (isOpen) 180f else 0f, androidx.compose.animation.core.tween(if (reduced) 0 else 150), label = "caret")
+                            Column(Modifier.fillMaxWidth().clickable(role = Role.Button) { open = if (isOpen) null else f.id }
+                                .semantics { stateDescription = if (isOpen) "Expanded" else "Collapsed"; if (isOpen) collapse { open = null; true } else expand { open = f.id; true } }
+                                .heightIn(min = 56.dp).padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(f.question, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                                    androidx.compose.material3.Icon(painterResource(R.drawable.ph_caret_down), null, Modifier.size(20.dp).rotate(turn), tint = OrvynTheme.colors.textSecondary)
+                                }
+                                if (isOpen) Text(f.answer, style = MaterialTheme.typography.bodyLarge, color = OrvynTheme.colors.textSecondary)
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    if (onAskVyna != null) id.orvyn.app.ui.components.OrvynCard(Modifier.padding(top = 24.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            id.orvyn.app.ui.components.IconTile(R.drawable.ph_sparkle)
+                            Text("Still need help?", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        }
+                        Text("Vyna can answer questions about your money and how ORVYN works.", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
+                        OrvynButton("Ask Vyna", onClick = onAskVyna, kind = id.orvyn.app.ui.components.ButtonKind.Secondary)
                     }
                 }
             }
@@ -236,22 +299,23 @@ fun HelpScreen(onBack: () -> Unit, onAskVyna: (() -> Unit)? = null) {
     }
 }
 
-/** Story S1.31 AC2: PRD 7.4 in plain words. */
+/** Story S1.31 AC2 and Q-G3: every line of PRD 7.4 in plain words, including the sign-up camera and Vyna's microphone. */
 @Composable
 fun PrivacyScreen(onBack: () -> Unit) {
     FlowScreen("Privacy", "What ORVYN can and can't see on your phone.", onBack) {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             for ((title, body) in listOf(
                 "What ORVYN sends" to "Only what you type into the app: your sign-in details, the people and amounts you pay, and the notes you add.",
-                "Camera" to "Used only while the QRIS scanner is open. The QR code is read on your phone. No pictures are taken, saved or sent.",
+                "Camera" to "Used only when you open it: to scan a QRIS code, and to photograph your KTP and take a selfie when you open an account. QR codes are read on your phone. The KTP photo and selfie stay on your phone, are never sent, and are deleted as soon as you move on.",
+                "Microphone" to "Used only after you tap the microphone in Vyna. Your phone turns what you say into text, and only that text goes to Vyna. The recording never leaves your phone.",
                 "Fingerprint" to "Android checks your fingerprint. ORVYN only learns whether it matched, never the fingerprint itself.",
                 "Gallery" to "When you pick a QR picture, Android hands ORVYN that one picture. ORVYN can't see your other photos.",
                 "Never touched" to "Your contacts, location, messages, calls, files and other apps. ORVYN doesn't ask for them, so it can't read them.",
                 "No tracking" to "No analytics, ads or crash reporters. Your phone is recognised by a random code ORVYN makes when it's installed, not by its serial number.",
                 "Notifications" to "Google's Firebase delivers push notifications to a random token made for this phone. Each one carries the same short text as your Inbox, like an amount and a name. Your lock screen only shows \"New activity\".",
             )) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(title, style = MaterialTheme.typography.titleMedium)
+                Column(Modifier.semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
                     Text(body, style = MaterialTheme.typography.bodyLarge, color = OrvynTheme.colors.textSecondary)
                 }
             }

@@ -34,7 +34,7 @@ import id.orvyn.app.R
 import id.orvyn.app.data.Api
 import id.orvyn.app.data.ApiException
 import id.orvyn.app.ui.auth.FlowScreen
-import id.orvyn.app.ui.components.ConfirmDialog
+import id.orvyn.app.ui.components.*
 import id.orvyn.app.ui.components.ListRow
 import id.orvyn.app.ui.components.OrvynButton
 import id.orvyn.app.ui.components.OrvynTextButton
@@ -70,22 +70,23 @@ suspend fun signInWithPasskey(activity: Activity): Api.SignIn {
 @Composable
 fun PasskeysScreen(onBack: () -> Unit) {
     val activity = LocalContext.current as Activity
-    var list by remember { mutableStateOf<List<Pair<String, Instant>>?>(null) }
+    val list = rememberLoad { Api.passkeys() }
     var message by remember { mutableStateOf<String?>(null) }
     var removing by remember { mutableStateOf<String?>(null) }
+    var deleting by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
-    var reload by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(reload) { list = runCatching { Api.passkeys() }.getOrNull() ?: emptyList() }
+    val snacks = LocalSnacks.current
     FlowScreen("Passkeys", "Sign in on a new phone with your fingerprint or screen lock instead of your password. The passkey stays in your phone's password manager.", onBack) {
         Column(Modifier.weight(1f)) {
-            val l = list
-            when {
-                l == null -> Skeleton(Modifier.fillMaxWidth().height(80.dp))
-                l.isEmpty() -> Text("No passkeys yet.", style = MaterialTheme.typography.bodyLarge, color = OrvynTheme.colors.textSecondary)
-                else -> l.forEachIndexed { i, (id, at) ->
-                    ListRow("Passkey ${i + 1}", "Added ${formatDateTime(at)}", R.drawable.ph_fingerprint) { OrvynTextButton("Remove", onClick = { removing = id }) }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            // Q-B3 AC4: a list that didn't load is an error, never "No passkeys yet."
+            LoadContent(list, "Couldn't load your passkeys", skeleton = { Skeleton(Modifier.fillMaxWidth().height(80.dp)) }) { l ->
+                Column {
+                    if (l.isEmpty()) Text("No passkeys yet.", style = MaterialTheme.typography.bodyLarge, color = OrvynTheme.colors.textSecondary)
+                    else l.forEachIndexed { i, (id, at) ->
+                        ListRow("Passkey ${i + 1}", "Added ${formatDateTime(at)}", R.drawable.ph_fingerprint) { OrvynTextButton("Remove", onClick = { removing = id }) }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
                 }
             }
             message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 12.dp)) }
@@ -93,7 +94,7 @@ fun PasskeysScreen(onBack: () -> Unit) {
         OrvynButton("Add a passkey", loading = busy, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp), onClick = {
             busy = true
             scope.launch {
-                try { createPasskey(activity); message = "Passkey added. Next time, tap Sign in with a passkey."; reload++ }
+                try { createPasskey(activity); message = "Passkey added. Next time, tap Sign in with a passkey."; list.reload() }
                 catch (_: PasskeyCancelled) {}
                 catch (e: ApiException) { message = e.message }
                 busy = false
@@ -102,6 +103,12 @@ fun PasskeysScreen(onBack: () -> Unit) {
     }
     removing?.let { id ->
         ConfirmDialog("Remove this passkey?", "You'll need your password to sign in on a new phone. Also delete it from your password manager if you like.", "Remove",
-            onConfirm = { removing = null; scope.launch { runCatching { Api.deletePasskey(id) }; reload++ } }, onDismiss = { removing = null }, destructive = true)
+            busy = deleting, destructive = true, onDismiss = { removing = null }, onConfirm = {
+                deleting = true
+                scope.launch {
+                    try { Api.deletePasskey(id); list.reload() } catch (e: ApiException) { snacks?.show(e.message, error = true) }
+                    deleting = false; removing = null
+                }
+            })
     }
 }

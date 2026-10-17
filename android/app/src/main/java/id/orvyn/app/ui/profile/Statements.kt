@@ -39,7 +39,10 @@ import id.orvyn.app.data.ApiException
 import id.orvyn.app.data.Statement
 import id.orvyn.app.ui.Money
 import id.orvyn.app.ui.auth.FlowScreen
-import id.orvyn.app.ui.components.ListRow
+import id.orvyn.app.ui.components.*
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import id.orvyn.app.ui.components.MessageState
 import id.orvyn.app.ui.components.Skeleton
 import id.orvyn.app.ui.groupAccountNumber
@@ -57,32 +60,31 @@ import java.util.Locale
 
 private fun monthTitle(key: String) = YearMonth.parse(key).format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.US))
 
+/** Story S2.17 and Q-B10: one PDF failing leaves the list alone and offers Try again in a snackbar. */
 @Composable
 fun StatementsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    var months by remember { mutableStateOf<List<String>?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    val months = rememberLoad { Api.statementMonths() }
     var making by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { try { months = Api.statementMonths() } catch (e: ApiException) { error = e.message } }
+    val snacks = LocalSnacks.current
+    fun make(key: String) {
+        if (making != null) return
+        making = key
+        scope.launch {
+            try { sharePdf(context, Api.statement(key)) }
+            catch (e: ApiException) { snacks?.show("Couldn't make your ${monthTitle(key)} statement.", error = true, action = "Try again") { make(key) } }
+            making = null
+        }
+    }
     FlowScreen("E-statements", "Your ORVYN Everyday account, month by month, as a PDF.", onBack) {
-        val m = months
-        when {
-            error != null -> MessageState(R.drawable.ph_warning_circle, "Couldn't load your statements", error!!)
-            m == null -> Skeleton(Modifier.fillMaxWidth().height(160.dp))
-            m.isEmpty() -> MessageState(R.drawable.ph_file_pdf, "No statements yet", "Your first statement is ready after your first full month with ORVYN.")
-            else -> LazyColumn {
+        LoadContent(months, "Couldn't load your statements", skeleton = { Skeleton(Modifier.fillMaxWidth().height(160.dp)) }) { m ->
+            if (m.isEmpty()) MessageState(R.drawable.ph_file_pdf, "No statements yet", "Your first statement is ready after your first full month with ORVYN.")
+            else LazyColumn {
                 items(m) { key ->
-                    ListRow(monthTitle(key), if (making == key) "Making your PDF…" else "PDF", R.drawable.ph_file_pdf, onClick = {
-                        if (making != null) return@ListRow
-                        making = key
-                        scope.launch {
-                            try { sharePdf(context, Api.statement(key)) } catch (e: ApiException) { error = e.message }
-                            making = null
-                        }
-                    }) {
-                        if (making == key) CircularProgressIndicator(Modifier.height(20.dp), strokeWidth = 2.dp)
-                        else Icon(painterResource(R.drawable.ph_share_network), contentDescription = "Share", tint = OrvynTheme.colors.textSecondary)
+                    ListRow(monthTitle(key), if (making == key) "Making your PDF…" else "PDF", R.drawable.ph_file_pdf, onClick = { make(key) }) {
+                        if (making == key) CircularProgressIndicator(Modifier.size(20.dp).semantics { contentDescription = "Making your ${monthTitle(key)} statement" }, strokeWidth = 2.dp)
+                        else Icon(painterResource(R.drawable.ph_share_network), contentDescription = "Share ${monthTitle(key)} statement", tint = OrvynTheme.colors.textSecondary)
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }

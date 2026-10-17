@@ -87,7 +87,18 @@ import id.orvyn.app.ui.components.MessageState
 import id.orvyn.app.ui.components.OrvynButton
 import id.orvyn.app.ui.components.OrvynTextButton
 import id.orvyn.app.ui.components.OrvynTextField
-import id.orvyn.app.ui.components.PinPad
+import id.orvyn.app.ui.components.*
+import id.orvyn.app.ui.auth.PIN_MISMATCH
+import id.orvyn.app.ui.auth.WEAK_PIN
+import id.orvyn.app.ui.isAcceptablePin
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.withStyle
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import id.orvyn.app.ui.theme.OrvynTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -110,6 +121,10 @@ fun RegisterFlow(store: DeviceStore, onExit: () -> Unit, onSignIn: () -> Unit) {
     var phone by remember { mutableStateOf(saved?.optString("phone") ?: "") }
     var password by remember { mutableStateOf("") }
     var pin by remember { mutableStateOf("") }
+    var shownCode by remember { mutableStateOf<String?>(null) } // Q-D4: notifications are off, so the code shows on screen
+    var pinError by remember { mutableStateOf<String?>(null) }
+    var pinErrors by remember { mutableIntStateOf(0) }
+    fun restart() { store.registration = null; token = null; d.keys().asSequence().toList().forEach(d::remove); step = Step.Phone }
     fun save(sent: Boolean = false) { store.registration = JSONObject().put("token", token).put("phone", phone).put("details", d).put("sent", sent).toString() }
 
     BackHandler(step != Step.Waiting) {
@@ -118,27 +133,31 @@ fun RegisterFlow(store: DeviceStore, onExit: () -> Unit, onSignIn: () -> Unit) {
     }
     val progress = "Step ${step.ordinal + 1} of 8"
 
-    when (step) {
-        Step.Phone -> PhoneStep(phone, progress, onExit) { p -> phone = p; step = Step.Code }
-        Step.Code -> CodeStep(phone, progress, { step = Step.Phone }) { t -> token = t; save(); step = Step.About }
-        Step.About -> AboutStep(d, progress, { step = Step.Phone }) { save(); step = Step.IdPhoto }
-        Step.IdPhoto -> PhotoStep("Photo of your KTP", "Fit your KTP inside the frame. $progress.", back = true, card = true, onBack = { step = Step.About }) { step = Step.Selfie }
-        Step.Selfie -> PhotoStep("Take a selfie", "Look straight at the camera, face inside the circle. $progress.", back = false, card = false, onBack = { step = Step.IdPhoto }) { step = Step.Password }
-        Step.Password -> PasswordStep(progress, { step = Step.Selfie }) { password = it; step = Step.Pin }
-        Step.Pin -> PinStep("Create your PIN", "6 digits to open ORVYN and approve payments. Avoid 123456 or your birthday.", null) { pin = it; step = Step.PinAgain }
-        Step.PinAgain -> {
-            var error by remember { mutableStateOf<String?>(null) }
-            var errors by remember { mutableIntStateOf(0) }
-            val scope = rememberCoroutineScope()
-            PinStep("Enter it again", "Just to be sure you remember it.", error, errors) { again ->
-                if (again != pin) { error = "Those PINs didn't match. Start again."; step = Step.Pin; return@PinStep }
+    val scope = rememberCoroutineScope()
+    var submitError by remember { mutableStateOf<String?>(null) }
+    FlowSteps(step, index = { it.ordinal }) { s ->
+        when (s) {
+            Step.Phone -> PhoneStep(phone, progress, onExit) { p, code -> phone = p; shownCode = code; step = Step.Code }
+            Step.Code -> CodeStep(phone, shownCode, progress, { step = Step.Phone }) { t -> token = t; save(); step = Step.About }
+            Step.About -> AboutStep(d, token ?: "", progress, { step = Step.Phone }, onRestart = { restart() }) { save(); step = Step.IdPhoto }
+            Step.IdPhoto -> PhotoStep("Photo of your KTP", "Fit your KTP inside the frame. $progress.", card = true, onBack = { step = Step.About }) { step = Step.Selfie }
+            // Q-D5: the selfie step has the same back arrow, back to the KTP photo.
+            Step.Selfie -> PhotoStep("Take a selfie", "Look straight at the camera, face inside the circle. $progress.", card = false, onBack = { step = Step.IdPhoto }) { step = Step.Password }
+            Step.Password -> PasswordStep(progress, { step = Step.Selfie }) { password = it; step = Step.Pin }
+            // Q-D3: a weak PIN is refused right after the 6th digit; a mismatch comes back here with its message.
+            Step.Pin -> PinScreen("Create your PIN", "You'll use these 6 digits to open ORVYN and approve payments. Avoid 123456 or your birthday. $progress.", null,
+                errorCount = pinErrors, errorText = pinError, onComplete = { p ->
+                    if (!isAcceptablePin(p)) { pinError = WEAK_PIN; pinErrors++ } else { pinError = null; pin = p; submitError = null; step = Step.PinAgain }
+                })
+            Step.PinAgain -> PinScreen("Enter it again", "Just to be sure you remember it.", null, errorCount = 0, errorText = submitError, onComplete = { again ->
+                if (again != pin) { pinError = PIN_MISMATCH; pinErrors++; step = Step.Pin; return@PinScreen }
                 scope.launch {
                     try { Api.registerSubmit(token!!, d, password, pin); password = ""; pin = ""; save(sent = true); step = Step.Waiting }
-                    catch (e: ApiException) { error = e.message; errors++ }
+                    catch (e: ApiException) { submitError = e.message }
                 }
-            }
+            })
+            Step.Waiting -> WaitingStep(token ?: "", onDone = { store.registration = null; onSignIn() }, onRestart = { restart() })
         }
-        Step.Waiting -> WaitingStep(token!!, onDone = { store.registration = null; onSignIn() }, onRestart = { store.registration = null; token = null; d.keys().asSequence().toList().forEach(d::remove); step = Step.Phone })
     }
 }
 
@@ -153,27 +172,24 @@ private fun showOtp(context: Context, code: String): Boolean {
 }
 
 @Composable
-private fun PhoneStep(initial: String, progress: String, onBack: () -> Unit, onSent: (String) -> Unit) {
+private fun PhoneStep(initial: String, progress: String, onBack: () -> Unit, onSent: (phone: String, shownCode: String?) -> Unit) {
     val context = LocalContext.current
     var phone by remember { mutableStateOf(initial) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var fallback by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     LaunchedEffect(Unit) { if (Build.VERSION.SDK_INT >= 33) askNotify.launch(Manifest.permission.POST_NOTIFICATIONS) }
     FlowScreen("Open an account", "First, your phone number. We'll send a 6-digit code to confirm it. $progress.", onBack) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             OrvynTextField("Phone number", phone, { phone = it; error = null }, keyboardType = KeyboardType.Phone, error = error, helper = "For example 0812 3456 7890")
-            fallback?.let { Text("Notifications are off, so here's your demo code: $it", style = MaterialTheme.typography.bodyLarge, color = OrvynTheme.colors.warning) }
         }
         OrvynButton("Send code", enabled = phone.length >= 10, loading = busy, modifier = Modifier.padding(vertical = 16.dp), onClick = {
             busy = true
             scope.launch {
                 try {
                     val (normalized, code) = Api.registerOtp(phone)
-                    if (!showOtp(context, code)) { fallback = code; delay(2500) }
-                    onSent(normalized)
+                    onSent(normalized, if (showOtp(context, code)) null else code)
                 } catch (e: ApiException) { error = e.message } finally { busy = false }
             }
         })
@@ -181,13 +197,27 @@ private fun PhoneStep(initial: String, progress: String, onBack: () -> Unit, onS
 }
 
 @Composable
-private fun CodeStep(phone: String, progress: String, onBack: () -> Unit, onVerified: (String) -> Unit) {
+private fun CodeStep(phone: String, shownCode: String?, progress: String, onBack: () -> Unit, onVerified: (String) -> Unit) {
     var code by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    FlowScreen("Enter the code", "We sent it to $phone as a notification. $progress.", onBack) {
-        Column(Modifier.weight(1f)) {
+    val grouped = phone.chunked(4).joinToString(" ")
+    FlowScreen("Enter the code", "Enter the 6-digit code for $grouped. $progress.", onBack) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (shownCode != null) Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.primaryContainer)
+                    .semantics(mergeDescendants = true) { contentDescription = "Notifications are off, so here's your code: ${shownCode.toList().joinToString(" ")}" }.padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(R.drawable.ph_bell), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                androidx.compose.foundation.text.selection.SelectionContainer {
+                    Text(androidx.compose.ui.text.buildAnnotatedString {
+                        append("Notifications are off, so here's your code: ")
+                        withStyle(MaterialTheme.typography.titleMedium.toSpanStyle()) { append(shownCode) }
+                    }, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            }
             OrvynTextField("6-digit code", code, { code = it.filter(Char::isDigit).take(6); error = null }, keyboardType = KeyboardType.NumberPassword, error = error)
         }
         OrvynButton("Confirm", enabled = code.length == 6, loading = busy, modifier = Modifier.padding(vertical = 16.dp), onClick = {
@@ -199,25 +229,23 @@ private fun CodeStep(phone: String, progress: String, onBack: () -> Unit, onVeri
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Choices(label: String, options: List<String>, value: String, onPick: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun Choices(label: String, options: List<String>, value: String, error: Boolean, modifier: Modifier = Modifier, onPick: (String) -> Unit) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label, style = MaterialTheme.typography.titleMedium)
+        if (error) GroupError("Pick one.") // Q-D2 AC2
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (o in options) {
-                val sel = o == value
-                Box(
-                    Modifier.clip(CircleShape).background(if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
-                        .border(1.dp, if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, CircleShape)
-                        .clickable(role = Role.RadioButton) { onPick(o) }.semantics { selected = sel }.heightIn(min = 44.dp).padding(horizontal = 16.dp, vertical = 10.dp),
-                    contentAlignment = Alignment.Center,
-                ) { Text(o, style = MaterialTheme.typography.labelLarge, color = if (sel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface) }
-            }
+            for (o in options) Chip(o, o == value) { onPick(o) }
         }
     }
 }
 
+/**
+ * Q-D2 (design.md 8.2): Continue scrolls to the first answer that needs a fix and says how many there are above the button.
+ * When everything looks right on the phone, it asks the server whether the NIK is free before moving on (PO-2).
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun AboutStep(d: JSONObject, progress: String, onBack: () -> Unit, onNext: () -> Unit) {
+private fun AboutStep(d: JSONObject, token: String, progress: String, onBack: () -> Unit, onRestart: () -> Unit, onNext: () -> Unit) {
     var name by remember { mutableStateOf(d.optString("fullName")) }
     var nik by remember { mutableStateOf(d.optString("nik")) }
     // Digits only ("17081990"); the slashes are drawn by DobTransformation (hotfix 0.8.1, H1).
@@ -228,28 +256,67 @@ private fun AboutStep(d: JSONObject, progress: String, onBack: () -> Unit, onNex
     var income by remember { mutableStateOf(d.optString("incomeRange")) }
     var purpose by remember { mutableStateOf(d.optString("purpose")) }
     var tried by remember { mutableStateOf(false) }
+    var nikServer by remember { mutableStateOf<String?>(null) }
+    var tooMany by remember { mutableStateOf(false) }
+    var boxError by remember { mutableStateOf<String?>(null) }
+    var checking by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val date = parseDobDigits(dob.text)
     val age = date?.let { java.time.Period.between(it, LocalDate.now()).years }
-    val errNik = if (tried && nik.length != 16) "NIK has 16 digits. You entered ${nik.length}." else null
+    val errName = if (tried && name.trim().length < 3) "Enter your full name." else null
+    val errNik = nikServer ?: if (tried && nik.length != 16) "NIK has 16 digits. You entered ${nik.length}." else null
     val errDob = if (tried && (date == null || age!! < 17)) (if (date == null) "Use the format DD/MM/YYYY." else "You need to be at least 17 to open an account.") else null
+    val errAddress = if (tried && address.isBlank()) "Enter your address." else null
+    val errs = listOf(errName != null, errNik != null, errDob != null, errAddress != null, tried && work.isEmpty(), tried && income.isEmpty(), tried && purpose.isEmpty())
+    val focus = List(4) { remember { FocusRequester() } }
+    val bring = List(7) { remember { androidx.compose.foundation.relocation.BringIntoViewRequester() } }
+    var jump by remember { mutableIntStateOf(0) }
+    LaunchedEffect(jump) {
+        if (jump == 0) return@LaunchedEffect
+        val first = errs.indexOf(true).takeIf { it >= 0 } ?: return@LaunchedEffect
+        runCatching { bring[first].bringIntoView() }
+        if (first < 4) runCatching { focus[first].requestFocus() }
+    }
+    val count = errs.count { it }
+    fun ok() = name.trim().length >= 3 && nik.length == 16 && date != null && age!! >= 17 && address.isNotBlank() && work.isNotEmpty() && income.isNotEmpty() && purpose.isNotEmpty()
     FlowScreen("About you", "As written on your KTP. $progress.", onBack) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            OrvynTextField("Full name", name, { name = it }, error = if (tried && name.trim().length < 3) "Enter your full name." else null)
-            OrvynTextField("NIK", nik, { nik = it.filter(Char::isDigit).take(16) }, keyboardType = KeyboardType.Number, error = errNik)
-            OrvynTextField("Date of birth", dob, { dob = dobInput(dob, it) }, keyboardType = KeyboardType.Number, helper = "DD/MM/YYYY", error = errDob, visualTransformation = DobTransformation)
-            OrvynTextField("Address", address, { address = it }, error = if (tried && address.isBlank()) "Enter your address." else null)
-            Choices("Work", WORK, work) { work = it }
-            Choices("Monthly income", INCOME, income) { income = it }
-            Choices("Main reason for the account", PURPOSE, purpose) { purpose = it }
-            if (tried && (work.isEmpty() || income.isEmpty() || purpose.isEmpty())) Text("Pick one answer for each question.", color = MaterialTheme.colorScheme.error)
+            val bringMod = { i: Int -> Modifier.bringIntoViewRequester(bring[i]) }
+            OrvynTextField("Full name", name, { name = it }, error = errName, modifier = bringMod(0), fieldModifier = Modifier.focusRequester(focus[0]))
+            Column(bringMod(1)) {
+                OrvynTextField("NIK", nik, { nik = it.filter(Char::isDigit).take(16); nikServer = null; tooMany = false }, keyboardType = KeyboardType.Number, error = errNik,
+                    fieldModifier = Modifier.focusRequester(focus[1]))
+                if (tooMany) OrvynTextButton("Start again", onClick = onRestart)
+            }
+            OrvynTextField("Date of birth", dob, { dob = dobInput(dob, it) }, keyboardType = KeyboardType.Number, helper = "DD/MM/YYYY", error = errDob, visualTransformation = DobTransformation,
+                modifier = bringMod(2), fieldModifier = Modifier.focusRequester(focus[2]))
+            OrvynTextField("Address", address, { address = it }, error = errAddress, modifier = bringMod(3), fieldModifier = Modifier.focusRequester(focus[3]))
+            Choices("Work", WORK, work, errs[4], bringMod(4)) { work = it }
+            Choices("Monthly income", INCOME, income, errs[5], bringMod(5)) { income = it }
+            Choices("Main reason for the account", PURPOSE, purpose, errs[6], bringMod(6)) { purpose = it }
             Spacer(Modifier.heightIn(min = 8.dp))
         }
-        OrvynButton("Continue", modifier = Modifier.padding(vertical = 16.dp), onClick = {
-            tried = true
-            if (name.trim().length >= 3 && nik.length == 16 && date != null && age!! >= 17 && address.isNotBlank() && work.isNotEmpty() && income.isNotEmpty() && purpose.isNotEmpty()) {
-                d.put("fullName", name.trim()).put("nik", nik).put("birthDate", date.toString()).put("address", address.trim())
-                    .put("occupation", work).put("incomeRange", income).put("purpose", purpose)
-                onNext()
+        when {
+            count > 0 -> ErrorBox(if (count == 1) "1 answer needs a fix. It's marked above." else "$count answers need a fix. They're marked above.", Modifier.padding(top = 12.dp))
+            boxError != null -> ErrorBox(boxError!!, Modifier.padding(top = 12.dp))
+        }
+        OrvynButton("Continue", loading = checking, modifier = Modifier.padding(vertical = 16.dp).semantics { if (checking) stateDescription = "Checking your NIK" }, onClick = {
+            tried = true; boxError = null
+            if (!ok() || nikServer != null) { jump++; return@OrvynButton }
+            checking = true
+            scope.launch {
+                try {
+                    Api.registerNik(token, nik)
+                    d.put("fullName", name.trim()).put("nik", nik).put("birthDate", date.toString()).put("address", address.trim())
+                        .put("occupation", work).put("incomeRange", income).put("purpose", purpose)
+                    onNext()
+                } catch (e: ApiException) {
+                    when (e.code) {
+                        "NIK_TAKEN" -> { nikServer = e.message; jump++ }
+                        "TOO_MANY_CHECKS" -> { nikServer = e.message; tooMany = true; jump++ }
+                        else -> boxError = e.message
+                    }
+                } finally { checking = false }
             }
         })
     }
@@ -257,7 +324,7 @@ private fun AboutStep(d: JSONObject, progress: String, onBack: () -> Unit, onNex
 
 /** Story S1.2: the photo stays in memory on this screen only, is never uploaded, and is dropped when you move on. */
 @Composable
-private fun PhotoStep(title: String, body: String, back: Boolean, card: Boolean, onBack: () -> Unit, onDone: () -> Unit) {
+private fun PhotoStep(title: String, body: String, card: Boolean, onBack: () -> Unit, onDone: () -> Unit) {
     val context = LocalContext.current
     var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
     var asked by remember { mutableStateOf(false) }
@@ -266,7 +333,8 @@ private fun PhotoStep(title: String, body: String, back: Boolean, card: Boolean,
     val capture = remember { ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build() }
     val lifecycle = LocalLifecycleOwner.current
 
-    FlowScreen(title, body, if (back) onBack else null) {
+    BackHandler { onBack() }
+    FlowScreen(title, body, onBack) {
         if (!granted) {
             Spacer(Modifier.weight(1f))
             MessageState(R.drawable.ph_user, "ORVYN needs the camera for this step",
@@ -336,14 +404,6 @@ private fun PasswordStep(progress: String, onBack: () -> Unit, onNext: (String) 
             OrvynTextField("Password", pw, { pw = it }, password = true, helper = when (strength) { 3 -> "Strong enough."; else -> "At least 8 characters, with letters and numbers." })
         }
         OrvynButton("Continue", enabled = strength == 3, onClick = { onNext(pw) }, modifier = Modifier.padding(vertical = 16.dp))
-    }
-}
-
-@Composable
-private fun PinStep(title: String, body: String, error: String?, errorCount: Int = 0, onPin: (String) -> Unit) {
-    FlowScreen(title, body, null) {
-        Spacer(Modifier.weight(1f))
-        PinPad(onComplete = onPin, errorCount = errorCount, errorText = error, onBiometric = null, modifier = Modifier.padding(bottom = 24.dp))
     }
 }
 
