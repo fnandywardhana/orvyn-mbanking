@@ -60,6 +60,8 @@ import id.orvyn.app.data.Transaction
 import id.orvyn.app.ui.Money
 import id.orvyn.app.ui.auth.FlowScreen
 import id.orvyn.app.ui.components.AmountDisplay
+import id.orvyn.app.ui.components.LoadContent
+import id.orvyn.app.ui.components.rememberLoad
 import id.orvyn.app.ui.components.AmountKeypad
 import id.orvyn.app.ui.components.ButtonKind
 import id.orvyn.app.ui.components.Chip
@@ -104,7 +106,7 @@ private fun MonthBars(months: List<Pair<String, Long>>, modifier: Modifier = Mod
     var selected by remember(months) { mutableIntStateOf(months.lastIndex) }
     val strong = MaterialTheme.colorScheme.primary
     // Opaque, so the square base drawn over the rounded bar doesn't show a darker seam.
-    val quiet = androidx.compose.ui.graphics.lerp(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.primary, 0.32f)
+    val quiet = OrvynTheme.colors.chartBarMuted // Q-E11: 3.50:1 (light), 3.36:1 (dark) against the card
     val baseline = MaterialTheme.colorScheme.outlineVariant
     val max = (months.maxOfOrNull { it.second } ?: 0L).coerceAtLeast(1L)
     val (key, total) = months[selected]
@@ -142,11 +144,7 @@ private fun MonthBars(months: List<Pair<String, Long>>, modifier: Modifier = Mod
 }
 
 @Composable
-private fun Card(content: @Composable () -> Unit) = Column(
-    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surface)
-        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp)).padding(16.dp),
-    verticalArrangement = Arrangement.spacedBy(12.dp),
-) { content() }
+private fun Card(content: @Composable () -> Unit) = id.orvyn.app.ui.components.OrvynCard { content() }
 
 @Composable
 private fun Eyebrow(text: String) = Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = OrvynTheme.colors.textSecondary,
@@ -162,18 +160,12 @@ private fun changeText(change: Int?, lastMonth: String) = when {
 
 @Composable
 fun InsightsScreen(onBack: () -> Unit, onCategory: (String) -> Unit) {
-    var data by remember { mutableStateOf<Insights?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    val load = rememberLoad(DataVersion.count) { Api.insights() }
     var editing by remember { mutableStateOf<String?>(null) } // category whose budget is being set; "" = pick one
-    var reload by remember { mutableIntStateOf(0) }
-    LaunchedEffect(reload, DataVersion.count) { try { data = Api.insights(); error = null } catch (e: ApiException) { error = e.message } }
+    val data = load.value
     FlowScreen("Insights", "What you spent from ORVYN Everyday and your cards.", onBack) {
-        val d = data
-        when {
-            d == null && error != null -> MessageState(R.drawable.ph_warning_circle, "Couldn't load your insights", error!!,
-                action = { OrvynTextButton("Try again", onClick = { reload++ }) })
-            d == null -> Skeleton(Modifier.fillMaxWidth().height(220.dp))
-            else -> LazyColumn {
+        LoadContent(load, "Couldn't load your insights", skeleton = { Skeleton(Modifier.fillMaxWidth().height(220.dp)) }) { d ->
+            LazyColumn {
                 item { Card { MonthBars(d.months) } }
                 val monthTotal = d.categories.sumOf { it.total }.coerceAtLeast(1)
                 val lastMonth = YearMonth.parse(d.month).minusMonths(1).toString()
@@ -192,7 +184,7 @@ fun InsightsScreen(onBack: () -> Unit, onCategory: (String) -> Unit) {
                             }
                             GoalBar(c.total.toFloat() / monthTotal)
                             Text("${c.total * 100 / monthTotal}% of spending · ${changeText(c.change, lastMonth)}",
-                                style = MaterialTheme.typography.bodySmall, color = OrvynTheme.colors.textSecondary)
+                                style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
                         }
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -212,7 +204,7 @@ fun InsightsScreen(onBack: () -> Unit, onCategory: (String) -> Unit) {
             }
         }
     }
-    editing?.let { cat -> BudgetSheet(cat.ifEmpty { null }, data?.budgets?.firstOrNull { it.category == cat }?.limit, onDismiss = { editing = null }) { reload++ } }
+    editing?.let { cat -> BudgetSheet(cat.ifEmpty { null }, data?.budgets?.firstOrNull { it.category == cat }?.limit, onDismiss = { editing = null }) { load.reload() } }
 }
 
 @Composable
@@ -247,9 +239,13 @@ private fun BudgetSheet(initialCategory: String?, current: Long?, onDismiss: () 
     var category by remember { mutableStateOf(initialCategory) }
     var limit by remember { mutableLongStateOf(current ?: 0L) }
     var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var confirm by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     fun save(value: Long?) = scope.launch {
+        busy = true
         try { Api.setBudget(category!!, value); onSaved(); onDismiss() } catch (e: ApiException) { error = e.message }
+        busy = false; confirm = false
     }
     OrvynBottomSheet(onDismiss) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -258,31 +254,32 @@ private fun BudgetSheet(initialCategory: String?, current: Long?, onDismiss: () 
                 for ((key, label) in CATEGORIES.map { it.first to it.second }) Chip(label, category == key) { category = key }
             }
             Text("Each month", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
-            AmountDisplay(limit, null, error, onQuickPick = { limit = it })
-            AmountKeypad(limit, { limit = it })
-            OrvynButton("Save budget", enabled = category != null && limit >= 10_000, onClick = { save(limit) }, modifier = Modifier.fillMaxWidth())
-            if (current != null) OrvynButton("Remove budget", kind = ButtonKind.Destructive, onClick = { save(null) }, modifier = Modifier.fillMaxWidth())
+            AmountDisplay(limit, null, null, onQuickPick = { limit = it })
+            AmountKeypad(limit, { limit = it; error = null })
+            error?.let { id.orvyn.app.ui.components.ErrorBox(it) }
+            OrvynButton("Save budget", enabled = category != null && limit >= 10_000, loading = busy && !confirm, onClick = { save(limit) }, modifier = Modifier.fillMaxWidth())
+            if (current != null) {
+                Spacer(Modifier.height(12.dp)) // 24dp from the primary action (Q-C5 AC4)
+                OrvynButton("Remove budget", kind = ButtonKind.DestructiveText, onClick = { confirm = true }, modifier = Modifier.align(Alignment.CenterHorizontally))
+            }
         }
     }
+    if (confirm && initialCategory != null) id.orvyn.app.ui.components.ConfirmDialog("Remove your ${categoryLabel(initialCategory)} budget?", "Reminders for this category stop.", "Remove",
+        destructive = true, busy = busy, onDismiss = { confirm = false }, onConfirm = { save(null) })
 }
 
 /** S2.9 AC3: this month's transactions in one category. */
 @Composable
 fun CategoryScreen(key: String, accountId: String?, onBack: () -> Unit, onOpen: (String) -> Unit) {
-    var items by remember { mutableStateOf<List<Transaction>?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(key) {
-        if (accountId == null) return@LaunchedEffect
+    val load = rememberLoad(key) {
         val start = LocalDate.now(ZoneId.of("Asia/Jakarta")).withDayOfMonth(1).atStartOfDay(ZoneId.of("Asia/Jakarta")).toInstant()
-        try { items = Api.transactions(accountId, category = key, from = start).items } catch (e: ApiException) { error = e.message }
+        Api.transactions(accountId ?: "", category = key, from = start).items
     }
     FlowScreen(categoryLabel(key), "This month, from ORVYN Everyday.", onBack) {
-        val l = items
-        when {
-            error != null -> MessageState(R.drawable.ph_warning_circle, "Couldn't load these", error!!)
-            l == null -> Skeleton(Modifier.fillMaxWidth().height(160.dp))
-            l.isEmpty() -> MessageState(categoryIcon(key), "Nothing here this month", "Credit card purchases count in insights and are listed under Cards.")
-            else -> LazyColumn { items(l, key = { it.id }) { t -> TransactionRow(t) { onOpen(t.id) }; HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) } }
+        LoadContent(load, "Couldn't load these", skeleton = { Skeleton(Modifier.fillMaxWidth().height(160.dp)) }) { l ->
+            // Q-E11 AC3: says which category, and nothing about credit cards.
+            if (l.isEmpty()) MessageState(R.drawable.ph_tray, "No ${categoryLabel(key)} spending this month.", "")
+            else LazyColumn { items(l, key = { it.id }) { t -> TransactionRow(t) { onOpen(t.id) }; HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) } }
         }
     }
 }

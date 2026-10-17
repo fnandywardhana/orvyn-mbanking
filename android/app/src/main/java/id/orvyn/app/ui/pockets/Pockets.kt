@@ -65,7 +65,7 @@ import id.orvyn.app.data.Transaction
 import id.orvyn.app.data.parseHome
 import id.orvyn.app.ui.Money
 import id.orvyn.app.ui.auth.FlowScreen
-import id.orvyn.app.ui.components.AmountDisplay
+import id.orvyn.app.ui.components.*
 import id.orvyn.app.ui.components.AmountKeypad
 import id.orvyn.app.ui.components.ButtonKind
 import id.orvyn.app.ui.components.Chip
@@ -190,8 +190,7 @@ fun PocketScreen(id: String, onBack: () -> Unit, onMove: (intoPocket: Boolean) -
             if (p != null) IconButton(onClick = onEdit) { Icon(painterResource(R.drawable.ph_pencil_simple), contentDescription = "Edit pocket") }
         }
         if (p == null) {
-            if (error != null) MessageState(R.drawable.ph_warning_circle, "Couldn't load this pocket", error!!,
-                action = { OrvynTextButton("Try again", onClick = { scope.launch { load() } }) })
+            if (error != null) LoadError("Couldn't load this pocket", error!!, retrying = false, onRetry = { scope.launch { load() } })
             else Skeleton(Modifier.padding(20.dp).fillMaxWidth().height(144.dp))
             return@Column
         }
@@ -277,7 +276,7 @@ private fun AutoSaveSheet(p: Pocket, onDismiss: () -> Unit, onSaved: () -> Unit)
                 "roundup" -> Text("Pay Rp23,000 and Rp7,000 goes into ${p.name}. Works for QRIS, bills and debit card payments.",
                     style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
             }
-            error?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+            error?.let { ErrorBox(it) }
             OrvynButton("Save", loading = saving, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), onClick = {
                 val rule = when (type) {
                     "payday" -> JSONObject().put("type", "payday").put("percent", percent)
@@ -344,8 +343,8 @@ fun PocketEditor(id: String?, onBack: () -> Unit, onSaved: (String) -> Unit, onC
                     if (date != null) OrvynTextButton("Clear", onClick = { date = null })
                 }
             }
-            if (existing != null) OrvynButton("Close pocket", onClick = { confirmClose = true }, kind = ButtonKind.Destructive, modifier = Modifier.fillMaxWidth())
-            error?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+            if (existing != null) OrvynButton("Close pocket", onClick = { confirmClose = true }, kind = ButtonKind.DestructiveText)
+            error?.let { ErrorBox(it) }
         }
         OrvynButton(if (id == null) "Create pocket" else "Save", loading = saving, enabled = name.isNotBlank() && targetError == null,
             modifier = Modifier.padding(vertical = 16.dp), onClick = {
@@ -391,41 +390,46 @@ fun PocketMoveFlow(id: String, intoPocket: Boolean, onExit: () -> Unit, startAmo
     var error by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
     var done by remember { mutableStateOf<Boolean?>(null) } // true when the goal was just reached
+    var movedAt by remember { mutableStateOf<java.time.Instant?>(null) }
     val key = remember { UUID.randomUUID().toString() }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         runCatching {
             pocket = Api.pockets().first { it.id == id }
             savings = parseHome(Api.homeJson()).accounts.first().balance
-        }.onFailure { error = it.message }
+        }.onFailure { error = it.say() }
+    }
+    var reload by remember { mutableStateOf(0) }
+    LaunchedEffect(reload) {
+        if (reload == 0) return@LaunchedEffect
+        error = null
+        runCatching { pocket = Api.pockets().first { it.id == id }; savings = parseHome(Api.homeJson()).accounts.first().balance }.onFailure { error = it.say() }
     }
     val p = pocket ?: return FlowScreen(if (intoPocket) "Add money" else "Take out", null, onExit) {
-        error?.let { MessageState(R.drawable.ph_warning_circle, "Couldn't load this pocket", it) } ?: Skeleton(Modifier.fillMaxWidth().height(120.dp))
+        error?.let { LoadError("Couldn't load this pocket", it, retrying = false, onRetry = { reload++ }) } ?: Skeleton(Modifier.fillMaxWidth().height(120.dp))
     }
     val available = if (intoPocket) savings else p.balance
     BackHandler(done != null) { onExit() }
     done?.let { reached ->
         return SuccessScreen(if (reached) "Goal reached" else if (intoPocket) "Added" else "Moved",
-            Money.format(amount), if (intoPocket) "into ${p.name}" else "back to ORVYN Everyday",
+            Money.format(amount), if (intoPocket) "into ${p.name}" else "back to ORVYN Everyday", date = movedAt,
             details = {
                 ReceiptLine("From", if (intoPocket) "ORVYN Everyday" else p.name)
                 ReceiptLine("${p.name} now", Money.format(p.balance + if (intoPocket) amount else -amount))
-            }, primaryLabel = "Done", onPrimary = onExit)
+            }, primaryLabel = "Done", onPrimary = onExit, buzz = false)
     }
-    FlowScreen(if (intoPocket) "Add to ${p.name}" else "Take out of ${p.name}",
-        if (intoPocket) "From ORVYN Everyday. No fee." else "Back to ORVYN Everyday. No fee.", onExit) {
-        Column(Modifier.weight(1f)) {
-            AmountDisplay(amount, available, error ?: if (amount > available) "You have ${Money.format(available)} to move." else null, onQuickPick = { amount = it; error = null })
-            Spacer(Modifier.weight(1f))
-            AmountKeypad(amount, { amount = it; error = null })
-        }
-        OrvynButton(if (amount > 0) "Move ${Money.format(amount)}" else "Enter an amount", enabled = amount in 1..available, loading = sending,
-            modifier = Modifier.padding(vertical = 16.dp), onClick = {
+    AmountScreen(if (intoPocket) "Add to ${p.name}" else "Take out of ${p.name}",
+        if (intoPocket) "From ORVYN Everyday. No fee." else "Back to ORVYN Everyday. No fee.", onExit,
+        keypad = { AmountKeypad(amount, { amount = it; error = null }) },
+        button = {
+            OrvynButton(if (amount > 0) "Move ${Money.format(amount)}" else "Enter an amount", enabled = amount in 1..available, loading = sending, onClick = {
                 scope.launch {
                     sending = true
-                    try { done = Api.movePocket(p.id, intoPocket, amount, key); DataVersion.count++ } catch (e: ApiException) { error = e.message }
+                    try { val r = Api.movePocket(p.id, intoPocket, amount, key); movedAt = r.second ?: java.time.Instant.now(); done = r.first; DataVersion.count++ } catch (e: ApiException) { error = e.message }
                     sending = false
                 }
             })
+        }) {
+        AmountDisplay(amount, available, error ?: if (amount > available) "You have ${Money.format(available)} to move." else null, onQuickPick = { amount = it; error = null })
     }
 }

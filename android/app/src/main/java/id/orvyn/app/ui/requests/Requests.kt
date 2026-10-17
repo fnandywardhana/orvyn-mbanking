@@ -51,7 +51,13 @@ import id.orvyn.app.data.Recipient
 import id.orvyn.app.data.Split
 import id.orvyn.app.ui.Money
 import id.orvyn.app.ui.auth.FlowScreen
-import id.orvyn.app.ui.components.AmountDisplay
+import id.orvyn.app.ui.components.*
+import id.orvyn.app.data.Paid
+import id.orvyn.app.ui.formatDateTime
+import id.orvyn.app.ui.shareTransaction
+import id.orvyn.app.ui.transfer.RecipientHeader
+import id.orvyn.app.ui.transfer.ReviewRow
+import androidx.compose.ui.platform.LocalContext
 import id.orvyn.app.ui.components.AmountKeypad
 import id.orvyn.app.ui.components.ButtonKind
 import id.orvyn.app.ui.components.ConfirmDialog
@@ -73,17 +79,11 @@ import kotlinx.coroutines.launch
 
 // Stories S2.6–S2.7: ask an ORVYN customer for money, or split a bill between friends.
 
-private fun statusText(r: MoneyRequest) = when (r.status) {
-    "open" -> if (r.mine) "Waiting" else "To pay"
-    "paid" -> "Paid"; "declined" -> "Declined"; "cancelled" -> "Cancelled"; else -> "Expired"
+/** Q-E9 (design.md 4.17): a status chip with an icon and a word, never colour alone. */
+private fun statusOf(status: String, mine: Boolean) = when (status) {
+    "open" -> if (mine) Status.Waiting else Status.ToPay
+    "paid" -> Status.Paid; "declined" -> Status.Declined; "cancelled" -> Status.Cancelled; else -> Status.Expired
 }
-
-@Composable
-private fun StatusLabel(status: String, text: String) = Text(text, style = MaterialTheme.typography.labelMedium, color = when (status) {
-    "paid" -> OrvynTheme.colors.success
-    "declined", "expired", "cancelled" -> OrvynTheme.colors.textSecondary
-    else -> OrvynTheme.colors.warning
-})
 
 @Composable
 private fun Section(text: String) = Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = OrvynTheme.colors.textSecondary,
@@ -92,21 +92,16 @@ private fun Section(text: String) = Text(text.uppercase(), style = MaterialTheme
 /** Everything asked of me, everything I asked, and my splits. */
 @Composable
 fun RequestsScreen(onBack: () -> Unit, onAsk: () -> Unit, onSplit: () -> Unit, onOpen: (String) -> Unit) {
-    var data by remember { mutableStateOf<Pair<List<MoneyRequest>, List<Split>>?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(DataVersion.count) { try { data = Api.requests(); error = null } catch (e: ApiException) { error = e.message } }
+    val data = rememberLoad(DataVersion.count) { Api.requests() }
     FlowScreen("Requests", null, onBack) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OrvynButton("Ask for money", onClick = onAsk, kind = ButtonKind.Secondary, modifier = Modifier.weight(1f))
             OrvynButton("Split a bill", onClick = onSplit, kind = ButtonKind.Secondary, modifier = Modifier.weight(1f))
         }
-        val d = data
-        when {
-            d == null && error != null -> MessageState(R.drawable.ph_warning_circle, "Couldn't load your requests", error!!)
-            d == null -> Skeleton(Modifier.padding(top = 16.dp).fillMaxWidth().height(160.dp))
-            d.first.isEmpty() && d.second.isEmpty() -> MessageState(R.drawable.ph_hand_coins, "No requests yet",
+        LoadContent(data, "Couldn't load your requests", skeleton = { Skeleton(Modifier.padding(top = 16.dp).fillMaxWidth().height(160.dp)) }) { d ->
+            if (d.first.isEmpty() && d.second.isEmpty()) MessageState(R.drawable.ph_hand_coins, "No requests yet",
                 "Ask a friend on ORVYN for money, or split a bill and everyone gets their share to pay.")
-            else -> LazyColumn {
+            else LazyColumn {
                 val toPay = d.first.filter { !it.mine && it.status == "open" }
                 if (toPay.isNotEmpty()) item { Section("To pay") }
                 items(toPay, key = { "p" + it.id }) { r -> RequestRow(r, onOpen) }
@@ -128,16 +123,16 @@ fun RequestsScreen(onBack: () -> Unit, onAsk: () -> Unit, onSplit: () -> Unit, o
 private fun RequestRow(r: MoneyRequest, onOpen: (String) -> Unit) {
     val other = if (r.mine) r.to else r.from
     Column {
-        Row(Modifier.fillMaxWidth().clickable { onOpen(r.id) }.heightIn(min = 64.dp).padding(vertical = 10.dp),
+        Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = rememberOnce { onOpen(r.id) }).heightIn(min = 64.dp).padding(vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             InitialsAvatar(other)
             Column(Modifier.weight(1f)) {
                 Text(if (r.mine) "You asked $other" else "$other asks you", style = MaterialTheme.typography.titleMedium)
                 Text(listOfNotNull(r.note, dayLabel(r.at)).joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
             }
-            Column(horizontalAlignment = Alignment.End) {
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(Money.format(r.amount), style = MaterialTheme.typography.titleMedium)
-                StatusLabel(r.status, statusText(r))
+                StatusChip(statusOf(r.status, r.mine))
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -147,8 +142,7 @@ private fun RequestRow(r: MoneyRequest, onOpen: (String) -> Unit) {
 @Composable
 private fun SplitCard(s: Split) {
     val paid = s.people.filter { it.status == "paid" }.sumOf { it.amount }
-    Column(Modifier.padding(vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface)
-        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    OrvynCard(Modifier.padding(vertical = 6.dp)) {
         Row {
             Text(s.note ?: "Split bill", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             Text(Money.format(s.total), style = MaterialTheme.typography.titleMedium)
@@ -157,76 +151,133 @@ private fun SplitCard(s: Split) {
         for (p in s.people) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(p.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             Text(Money.format(p.amount), style = MaterialTheme.typography.bodyLarge)
-            StatusLabel(p.status, when (p.status) { "open" -> "Waiting"; "paid" -> "Paid"; "declined" -> "Declined"; else -> p.status.replaceFirstChar(Char::uppercase) })
+            StatusChip(statusOf(p.status, mine = true))
         }
     }
 }
 
-/** One request: pay or decline it (asked of me), or cancel it (mine). Paying needs the PIN, like any transfer. */
+/**
+ * One request (design.md 10.7). Asked of me and open: Pay goes through a review screen, then the PIN; Decline asks first
+ * (PO-26). Mine and open: Cancel request asks first, with Keep request to back out (PO-15).
+ */
 @Composable
 fun RequestScreen(id: String, onBack: () -> Unit) {
-    var r by remember { mutableStateOf<MoneyRequest?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var paying by remember { mutableStateOf(false) }
-    var pinError by remember { mutableStateOf<String?>(null) }
-    var pinErrors by remember { mutableIntStateOf(0) }
-    var reference by remember { mutableStateOf<String?>(null) }
+    val load = rememberLoad { Api.request(id) }
+    var step by remember { mutableIntStateOf(0) } // 0 detail, 1 review, 2 PIN, 3 done
+    var refused by remember { mutableStateOf<String?>(null) }
+    var paid by remember { mutableStateOf<Paid?>(null) }
     var confirm by remember { mutableStateOf<String?>(null) } // "decline" or "cancel"
+    var working by remember { mutableStateOf(false) }
+    var actionError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(id) { try { r = Api.request(id) } catch (e: ApiException) { error = e.message } }
-    val q = r
-    BackHandler(paying && reference == null) { paying = false }
-    if (q != null && reference != null) return SuccessScreen("Paid", Money.format(q.amount), "to ${q.from}",
-        details = { q.note?.let { ReceiptLine("Note", it) }; ReceiptLine("Reference", reference!!) }, primaryLabel = "Done", onPrimary = onBack)
-    if (q != null && paying) return FlowScreen("Enter your PIN", "To pay ${Money.format(q.amount)} to ${q.from}.", { paying = false }) {
-        Spacer(Modifier.weight(1f))
-        PinPad(onComplete = { pin ->
-            scope.launch {
-                try { reference = Api.payRequest(q.id, pin).reference; DataVersion.count++ }
-                catch (e: ApiException) { if (e.code == "WRONG_PIN") { pinError = e.message; pinErrors++ } else { error = e.message; paying = false } }
-            }
-        }, errorCount = pinErrors, errorText = pinError, onBiometric = null, modifier = Modifier.padding(bottom = 24.dp))
+    val context = LocalContext.current
+    BackHandler(step in 1..2) { step -= 1 }
+    val q = load.value ?: return FlowScreen("Money request", null, onBack) {
+        LoadContent(load, "Couldn't load this request", skeleton = { Skeleton(Modifier.fillMaxWidth().height(160.dp)) }) {}
     }
-    FlowScreen("Money request", null, onBack) {
-        if (q == null) {
-            error?.let { MessageState(R.drawable.ph_warning_circle, "Couldn't load this request", it) } ?: Skeleton(Modifier.fillMaxWidth().height(160.dp))
-            return@FlowScreen
-        }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                InitialsAvatar(if (q.mine) q.to else q.from)
-                Text(if (q.mine) "You asked ${q.to}" else "${q.from} asks you", style = MaterialTheme.typography.titleLarge)
+    FlowSteps(step, index = { it }, success = { it == 3 }) { s ->
+        when (s) {
+            0 -> FlowScreen("Money request", null, onBack) {
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        InitialsAvatar(if (q.mine) q.to else q.from)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(if (q.mine) "You asked ${q.to}" else "${q.from} asks you", style = MaterialTheme.typography.titleLarge)
+                            StatusChip(statusOf(q.status, q.mine))
+                        }
+                    }
+                    AmountText(Money.format(q.amount), OrvynType.displayBalance)
+                    OrvynCard {
+                        ReviewRow(if (q.mine) "To" else "From", if (q.mine) q.to else q.from)
+                        q.note?.let { ReviewRow("Note", it) }
+                        ReviewRow("Sent", formatDateTime(q.at))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Status", style = MaterialTheme.typography.bodyLarge, color = OrvynTheme.colors.textSecondary, modifier = Modifier.weight(1f))
+                            StatusChip(statusOf(q.status, q.mine))
+                        }
+                    }
+                    actionError?.let { ErrorBox(it) }
+                }
+                if (q.status == "open") {
+                    if (q.mine) OrvynButton("Cancel request", onClick = { confirm = "cancel" }, kind = ButtonKind.Secondary, modifier = Modifier.padding(vertical = 16.dp))
+                    else {
+                        OrvynButton("Pay ${Money.format(q.amount)}", onClick = { actionError = null; refused = null; step = 1 }, modifier = Modifier.padding(top = 16.dp))
+                        Spacer(Modifier.height(12.dp))
+                        OrvynButton("Decline", onClick = { confirm = "decline" }, kind = ButtonKind.DestructiveText, modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp))
+                    }
+                }
             }
-            Text(Money.format(q.amount), style = OrvynType.displayBalance)
-            q.note?.let { Text("“$it”", style = MaterialTheme.typography.bodyLarge) }
-            StatusLabel(q.status, when (q.status) {
-                "open" -> if (q.mine) "Waiting for ${q.to.substringBefore(' ')}" else "Sent ${dayLabel(q.at)}. Open for 7 days."
-                else -> statusText(q)
-            })
-            error?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
-        }
-        if (q.status == "open") {
-            if (q.mine) OrvynButton("Cancel request", onClick = { confirm = "cancel" }, kind = ButtonKind.Secondary, modifier = Modifier.padding(vertical = 16.dp))
-            else {
-                OrvynButton("Pay ${Money.format(q.amount)}", onClick = { error = null; paying = true }, modifier = Modifier.padding(top = 16.dp))
-                OrvynButton("Decline", onClick = { confirm = "decline" }, kind = ButtonKind.Secondary, modifier = Modifier.padding(vertical = 10.dp))
-            }
+            1 -> PayReview(q, refused, onBack = { step = 0 }) { step = 2 }
+            2 -> PinConfirm(q, onBack = { step = 1 }, onRefused = { refused = it; step = 1 }) { p -> paid = p; DataVersion.count++; step = 3 }
+            else -> SuccessScreen("Paid", Money.format(q.amount), "to ${q.from}", date = paid?.at, details = {
+                ReceiptLine("To", q.from)
+                q.note?.let { ReceiptLine("Note", it) }
+                ReceiptLine("Reference", paid?.reference ?: "")
+            }, onPrimary = onBack, onShare = paid?.transactionId?.let { tid -> { shareTransaction(context, tid) } })
         }
     }
     confirm?.let { what ->
+        val first = (if (what == "decline") q.from else q.to).substringBefore(' ')
         ConfirmDialog(
             title = if (what == "decline") "Decline this request?" else "Cancel this request?",
-            body = if (what == "decline") "${q?.from?.substringBefore(' ')} gets a message that you declined." else "${q?.to?.substringBefore(' ')} won't be able to pay it anymore.",
-            confirmLabel = if (what == "decline") "Decline" else "Cancel request", destructive = true, onDismiss = { confirm = null },
+            body = if (what == "decline") "$first gets a message that you declined." else "$first won't be able to pay it anymore.",
+            confirmLabel = if (what == "decline") "Decline" else "Cancel request", dismissLabel = "Keep request", destructive = true, busy = working,
+            onDismiss = { confirm = null },
             onConfirm = {
-                confirm = null
+                working = true
                 scope.launch {
-                    try { if (what == "decline") Api.declineRequest(id) else Api.cancelRequest(id); DataVersion.count++; r = Api.request(id) }
-                    catch (e: ApiException) { error = e.message }
+                    try { if (what == "decline") Api.declineRequest(id) else Api.cancelRequest(id); DataVersion.count++; load.reload() }
+                    catch (e: ApiException) { actionError = e.message }
+                    working = false; confirm = null
                 }
             },
         )
     }
+}
+
+/** Q-F7: who gets it, the amount, the fee (free) and the balance after, before the PIN. */
+@Composable
+private fun PayReview(q: MoneyRequest, refused: String?, onBack: () -> Unit, onPay: () -> Unit) {
+    val opts = rememberLoad { Api.transferOptions("ORVYN", q.amount) }
+    FlowScreen("Check the details", null, onBack) {
+        val o = opts.value
+        val short = o?.let { q.amount - it.balance }?.takeIf { it > 0 }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            RecipientHeader(Recipient("ORVYN", "ORVYN Bank", q.fromAccount ?: "", q.from))
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                ReviewRow("Amount", Money.format(q.amount))
+                ReviewRow("Fee", "Free")
+                q.note?.let { ReviewRow("Note", it) }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ReviewRow("Total", Money.format(q.amount), strong = true)
+                when {
+                    o != null -> ReviewRow("Balance after", Money.format(o.balance - q.amount))
+                    opts.error != null -> InlineLoadError(opts.error!!, opts.busy, opts::reload)
+                    else -> Skeleton(Modifier.fillMaxWidth().height(24.dp))
+                }
+            }
+        }
+        (short?.let { "You're ${Money.format(it)} short." } ?: refused)?.let { ErrorBox(it, Modifier.padding(top = 12.dp)) }
+        OrvynButton("Pay ${Money.format(q.amount)}", enabled = o != null && short == null, onClick = onPay, modifier = Modifier.padding(vertical = 16.dp))
+    }
+}
+
+@Composable
+private fun PinConfirm(q: MoneyRequest, onBack: () -> Unit, onRefused: (String) -> Unit, onPaid: (Paid) -> Unit) {
+    var error by remember { mutableStateOf<String?>(null) }
+    var errors by remember { mutableIntStateOf(0) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    PinScreen("Enter your PIN", "To pay ${Money.format(q.amount)} to ${q.from}.", onBack, errorCount = errors, errorText = error,
+        busyText = if (busy) "Paying ${Money.format(q.amount)}…" else null,
+        onComplete = { pin ->
+            busy = true; error = null
+            scope.launch {
+                try { onPaid(Api.payRequest(q.id, pin)) }
+                catch (e: ApiException) { when (e.code) { "WRONG_PIN" -> { error = e.message; errors++ }; "LOCKED", "signed_out" -> {}; else -> onRefused(e.message) } }
+                finally { busy = false }
+            }
+        })
 }
 
 /** Pick ORVYN people: saved and recent ones, or anyone by account number. */
@@ -282,38 +333,51 @@ private fun PeoplePicker(title: String, body: String, multi: Boolean, initial: L
     }
 }
 
-/** S2.6: person → amount and note → sent. */
+/** S2.6 and Q-G9: person → amount → check the request (the note goes here, never next to the keypad) → sent. */
 @Composable
 fun AskFlow(onExit: () -> Unit) {
     var who by remember { mutableStateOf<Recipient?>(null) }
     var amount by remember { mutableLongStateOf(0L) }
     var note by remember { mutableStateOf("") }
-    var sent by remember { mutableStateOf(false) }
+    var step by remember { mutableIntStateOf(0) } // 0 who, 1 amount, 2 check, 3 sent
     var sending by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var sentAt by remember { mutableStateOf<java.time.Instant?>(null) }
     val scope = rememberCoroutineScope()
-    val w = who
-    BackHandler(w != null && !sent) { who = null }
-    when {
-        w == null -> PeoplePicker("Ask for money", "From someone with an ORVYN account.", multi = false, initial = emptyList(), onBack = onExit) { who = it.first() }
-        sent -> SuccessScreen("Request sent", Money.format(amount), "asked of ${w.name}",
-            details = { if (note.isNotBlank()) ReceiptLine("Note", note); ReceiptLine("Open for", "7 days") }, primaryLabel = "Done", onPrimary = onExit)
-        else -> FlowScreen("Ask ${w.name.substringBefore(' ')}", "They get a notification and pay with one tap and their PIN.", { who = null }) {
-            Column(Modifier.weight(1f)) {
-                AmountDisplay(amount, null, error, onQuickPick = { amount = it })
-                Spacer(Modifier.height(16.dp))
-                OrvynTextField("Note (optional)", note, { note = it.take(50) }, helper = "For example \"Lunch on Friday\"")
-                Spacer(Modifier.weight(1f))
-                AmountKeypad(amount, { amount = it; error = null })
+    BackHandler(step in 1..2) { step -= 1 }
+    FlowSteps(step, index = { it }, success = { it == 3 }) { s ->
+        val w = who
+        when {
+            s == 0 || w == null -> PeoplePicker("Ask for money", "From someone with an ORVYN account.", multi = false, initial = emptyList(), onBack = onExit) { who = it.first(); step = 1 }
+            s == 1 -> AmountScreen("Ask ${w.name.substringBefore(' ')}", "They get a notification and pay with one tap and their PIN.", { step = 0 },
+                keypad = { AmountKeypad(amount, { amount = it }) },
+                button = { OrvynButton(if (amount >= 1_000) "Continue" else "Ask for at least Rp1,000", enabled = amount >= 1_000, onClick = { error = null; step = 2 }) }) {
+                AmountDisplay(amount, null, null, onQuickPick = { amount = it })
             }
-            OrvynButton(if (amount >= 1_000) "Ask for ${Money.format(amount)}" else "Ask for at least Rp1,000", enabled = amount >= 1_000, loading = sending,
-                modifier = Modifier.padding(vertical = 16.dp), onClick = {
+            s == 2 -> FlowScreen("Check the request", null, { step = 1 }) {
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    OrvynCard {
+                        ReviewRow("Ask", w.name)
+                        ReviewRow("Amount", Money.format(amount))
+                        ReviewRow("Open for", "7 days")
+                    }
+                    Column {
+                        OrvynTextField("Note (optional)", note, { note = it.take(50) }, helper = "For example \"Lunch on Friday\". ${w.name.substringBefore(' ')} sees this.")
+                        Text("${note.length}/50", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary, modifier = Modifier.align(Alignment.End))
+                    }
+                }
+                error?.let { ErrorBox(it, Modifier.padding(top = 12.dp)) }
+                OrvynButton("Ask for ${Money.format(amount)}", loading = sending, modifier = Modifier.padding(vertical = 16.dp), onClick = {
+                    sending = true
                     scope.launch {
-                        sending = true
-                        try { Api.askForMoney(w.accountNumber, amount, note.trim()); DataVersion.count++; sent = true } catch (e: ApiException) { error = e.message }
+                        try { sentAt = Api.askForMoney(w.accountNumber, amount, note.trim()) ?: java.time.Instant.now(); DataVersion.count++; step = 3 }
+                        catch (e: ApiException) { error = e.message }
                         sending = false
                     }
                 })
+            }
+            else -> SuccessScreen("Request sent", Money.format(amount), "asked of ${w.name}", date = sentAt, buzz = false,
+                details = { if (note.isNotBlank()) ReceiptLine("Note", note.trim()); ReceiptLine("Open for", "7 days") }, onPrimary = onExit)
         }
     }
 }
@@ -332,13 +396,9 @@ fun SplitFlow(startTotal: Long?, onExit: () -> Unit) {
     val scope = rememberCoroutineScope()
     BackHandler(step in 1..2) { step -= 1 }
     when (step) {
-        0 -> FlowScreen("Split a bill", "How much was the whole bill?", onExit) {
-            Column(Modifier.weight(1f)) {
-                AmountDisplay(total, null, null, onQuickPick = { total = it })
-                Spacer(Modifier.weight(1f))
-                AmountKeypad(total, { total = it })
-            }
-            OrvynButton("Next", enabled = total >= 2_000, onClick = { step = 1 }, modifier = Modifier.padding(vertical = 16.dp))
+        0 -> AmountScreen("Split a bill", "How much was the whole bill?", onExit, keypad = { AmountKeypad(total, { total = it }) },
+            button = { OrvynButton("Next", enabled = total >= 2_000, onClick = { step = 1 }) }) {
+            AmountDisplay(total, null, null, onQuickPick = { total = it })
         }
         1 -> PeoplePicker("Who's in?", "Pick up to 9 friends on ORVYN. You pay your own share.", multi = true, initial = friends, onBack = { if (startTotal != null) onExit() else step = 0 }) {
             picked ->
@@ -364,7 +424,7 @@ fun SplitFlow(startTotal: Long?, onExit: () -> Unit) {
                     }
                     OrvynTextField("What for (optional)", note, { note = it.take(50) }, helper = "Your friends see this, like \"Dinner at Bakmi 88\"")
                     if (friendsTotal > total) Text("Your friends' shares add up to more than the bill.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-                    error?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+                    error?.let { ErrorBox(it) }
                 }
                 OrvynButton("Send ${friends.size} ${if (friends.size == 1) "request" else "requests"}", loading = sending,
                     enabled = friendsTotal <= total && shares.all { it >= 1_000 }, modifier = Modifier.padding(vertical = 16.dp), onClick = {
@@ -388,7 +448,7 @@ fun SplitFlow(startTotal: Long?, onExit: () -> Unit) {
                 }
             }
         }
-        else -> SuccessScreen("Requests sent", Money.format(shares.sum()), "asked of ${friends.size} ${if (friends.size == 1) "friend" else "friends"}",
+        else -> SuccessScreen("Requests sent", Money.format(shares.sum()), "asked of ${friends.size} ${if (friends.size == 1) "friend" else "friends"}", buzz = false, date = remember { java.time.Instant.now() },
             details = { friends.forEachIndexed { i, f -> ReceiptLine(f.name, Money.format(shares[i])) }; ReceiptLine("Your share", Money.format(total - shares.sum())) },
             primaryLabel = "Done", onPrimary = onExit)
     }

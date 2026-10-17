@@ -44,7 +44,7 @@ data class Pocket(val id: String, val name: String, val balance: Long, val image
 }
 
 /** Story S2.6. [status]: open, paid, declined, cancelled or expired. [mine]: I asked; otherwise I'm asked to pay. */
-data class MoneyRequest(val id: String, val amount: Long, val note: String?, val status: String, val mine: Boolean, val from: String, val to: String, val splitId: String?, val at: Instant)
+data class MoneyRequest(val id: String, val amount: Long, val note: String?, val status: String, val mine: Boolean, val from: String, val to: String, val splitId: String?, val at: Instant, val fromAccount: String? = null)
 data class SplitPerson(val requestId: String, val name: String, val amount: Long, val status: String)
 data class Split(val id: String, val total: Long, val note: String?, val people: List<SplitPerson>)
 
@@ -248,9 +248,9 @@ object Api {
     suspend fun updatePocket(p: Pocket, name: String = p.name, image: String = p.image, target: Long? = p.target, targetDate: String? = p.targetDate, rule: JSONObject? = p.rule) {
         call("POST", "/pockets/${p.id}", pocketBody(name, image, target, targetDate).put("rule", rule ?: JSONObject.NULL))
     }
-    /** Returns true when this move reached the pocket's target. */
-    suspend fun movePocket(id: String, intoPocket: Boolean, amount: Long, key: String): Boolean =
-        call("POST", "/pockets/$id/move", JSONObject().put("direction", if (intoPocket) "in" else "out").put("amount", amount).put("idempotencyKey", key)).optBoolean("reached")
+    /** (whether this move reached the pocket's target, when it happened). */
+    suspend fun movePocket(id: String, intoPocket: Boolean, amount: Long, key: String): Pair<Boolean, Instant?> =
+        call("POST", "/pockets/$id/move", JSONObject().put("direction", if (intoPocket) "in" else "out").put("amount", amount).put("idempotencyKey", key)).let { it.optBoolean("reached") to it.instantOrNull("at") }
     suspend fun closePocket(id: String, key: String) { call("POST", "/pockets/$id/close", JSONObject().put("idempotencyKey", key)) }
 
     suspend fun banks(): List<Bank> = call("GET", "/banks").getJSONArray("banks").map { Bank(it.getString("code"), it.getString("name")) }
@@ -398,7 +398,7 @@ object Api {
 
     // Money Requests and Split Bills (stories S2.6–S2.7)
     private fun parseRequest(r: JSONObject) = MoneyRequest(r.getString("id"), r.getLong("amount"), r.optStringOrNull("note"), r.getString("status"),
-        r.getBoolean("mine"), r.getString("from"), r.getString("to"), r.optStringOrNull("splitId"), Instant.parse(r.getString("createdAt")))
+        r.getBoolean("mine"), r.getString("from"), r.getString("to"), r.optStringOrNull("splitId"), Instant.parse(r.getString("createdAt")), r.optStringOrNull("fromAccount"))
     suspend fun requests(): Pair<List<MoneyRequest>, List<Split>> {
         val r = call("GET", "/requests")
         return r.getJSONArray("requests").map(::parseRequest) to r.getJSONArray("splits").map { s ->
@@ -408,9 +408,9 @@ object Api {
         }
     }
     suspend fun request(id: String): MoneyRequest = parseRequest(call("GET", "/requests/$id"))
-    suspend fun askForMoney(accountNumber: String, amount: Long, note: String) {
-        call("POST", "/requests", JSONObject().put("accountNumber", accountNumber).put("amount", amount).put("note", note))
-    }
+    /** Returns when the request was made, for the success screen. */
+    suspend fun askForMoney(accountNumber: String, amount: Long, note: String): Instant? =
+        call("POST", "/requests", JSONObject().put("accountNumber", accountNumber).put("amount", amount).put("note", note)).instantOrNull("createdAt")
     suspend fun splitBill(total: Long, note: String, shares: List<Pair<String, Long>>) {
         call("POST", "/splits", JSONObject().put("total", total).put("note", note).put("shares",
             org.json.JSONArray(shares.map { (number, amount) -> JSONObject().put("accountNumber", number).put("amount", amount) })))

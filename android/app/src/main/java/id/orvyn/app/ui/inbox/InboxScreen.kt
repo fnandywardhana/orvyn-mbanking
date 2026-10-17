@@ -34,41 +34,49 @@ import id.orvyn.app.data.ApiException
 import id.orvyn.app.data.DataVersion
 import id.orvyn.app.data.InboxItem
 import id.orvyn.app.ui.auth.FlowScreen
-import id.orvyn.app.ui.components.MessageState
+import id.orvyn.app.ui.components.*
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.font.FontWeight
 import id.orvyn.app.ui.components.Skeleton
 import id.orvyn.app.ui.dayLabel
 import id.orvyn.app.ui.formatTime
 import id.orvyn.app.ui.theme.OrvynTheme
 
-/** Story S1.27: every notification, kept in the app. Opening it marks everything read. */
+/** "Sinta Maharani asks for Rp50,000: lunch" → "Sinta Maharani asks you for Rp50,000" (design.md 10.7). */
+private fun requestLabel(body: String) = Regex("^(.+?) asks for (Rp[\\d,]+)").find(body)?.let { "${it.groupValues[1]} asks you for ${it.groupValues[2]}" } ?: body
+
+/**
+ * Story S1.27 and Q-E7: every notification, kept in the app. Opening it marks everything read. Rows with somewhere to go
+ * are buttons; the others are plain text (never announced "disabled"). Unread titles are bolder and darker.
+ */
 @Composable
 fun InboxScreen(onBack: () -> Unit, onOpenTransaction: (String) -> Unit, onOpenRequest: (String) -> Unit = {}) {
-    var items by remember { mutableStateOf<List<InboxItem>?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        try { items = Api.inbox(); Api.markInboxRead(); DataVersion.count++ } catch (e: ApiException) { error = e.message }
-    }
+    val load = rememberLoad { Api.inbox().also { runCatching { Api.markInboxRead(); DataVersion.count++ } } }
     FlowScreen("Inbox", null, onBack) {
-        val list = items
-        when {
-            error != null -> MessageState(R.drawable.ph_warning_circle, "Couldn't load your inbox", error!!)
-            list == null -> repeat(4) { Skeleton(Modifier.padding(vertical = 8.dp).fillMaxWidth().height(56.dp)) }
-            list.isEmpty() -> MessageState(R.drawable.ph_bell, "Nothing here yet", "Money in, money out and news from ORVYN show up here.")
-            else -> LazyColumn {
+        LoadContent(load, "Couldn't load your inbox", skeleton = { Column { repeat(4) { Skeleton(Modifier.padding(vertical = 8.dp).fillMaxWidth().height(56.dp)) } } }) { list ->
+            if (list.isEmpty()) MessageState(R.drawable.ph_bell, "Nothing here yet", "Money in, money out and news from ORVYN show up here.")
+            else LazyColumn {
                 items(list, key = { it.id }) { m ->
+                    val link = m.link?.takeIf { it.startsWith("tx:") || it.startsWith("request:") }
+                    val time = "${dayLabel(m.at)}, ${formatTime(m.at)}"
+                    val label = (if (!m.read) "Unread, " else "") + (if (link?.startsWith("request:") == true) requestLabel(m.body) else "${m.title}, ${m.body}") + ", $time"
                     Row(
-                        Modifier.fillMaxWidth().clickable(enabled = m.link?.startsWith("tx:") == true || m.link?.startsWith("request:") == true) {
-                            if (m.link!!.startsWith("tx:")) onOpenTransaction(m.link.removePrefix("tx:")) else onOpenRequest(m.link.removePrefix("request:"))
-                        }
-                            .padding(vertical = 14.dp).semantics { if (!m.read) stateDescription = "Unread" },
+                        Modifier.fillMaxWidth()
+                            .then(if (link != null) Modifier.clickable(role = Role.Button, onClick = rememberOnce {
+                                if (link.startsWith("tx:")) onOpenTransaction(link.removePrefix("tx:")) else onOpenRequest(link.removePrefix("request:"))
+                            }) else Modifier)
+                            .semantics(mergeDescendants = true) { contentDescription = label }
+                            .padding(vertical = 14.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Box(Modifier.padding(top = 6.dp).size(8.dp).clip(CircleShape)
                             .background(if (m.read) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.primary))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(m.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                                Text("${dayLabel(m.at)}, ${formatTime(m.at)}", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textTertiary)
+                                Text(m.title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = if (m.read) FontWeight.SemiBold else FontWeight.Bold),
+                                    color = if (m.read) OrvynTheme.colors.textSecondary else MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                                Text(time, style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textTertiary)
                             }
                             Text(m.body, style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
                         }

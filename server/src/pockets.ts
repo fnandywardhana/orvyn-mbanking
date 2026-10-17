@@ -98,7 +98,7 @@ export async function movePocket(sql: Sql, customerId: string, pocketId: string,
       memo: { from: { name: from.name }, to: { name: to.name }, channel, category: 'pocket' },
       postings: [{ accountId: from.id, amount: -amount }, { accountId: to.id, amount }],
     })
-    return { journalId: j.id as string, reached: await checkTarget(sql, customerId, p.id) }
+    return { journalId: j.id as string, at: j.created_at, reached: await checkTarget(sql, customerId, p.id) }
   } catch (e) {
     if (e instanceof LedgerError && e.code === 'INSUFFICIENT_FUNDS')
       throw new PocketError('INSUFFICIENT_FUNDS', `You have ${rp(Number(from.balance))} in ${from.name}.`)

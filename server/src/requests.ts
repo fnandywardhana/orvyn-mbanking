@@ -69,13 +69,15 @@ export function equalShares(total: number, friends: number) {
 export async function listRequests(sql: Sql, customerId: string) {
   const rows = await sql`
     select r.id, r.amount, r.note, r.split_id, r.created_at, r.expires_at, ${STATUS(sql)} as status,
-      r.requester_id = ${customerId} as mine, q.full_name as requester, p.full_name as payer
+      r.requester_id = ${customerId} as mine, q.full_name as requester, p.full_name as payer, qa.number as requester_account
     from money_requests r join customers q on q.id = r.requester_id join customers p on p.id = r.payer_id
+      join accounts qa on qa.customer_id = r.requester_id and qa.kind = 'savings'
     where r.requester_id = ${customerId} or r.payer_id = ${customerId}
     order by r.created_at desc limit 100`
   return rows.map(r => ({
     id: r.id, amount: Number(r.amount), note: r.note, splitId: r.split_id, status: r.status, mine: r.mine,
     from: r.requester, to: r.payer, createdAt: r.created_at, expiresAt: r.expires_at,
+    fromAccount: r.requester_account, // Q-F7: the payer's review shows where the money goes, like any ORVYN transfer
   }))
 }
 

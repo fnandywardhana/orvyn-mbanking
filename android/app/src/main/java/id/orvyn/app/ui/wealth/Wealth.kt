@@ -47,6 +47,10 @@ import id.orvyn.app.ui.Money
 import id.orvyn.app.ui.ThemeIsDark
 import id.orvyn.app.ui.auth.FlowScreen
 import id.orvyn.app.ui.components.ListRow
+import id.orvyn.app.ui.components.LoadContent
+import id.orvyn.app.ui.components.rememberLoad
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.heightIn
 import id.orvyn.app.ui.components.MessageState
 import id.orvyn.app.ui.components.OrvynTextButton
 import id.orvyn.app.ui.components.Skeleton
@@ -63,19 +67,24 @@ private val ORDER = listOf("cash", "deposits", "fx", "funds", "bonds", "gold") /
 @Composable
 fun slotColor(key: String): Color = (if (ThemeIsDark.value) SLOTS_DARK else SLOTS_LIGHT)[ORDER.indexOf(key).coerceAtLeast(0)]
 
-/** One 100% bar, 2dp surface gaps between parts, 4dp rounded ends. Labels live in the list below it (identity is never colour alone). */
+/** One 100% bar, 2dp surface gaps, every part at least 6dp wide (Q-E8 AC4). Labels live in the list below it. */
 @Composable
 fun CompositionBar(w: Wealth, modifier: Modifier = Modifier) {
     val parts = w.parts.filter { it.value > 0 }
     val colors = parts.map { slotColor(it.key) }
     val gap = MaterialTheme.colorScheme.surface
     Canvas(modifier.fillMaxWidth().height(14.dp).semantics {
-        contentDescription = parts.joinToString(", ") { "${it.label} ${it.value * 100 / w.total.coerceAtLeast(1)}%" }
+        contentDescription = parts.joinToString(", ") { "${it.label}, ${share(it.value, w.total)}" }
     }) {
-        var x = 0f
         val r = 4.dp.toPx()
-        parts.forEachIndexed { i, p ->
-            val width = size.width * p.value / w.total.coerceAtLeast(1)
+        val min = 6.dp.toPx()
+        val total = w.total.coerceAtLeast(1).toFloat()
+        val raw = parts.map { size.width * it.value / total }
+        val small = raw.count { it < min }
+        val squeeze = (size.width - small * min) / raw.filter { it >= min }.sum().coerceAtLeast(1f)
+        var x = 0f
+        parts.forEachIndexed { i, _ ->
+            val width = if (raw[i] < min) min else raw[i] * squeeze
             drawRoundRect(colors[i], Offset(x, 0f), Size(width, size.height), CornerRadius(r, r))
             if (i > 0) drawRect(gap, Offset(x - 1.dp.toPx(), 0f), Size(2.dp.toPx(), size.height))
             x += width
@@ -85,71 +94,76 @@ fun CompositionBar(w: Wealth, modifier: Modifier = Modifier) {
 
 @Composable
 fun WealthScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
-    var w by remember { mutableStateOf<Wealth?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(DataVersion.count) { try { w = Api.wealth(); error = null } catch (e: ApiException) { error = e.message } }
+    val load = rememberLoad(DataVersion.count) { Api.wealth() }
     FlowScreen("Wealth", "Everything you have with ORVYN, valued in Rupiah today.", onBack) {
-        val x = w
-        when {
-            x == null && error != null -> MessageState(R.drawable.ph_warning_circle, "Couldn't load your wealth", error!!)
-            x == null -> Skeleton(Modifier.fillMaxWidth().height(200.dp))
-            else -> Column(Modifier.verticalScroll(rememberScrollState())) {
+        LoadContent(load, "Couldn't load your wealth", skeleton = { Skeleton(Modifier.fillMaxWidth().height(200.dp)) }) { x ->
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text("Total assets", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
-                Text(Money.format(x.total), style = OrvynType.displayBalance)
+                id.orvyn.app.ui.components.AmountText(Money.format(x.total), OrvynType.displayBalance)
                 Spacer(Modifier.height(16.dp))
                 CompositionBar(x)
                 Spacer(Modifier.height(8.dp))
                 for (p in x.parts) {
-                    val route = mapOf("cash" to null, "deposits" to "deposits", "fx" to "fx", "funds" to "invest", "bonds" to "invest", "gold" to "invest")[p.key]
+                    // Q-E8: the whole row opens its screen; Savings and pockets opens the account detail (PO-16).
+                    val route = mapOf("cash" to "account", "deposits" to "deposits", "fx" to "fx", "funds" to "invest", "bonds" to "invest", "gold" to "invest")[p.key]
                     val enabled = when (p.key) { "deposits" -> AppConfig.on("deposits"); "fx" -> AppConfig.on("fx"); "cash" -> true; else -> AppConfig.on("invest") }
                     if (!enabled && p.value == 0L) continue
-                    Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(Modifier.fillMaxWidth().then(if (route != null && enabled) Modifier.clickable(role = androidx.compose.ui.semantics.Role.Button) { onOpen(route) } else Modifier)
+                        .semantics(mergeDescendants = true) {}.heightIn(min = 56.dp).padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Box(Modifier.size(12.dp).clip(CircleShape).background(slotColor(p.key)))
                         Column(Modifier.weight(1f)) {
                             Text(p.label, style = MaterialTheme.typography.titleMedium)
-                            Text(share(p.value, x.total), style = MaterialTheme.typography.bodySmall, color = OrvynTheme.colors.textSecondary)
+                            Text(share(p.value, x.total), style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
                         }
                         Text(Money.format(p.value), style = MaterialTheme.typography.titleMedium)
-                        if (route != null && enabled) OrvynTextButton("Open", onClick = { onOpen(route) })
+                        if (route != null && enabled) Chevron()
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
                 if (x.creditOwed > 0) {
                     SectionLabel("Owed")
-                    ListRow("Credit cards", "Not taken off your assets", R.drawable.ph_credit_card) { Text(Money.format(x.creditOwed), style = MaterialTheme.typography.titleMedium) }
+                    ListRow("Credit cards", "Not counted in your total", R.drawable.ph_credit_card) { Text(Money.format(x.creditOwed), style = MaterialTheme.typography.titleMedium) }
                 }
-                SectionLabel("Grow your money")
-                if (AppConfig.on("deposits")) ListRow("Time deposits", "Fixed rate for 1 to 12 months", R.drawable.ph_calendar_blank, onClick = { onOpen("deposits") }) { Chevron() }
-                if (AppConfig.on("fx")) ListRow("Foreign currency", "USD, SGD, JPY, AUD and EUR", R.drawable.ph_coins, onClick = { onOpen("fx") }) { Chevron() }
-                if (AppConfig.on("invest")) ListRow("Investments", "Mutual funds, bonds and gold", R.drawable.ph_chart_bar, onClick = { onOpen("invest") }) { Chevron() }
+                // Only what the customer doesn't have yet; nothing at all when they have it all (Q-E8 AC5).
+                val held = { key: String -> x.parts.any { it.key == key && it.value > 0 } }
+                val grow = buildList {
+                    if (AppConfig.on("deposits") && !held("deposits")) add(Triple("Time deposits", "Fixed rate for 1 to 12 months", R.drawable.ph_calendar_blank) to "deposits")
+                    if (AppConfig.on("fx") && !held("fx")) add(Triple("Foreign currency", "USD, SGD, JPY, AUD and EUR", R.drawable.ph_coins) to "fx")
+                    if (AppConfig.on("invest") && listOf("funds", "bonds", "gold").none(held)) add(Triple("Investments", "Mutual funds, bonds and gold", R.drawable.ph_chart_bar) to "invest")
+                }
+                if (grow.isNotEmpty()) {
+                    SectionLabel("Grow your money")
+                    for ((t, route) in grow) ListRow(t.first, t.second, t.third, onClick = { onOpen(route) }) { Chevron() }
+                }
                 Spacer(Modifier.height(24.dp))
             }
         }
     }
 }
 
-/** "12% of assets"; a small but real share says so instead of rounding to 0%. */
+/** "12% of assets"; a small but real share says so instead of rounding to 0%. TalkBack hears the same words. */
 private fun share(value: Long, total: Long) = (value * 100 / total.coerceAtLeast(1)).let { if (value > 0 && it == 0L) "Less than 1% of assets" else "$it% of assets" }
 
 @Composable
-fun Chevron() = Icon(painterResource(R.drawable.ph_caret_right), null, tint = OrvynTheme.colors.textSecondary)
+fun Chevron() = Icon(painterResource(R.drawable.ph_caret_right), null, Modifier.size(20.dp), tint = OrvynTheme.colors.textSecondary)
 
 /** Home screen card: the total and the bar, tap for the full view. */
 @Composable
 fun WealthCard(x: Wealth, onOpen: () -> Unit) {
     Column(
         Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface)
-            .clickable(onClickLabel = "Open wealth", onClick = onOpen).padding(16.dp),
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
+            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "Open wealth", onClick = onOpen).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Total assets", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
-                Text(Money.format(x.total), style = MaterialTheme.typography.titleLarge)
+                id.orvyn.app.ui.components.AmountText(Money.format(x.total), MaterialTheme.typography.titleLarge, minSize = MaterialTheme.typography.titleLarge.fontSize)
             }
             Chevron()
         }
         CompositionBar(x)
     }
 }
-

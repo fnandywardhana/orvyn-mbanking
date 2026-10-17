@@ -240,7 +240,7 @@ fun MessageState(
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center, color = c.onSurface)
-            Text(body, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, color = OrvynTheme.colors.textSecondary)
+            if (body.isNotEmpty()) Text(body, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, color = OrvynTheme.colors.textSecondary)
         }
         if (action != null) Box(Modifier.padding(top = 8.dp)) { action() }
     }

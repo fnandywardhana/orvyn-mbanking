@@ -432,7 +432,7 @@ export function apiRoutes(sql: Sql) {
   app.get('/requests/:id', async c => { try { return c.json(await getRequest(sql, c.get('customer').id, c.req.param('id'))) } catch (e) { return fail(c, e) } })
   app.post('/requests', async c => {
     const b = await c.req.json().catch(() => ({}))
-    try { return c.json({ id: await createRequest(sql, c.get('customer') as any, { accountNumber: String(b.accountNumber ?? ''), amount: b.amount, note: b.note }) }) } catch (e) { return fail(c, e) }
+    try { return c.json({ id: await createRequest(sql, c.get('customer') as any, { accountNumber: String(b.accountNumber ?? ''), amount: b.amount, note: b.note }), createdAt: new Date() }) } catch (e) { return fail(c, e) }
   })
   app.post('/splits', async c => {
     const b = await c.req.json().catch(() => ({}))
