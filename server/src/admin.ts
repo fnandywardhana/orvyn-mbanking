@@ -51,7 +51,7 @@ export const requireRole = (...roles: Officer['role'][]) => async (c: any, next:
 const css = html`<style>
 @font-face{font-family:"Plus Jakarta Sans";src:url(/fonts/PlusJakartaSans.ttf) format("truetype");font-weight:200 800;font-display:swap}
 :root{--primary:#0032A0;--on-primary:#fff;--primary-container:#E5ECFA;--nero:#0A0B10;--giallo:#F5C400;
---bg:#F4F6FB;--surface:#fff;--surface-variant:#EDF1F8;--text:#0B1020;--text2:#4D5872;--text3:#6B7690;
+--bg:#F4F6FB;--surface:#fff;--surface-variant:#EDF1F8;--text:#0B1020;--text2:#4D5872;--text3:#616D86;
 --outline:#DCE2EE;--outline-strong:#858FA3;--success:#0E7A47;--success-c:#E3F4EA;--error:#C62828;--error-c:#FCE8E8;color-scheme:light}
 @media (prefers-color-scheme:dark){:root{--primary:#7FA2FF;--on-primary:#001A5C;--primary-container:#0032A0;
 --bg:#070A12;--surface:#0F1422;--surface-variant:#161D2E;--text:#E8ECF6;--text2:#A3ADC2;--text3:#7C879E;
@@ -106,6 +106,9 @@ td.num{text-align:right}
 .persona input{height:auto;margin-top:3px}
 .persona b{display:block}
 .ok-box{background:var(--success-c);border-radius:14px;padding:16px 20px;display:grid;gap:6px;max-width:560px}
+.err-box{background:var(--error-c);border-radius:14px;padding:12px 16px;display:flex;gap:10px;align-items:flex-start;max-width:560px;color:var(--text)}
+.err-box::before{content:"!";flex:none;width:20px;height:20px;border-radius:50%;background:var(--error);color:var(--surface);font-weight:800;font-size:13px;display:grid;place-items:center}
+[aria-invalid=true]{border:2px solid var(--error);padding:0 13px}
 .ok-box pre{margin:0;font:13px/1.6 ui-monospace,Menlo,monospace;white-space:pre-wrap;color:var(--text)}
 .actions{display:flex;gap:8px;flex-wrap:wrap}
 .chip.tier{background:var(--primary-container);color:var(--text)}

@@ -3,6 +3,7 @@ import { verifyPassword } from './auth.ts'
 import { postJournal, houseAccount, LedgerError } from './ledger.ts'
 import type { Memo } from './personas.ts'
 import { notifyJournal } from './inbox.ts'
+import { countWrongTry, triesLeft } from './customers.ts'
 
 // Banks a customer can send to. 'ORVYN' is an Internal Transfer; the rest are External Transfers.
 export const BANKS = [
@@ -86,24 +87,27 @@ export async function transferOptions(sql: Sql, customer: { id: string; tier: st
   const methods = internal ? [{ method: 'internal' as Method, label: 'ORVYN transfer', fee: 0, note: 'Instantly' }]
     : [
       ...(amount <= fees.bifast_max ? [{ method: 'bifast' as Method, label: 'BI-FAST', fee: fees.bifast, note: 'In seconds' }] : []),
-      ...(amount >= fees.rtgs_min ? [{ method: 'rtgs' as Method, label: 'RTGS', fee: fees.rtgs, note: 'Within the hour, for amounts above Rp100,000,000' }] : []),
+      ...(amount >= fees.rtgs_min ? [{ method: 'rtgs' as Method, label: 'RTGS', fee: fees.rtgs, note: 'Within the hour' }] : []),
     ]
   return { methods, dailyLimit: limit, remainingToday: remaining }
 }
 
-export async function checkPin(sql: Sql, customerId: string, pin: string) {
+export const LOCKED_MESSAGE = 'Your account is locked. Ask the ORVYN team to unlock it.' // PO-7: right whether 5 wrong tries or an officer locked it
+
+/**
+ * Every PIN check after sign-in: payments, card details, Change PIN. A wrong PIN counts toward the same 5 as the unlock
+ * screen (K6). [wrong] starts the message, e.g. "That's not your current PIN." on Change PIN.
+ */
+export async function checkPin(sql: Sql, customerId: string, pin: string, wrong = 'Wrong PIN.') {
   const [c] = await sql`select pin_hash, locked from customers where id = ${customerId}`
-  if (c.locked) throw new TransferError('LOCKED', 'Your account is locked after too many wrong tries. Ask the ORVYN team to unlock it.')
+  if (c.locked) throw new TransferError('LOCKED', LOCKED_MESSAGE)
   if (c.pin_hash && await verifyPassword(pin, c.pin_hash)) {
     await sql`update customers set failed_attempts = 0 where id = ${customerId}`
     return
   }
-  const [u] = await sql`update customers set failed_attempts = failed_attempts + 1, locked = failed_attempts + 1 >= 5 where id = ${customerId} returning locked, 5 - failed_attempts as left`
-  if (u.locked) {
-    await sql`delete from customer_sessions where customer_id = ${customerId}`
-    throw new TransferError('LOCKED', 'Wrong PIN 5 times, so your account is now locked. Ask the ORVYN team to unlock it.')
-  }
-  throw new TransferError('WRONG_PIN', `Wrong PIN. ${u.left} ${u.left === 1 ? 'try' : 'tries'} left.`, { attemptsLeft: u.left })
+  const u = await countWrongTry(sql, customerId)
+  if (u.locked) throw new TransferError('LOCKED', LOCKED_MESSAGE)
+  throw new TransferError('WRONG_PIN', `${wrong} ${triesLeft(u.left)}`, { attemptsLeft: u.left })
 }
 
 /** Daily Limit then PIN: the two checks every payout passes before money moves. A null PIN means it was given earlier (a Scheduled Transfer). */

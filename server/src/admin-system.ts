@@ -271,6 +271,7 @@ ${done ? html`<div class="ok-box"><pre>${done}</pre></div>` : ''}
       await tx`delete from money_requests`; await tx`delete from splits`; await tx`delete from category_overrides`
       await tx`delete from budgets`; await tx`delete from budget_alerts`; await tx`delete from vyna_usage`
       await tx`delete from time_deposits`; await tx`delete from holdings`; await tx`delete from bond_coupons`
+      await tx`delete from passkeys` // Q-C3: the public halves; the copies left in phones' password managers stop working
       await tx`delete from postings`; await tx`update journal_entries set reverses_id = null`; await tx`delete from journal_entries`
       await tx`delete from accounts where kind <> 'house' or code like 'CLOSED_%'`; await tx`update accounts set balance = 0`; await tx`delete from customers`
       return n

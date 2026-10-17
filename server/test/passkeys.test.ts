@@ -61,5 +61,5 @@ test('a deleted passkey no longer works', async () => {
   const [p] = await listPasskeys(sql, me.id)
   await deletePasskey(sql, me.id, p.id)
   const opt = await signInOptions()
-  await assert.rejects(signInWithPasskey(sql, assertion(opt.challenge, 4)), /isn't linked/)
+  await assert.rejects(signInWithPasskey(sql, assertion(opt.challenge, 4)), /doesn't work anymore/)
 })

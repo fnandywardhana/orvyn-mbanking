@@ -57,7 +57,7 @@ export async function openDeposit(sql: Sql, customer: Customer, input: { amount:
   await authorizePayout(sql, customer, q.amount, input.pin, Number.MAX_SAFE_INTEGER) // own money: no Daily Limit
   const [savings] = await sql`select id, name from accounts where customer_id = ${customer.id} and kind = 'savings'`
   return sql.begin(async tx => {
-    const [dup] = await tx`select id from journal_entries where idempotency_key = ${`${customer.id}:${input.idempotencyKey}`}`
+    const [dup] = await tx`select * from journal_entries where idempotency_key = ${`${customer.id}:${input.idempotencyKey}`}`
     if (dup) return dup
     const [a] = await tx`insert into accounts (kind, customer_id, name, currency, floor) values ('deposit', ${customer.id}, ${`${q.tenor}-month deposit`}, 'IDR', 0) returning id`
     await tx`insert into time_deposits (account_id, customer_id, principal, rate_bp, tenor_months, opened_on, maturity_date, instruction)
@@ -83,13 +83,14 @@ export async function breakDeposit(sql: Sql, customer: Customer, id: string, pin
   if (!d) throw new TransferError('NOT_FOUND', "We couldn't find that deposit.")
   await authorizePayout(sql, customer, 0, pin, Number.MAX_SAFE_INTEGER)
   const [savings] = await sql`select id, name from accounts where customer_id = ${customer.id} and kind = 'savings'`
-  return sql.begin(async tx => {
+  const j = await sql.begin(async tx => {
     await tx`update time_deposits set closed_at = now() where account_id = ${id}`
     return postJournal(tx, {
       kind: 'deposit_close', memo: { from: { name: `${d.tenor_months}-month deposit` }, to: { name: savings.name }, channel: 'Time deposit · withdrawn early, no interest', category: 'deposit' },
       postings: [{ accountId: id, amount: -Number(d.balance) }, { accountId: savings.id, amount: Number(d.balance) }],
     })
   })
+  return { ...j, amount: Number(d.balance) } // Q-B2: the success screen shows exactly what this entry moved
 }
 
 /** S3.4 AC1: pays the interest, then renews or pays everything out. Also what the admin "Mature now" button runs. */

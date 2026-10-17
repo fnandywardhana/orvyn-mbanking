@@ -66,7 +66,7 @@ export async function signInWithPasskey(sql: Sql, response: any) {
   const c = take(response?.response?.clientDataJSON ?? '')
   if (!c) throw new PasskeyError('That took too long. Try again.')
   const [p] = await sql`select p.*, cu.pin_hash, cu.locked from passkeys p join customers cu on cu.id = p.customer_id where p.id = ${String(response?.id ?? '')}`
-  if (!p) throw new PasskeyError("This passkey isn't linked to an ORVYN account anymore. Sign in with your password.")
+  if (!p) throw new PasskeyError("This passkey doesn't work anymore. Sign in with your phone number and password.") // e.g. after a demo reset (Q-C3)
   if (p.locked) throw new PasskeyError('Your account is locked. Ask the ORVYN team to unlock it.')
   const v = await verifyAuthenticationResponse({
     response, expectedChallenge: c.challenge, expectedOrigin: ORIGINS, expectedRPID: RP_ID, requireUserVerification: true,

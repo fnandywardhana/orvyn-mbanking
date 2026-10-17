@@ -2,9 +2,9 @@ import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import type { Sql } from './db.ts'
 import {
-  signInWithPassword, signInWithPin, signInWithDevice, setPin, customerForSession, signOut, CustomerError,
+  signInWithPassword, signInWithPin, signInWithDevice, setPin, customerForSession, signOut, CustomerError, deviceStatus, countWrongTry, triesLeft,
 } from './customers.ts'
-import { BANKS, lookupRecipient, transferOptions, sendTransfer, payMerchant, TransferError } from './transfers.ts'
+import { BANKS, lookupRecipient, transferOptions, sendTransfer, payMerchant, TransferError, checkPin, LOCKED_MESSAGE } from './transfers.ts'
 import { parseQris, buildQris } from './qris.ts'
 import { ratesFor, listFx, openFx, closeFx, quote, exchange } from './fx.ts'
 import { depositRates, depositQuote, listDeposits, openDeposit, breakDeposit, setInstruction } from './deposits.ts'
@@ -20,15 +20,19 @@ import { inquire, payBill } from './bills.ts'
 import { listCards, updateCard, cardDetails, payCardBill } from './cards.ts'
 import { hashPassword, verifyPassword, isStrongPassword } from './auth.ts'
 import { isAcceptablePin } from './customers.ts'
-import { sendOtp, verifyOtp, submitRegistration, registrationStatus, RegistrationError } from './registrations.ts'
+import { sendOtp, verifyOtp, submitRegistration, registrationStatus, checkNik, RegistrationError } from './registrations.ts'
 
 type Customer = { id: string; full_name: string; tier: string; pin_hash: string | null }
 type Env = { Variables: { customer: Customer; token: string } }
 
 const SIGN_IN_ERRORS = {
   invalid: "That phone number and password don't match.",
-  locked: 'Your account is locked after too many wrong tries. Ask the ORVYN team to unlock it.',
+  locked: LOCKED_MESSAGE,
 }
+
+const ref = (id: string) => id.replace(/-/g, '').slice(0, 12).toUpperCase()
+/** What a success screen needs from a Journal Entry: its id for the receipt, the short reference, and the server's time (Q-F2). */
+const receipt = (j: any) => ({ transactionId: j.id as string, reference: ref(j.id), at: j.created_at })
 
 // One customer-side view of a journal entry (CONTEXT.md: Transaction).
 const txColumns = (sql: Sql) => sql`
@@ -60,7 +64,7 @@ export function apiRoutes(sql: Sql) {
 
   app.post('/auth/password', async c => {
     const b = await c.req.json().catch(() => ({}))
-    const r = await signInWithPassword(sql, String(b.phone ?? ''), String(b.password ?? ''))
+    const r = await signInWithPassword(sql, String(b.phone ?? ''), String(b.password ?? ''), b.deviceToken ? String(b.deviceToken) : undefined)
     if (!r.ok) return c.json({ error: r.reason, message: SIGN_IN_ERRORS[r.reason] }, 401)
     return c.json({ deviceToken: r.deviceToken, sessionToken: r.sessionToken, needsPin: r.needsPin })
   })
@@ -87,7 +91,7 @@ export function apiRoutes(sql: Sql) {
         ? await sql`select 5 - c.failed_attempts as n from registered_devices d join customers c on c.id = d.customer_id where d.device_token = ${String(b.deviceToken ?? '')}`
         : [{ n: 0 }]
       return c.json({ error: r.reason, attemptsLeft: left?.n ?? null,
-        message: r.reason === 'locked' ? SIGN_IN_ERRORS.locked : `Wrong PIN. ${left?.n ?? 0} ${left?.n === 1 ? 'try' : 'tries'} left.` }, 401)
+        message: r.reason === 'locked' ? SIGN_IN_ERRORS.locked : `Wrong PIN. ${triesLeft(left?.n ?? 0)}` }, 401)
     }
     return c.json({ sessionToken: r.sessionToken })
   })
@@ -97,6 +101,12 @@ export function apiRoutes(sql: Sql) {
     const r = await signInWithDevice(sql, String(b.deviceToken ?? ''))
     if (!r.ok) return c.json({ error: r.reason, message: r.reason === 'locked' ? SIGN_IN_ERRORS.locked : 'Sign in with your password again.' }, 401)
     return c.json({ sessionToken: r.sessionToken })
+  })
+
+  // Q-B9: the locked screen's "Try again" asks whether this phone's customer is still locked, without a PIN.
+  app.post('/auth/status', async c => {
+    const r = await deviceStatus(sql, String((await c.req.json().catch(() => ({}))).deviceToken ?? ''))
+    return r ? c.json(r) : c.json({ error: 'invalid', message: 'Sign in with your password again.' }, 401)
   })
 
   // App switches, read before sign-in too (story S1.37)
@@ -118,6 +128,11 @@ export function apiRoutes(sql: Sql) {
   app.post('/register/verify', async c => {
     const b = await c.req.json().catch(() => ({}))
     try { return c.json({ token: await verifyOtp(sql, String(b.phone ?? ''), String(b.code ?? '')) } ) } catch (e) { return regFail(c, e) }
+  })
+  // Q-D2 (PO-2): is this NIK free? Only for a phone that passed the OTP, yes or no, 10 checks per sign-up. The NIK is never logged.
+  app.post('/register/nik', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try { return c.json(await checkNik(sql, String(b.token ?? ''), String(b.nik ?? ''))) } catch (e) { return regFail(c, e) }
   })
   app.post('/register/submit', async c => {
     const b = await c.req.json().catch(() => ({}))
@@ -156,7 +171,7 @@ export function apiRoutes(sql: Sql) {
   app.post('/pin', async c => {
     const b = await c.req.json().catch(() => ({}))
     try {
-      await setPin(sql, c.get('customer').id, String(b.pin ?? ''))
+      await setPin(sql, c.get('customer').id, String(b.pin ?? ''), c.get('token'))
     } catch (e) {
       if (e instanceof CustomerError) return c.json({ error: e.code, message: e.message }, 400)
       throw e
@@ -167,16 +182,16 @@ export function apiRoutes(sql: Sql) {
   app.get('/home', async c => {
     const me = c.get('customer')
     const accounts = await sql`
-      select id, kind, name, number, balance from accounts where customer_id = ${me.id} and kind in ('savings', 'pocket') order by created_at`
+      select id, kind, name, number, balance, created_at from accounts where customer_id = ${me.id} and kind in ('savings', 'pocket') order by created_at`
     const ids = accounts.filter(a => a.kind === 'savings').map(a => a.id) // a move to a pocket would otherwise show twice
     const recent = ids.length ? await sql`
       select ${txColumns(sql)} from postings p join journal_entries j on j.id = p.journal_id
       where p.account_id in ${sql(ids)} order by j.created_at desc, j.id desc limit 5` : []
     return c.json({
-      customer: { name: me.full_name, firstName: me.full_name.split(' ')[0], tier: me.tier },
+      customer: { name: me.full_name, firstName: me.full_name.split(' ')[0], tier: me.tier, phone: (me as any).phone }, // phone: S1.20 "My number", from the server, never the SIM
       unread: (await sql`select count(*)::int as n from inbox_messages where customer_id = ${me.id} and read_at is null`)[0].n,
       totalBalance: accounts.reduce((s, a) => s + Number(a.balance), 0),
-      accounts: accounts.filter(a => a.kind === 'savings').map(a => ({ id: a.id, kind: a.kind, name: a.name, number: a.number, balance: Number(a.balance) })),
+      accounts: accounts.filter(a => a.kind === 'savings').map(a => ({ id: a.id, kind: a.kind, name: a.name, number: a.number, balance: Number(a.balance), openedOn: a.created_at })),
       pockets: await listPockets(sql, me.id),
       // S3.11: only Prestige and Private customers have a Relationship Manager
       relationshipManager: me.tier === 'everyday' || !me.rm_id ? null
@@ -258,7 +273,7 @@ export function apiRoutes(sql: Sql) {
     const b = await c.req.json().catch(() => ({}))
     try {
       const j = await exchange(sql, c.get('customer') as any, { currency: String(b.currency), side: b.side === 'sell' ? 'sell' : 'buy', amount: Number(b.amount), pin: String(b.pin ?? ''), idempotencyKey: String(b.idempotencyKey ?? crypto.randomUUID()) })
-      return c.json({ transactionId: j.id, reference: j.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
+      return c.json(receipt(j))
     } catch (e) { return fail(c, e) }
   })
   app.post('/fx/:currency/open', async c => { try { await openFx(sql, c.get('customer').id, c.req.param('currency')); return c.json({ ok: true }) } catch (e) { return fail(c, e) } })
@@ -274,7 +289,7 @@ export function apiRoutes(sql: Sql) {
     const b = await c.req.json().catch(() => ({}))
     try {
       const j = await openDeposit(sql, c.get('customer') as any, { amount: b.amount, tenor: Number(b.tenor), instruction: String(b.instruction), pin: String(b.pin ?? ''), idempotencyKey: String(b.idempotencyKey ?? crypto.randomUUID()) })
-      return c.json({ transactionId: j.id, reference: j.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
+      return c.json(receipt(j))
     } catch (e) { return fail(c, e) }
   })
   app.post('/deposits/:id/instruction', async c => {
@@ -283,7 +298,7 @@ export function apiRoutes(sql: Sql) {
   })
   app.post('/deposits/:id/withdraw', async c => {
     const b = await c.req.json().catch(() => ({}))
-    try { await breakDeposit(sql, c.get('customer') as any, c.req.param('id'), String(b.pin ?? '')); return c.json({ ok: true }) } catch (e) { return fail(c, e) }
+    try { const j = await breakDeposit(sql, c.get('customer') as any, c.req.param('id'), String(b.pin ?? '')); return c.json({ ok: true, ...receipt(j), amount: j.amount }) } catch (e) { return fail(c, e) }
   })
 
   // Investments and Total Assets (stories S3.5–S3.9)
@@ -300,14 +315,14 @@ export function apiRoutes(sql: Sql) {
     const b = await c.req.json().catch(() => ({}))
     try {
       const j = await buyProduct(sql, c.get('customer') as any, { productId: c.req.param('id'), amount: b.amount, grams: b.grams, pin: String(b.pin ?? ''), acknowledgeRisk: b.acknowledgeRisk === true, idempotencyKey: String(b.idempotencyKey ?? crypto.randomUUID()) })
-      return c.json({ transactionId: j.id, reference: j.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
+      return c.json(receipt(j))
     } catch (e) { return fail(c, e) }
   })
   app.post('/invest/:id/sell', async c => {
     const b = await c.req.json().catch(() => ({}))
     try {
       const j = await sellProduct(sql, c.get('customer') as any, { productId: c.req.param('id'), quantity: b.quantity ?? undefined, pin: String(b.pin ?? ''), idempotencyKey: String(b.idempotencyKey ?? crypto.randomUUID()) })
-      return c.json({ transactionId: j.id, reference: j.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
+      return c.json(receipt(j))
     } catch (e) { return fail(c, e) }
   })
   app.get('/wealth', async c => c.json(await totalAssets(sql, c.get('customer') as any)))
@@ -386,7 +401,7 @@ export function apiRoutes(sql: Sql) {
         bank: String(b.bank ?? ''), accountNumber: String(b.accountNumber ?? ''), amount: Number(b.amount),
         method: b.method, note: b.note, pin: String(b.pin ?? ''), idempotencyKey: String(b.idempotencyKey ?? crypto.randomUUID()),
       })
-      return c.json({ transactionId: j.id, reference: j.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
+      return c.json(receipt(j))
     } catch (e) { return fail(c, e) }
   })
 
@@ -399,7 +414,8 @@ export function apiRoutes(sql: Sql) {
         bank: String(b.bank ?? ''), accountNumber: String(b.accountNumber ?? ''), amount: Number(b.amount), method: b.method,
         note: b.note, repeat: b.repeat, firstDate: String(b.firstDate ?? ''), pin: String(b.pin ?? ''),
       })
-      return c.json({ id })
+      const [s] = await sql`select created_at from scheduled_transfers where id = ${id}`
+      return c.json({ id, createdAt: s.created_at })
     } catch (e) { return fail(c, e) }
   })
   app.post('/scheduled/:id', async c => {
@@ -426,7 +442,7 @@ export function apiRoutes(sql: Sql) {
     const b = await c.req.json().catch(() => ({}))
     try {
       const j = await payRequest(sql, c.get('customer') as any, c.req.param('id'), String(b.pin ?? ''))
-      return c.json({ transactionId: j.id, reference: j.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
+      return c.json(receipt(j))
     } catch (e) { return fail(c, e) }
   })
   app.post('/requests/:id/decline', async c => { try { await declineRequest(sql, c.get('customer') as any, c.req.param('id')); return c.json({ ok: true }) } catch (e) { return fail(c, e) } })
@@ -496,7 +512,7 @@ export function apiRoutes(sql: Sql) {
     const b = await c.req.json().catch(() => ({}))
     try {
       const j = await payMerchant(sql, c.get('customer') as any, { merchantId: String(b.merchantId ?? ''), amount: Number(b.amount), pin: String(b.pin ?? ''), idempotencyKey: String(b.idempotencyKey ?? crypto.randomUUID()) })
-      return c.json({ transactionId: j.id, reference: j.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
+      return c.json(receipt(j))
     } catch (e) { return fail(c, e) }
   })
 
@@ -526,7 +542,7 @@ export function apiRoutes(sql: Sql) {
         biller: String(b.biller ?? ''), number: String(b.number ?? ''), productId: b.productId, amount: b.amount,
         pin: String(b.pin ?? ''), idempotencyKey: String(b.idempotencyKey ?? crypto.randomUUID()),
       })
-      return c.json({ reference: r.journal.id.replace(/-/g, '').slice(0, 12).toUpperCase(), token: r.token, amount: r.amount, fee: r.fee, label: r.label })
+      return c.json({ ...receipt(r.journal), token: r.token, amount: r.amount, fee: r.fee, label: r.label })
     } catch (e) { return fail(c, e) }
   })
 
@@ -566,7 +582,7 @@ export function apiRoutes(sql: Sql) {
     const b = await c.req.json().catch(() => ({}))
     try {
       const j = await payCardBill(sql, c.get('customer').id, c.req.param('id'), Math.floor(Number(b.amount)), String(b.pin ?? ''), String(b.idempotencyKey ?? crypto.randomUUID()))
-      return c.json({ reference: j.id.replace(/-/g, '').slice(0, 12).toUpperCase() })
+      return c.json(receipt(j))
     } catch (e) { return fail(c, e) }
   })
 
@@ -601,19 +617,33 @@ export function apiRoutes(sql: Sql) {
     return c.json({ banners: banners.map(b => ({ ...b, id: String(b.id) })), faqs: faqs.map(f => ({ ...f, id: String(f.id) })) })
   })
 
+  // Q-C1 (PO-4): Change PIN checks the current PIN first, before a new one is typed. Counts like every PIN (K6).
+  const WRONG_CURRENT_PIN = "That's not your current PIN."
+  app.post('/me/pin/check', async c => {
+    const b = await c.req.json().catch(() => ({}))
+    try { await checkPin(sql, c.get('customer').id, String(b.pin ?? ''), WRONG_CURRENT_PIN); return c.json({ ok: true }) } catch (e) { return fail(c, e) }
+  })
+
+  // 0.8.1 sends both PINs here at once; 0.9.0 after /me/pin/check. Either way a wrong current PIN counts (Q-C1 AC6).
   app.post('/me/pin', async c => {
     const b = await c.req.json().catch(() => ({}))
-    const [me] = await sql`select pin_hash from customers where id = ${c.get('customer').id}`
-    if (!me.pin_hash || !(await verifyPassword(String(b.oldPin ?? ''), me.pin_hash))) return c.json({ error: 'WRONG_PIN', message: "That's not your current PIN." }, 400)
+    try { await checkPin(sql, c.get('customer').id, String(b.oldPin ?? ''), WRONG_CURRENT_PIN) } catch (e) { return fail(c, e) }
     if (!isAcceptablePin(String(b.newPin ?? ''))) return c.json({ error: 'WEAK_PIN', message: "Choose 6 digits that aren't all the same or in a row." }, 400)
     await sql`update customers set pin_hash = ${await hashPassword(String(b.newPin))} where id = ${c.get('customer').id}`
     return c.json({ ok: true })
   })
 
+  // Q-C2: a wrong current password counts toward the same 5 tries and locks on the 5th.
   app.post('/me/password', async c => {
     const b = await c.req.json().catch(() => ({}))
-    const [me] = await sql`select password_hash from customers where id = ${c.get('customer').id}`
-    if (!(await verifyPassword(String(b.oldPassword ?? ''), me.password_hash))) return c.json({ error: 'WRONG_PASSWORD', message: "That's not your current password." }, 400)
+    const id = c.get('customer').id
+    const [me] = await sql`select password_hash from customers where id = ${id}`
+    if (!(await verifyPassword(String(b.oldPassword ?? ''), me.password_hash))) {
+      const u = await countWrongTry(sql, id)
+      if (u.locked) return c.json({ error: 'LOCKED', message: LOCKED_MESSAGE }, 400)
+      return c.json({ error: 'WRONG_PASSWORD', message: `That's not your current password. ${triesLeft(u.left)}`, attemptsLeft: u.left }, 400)
+    }
+    await sql`update customers set failed_attempts = 0 where id = ${id}`
     if (!isStrongPassword(String(b.newPassword ?? ''))) return c.json({ error: 'WEAK_PASSWORD', message: 'Use at least 8 characters, with both letters and numbers.' }, 400)
     await sql`update customers set password_hash = ${await hashPassword(String(b.newPassword))} where id = ${c.get('customer').id}`
     return c.json({ ok: true })

@@ -2,9 +2,8 @@ import { randomInt } from 'node:crypto'
 import type { TransactionSql } from 'postgres'
 import type { Sql } from './db.ts'
 import { postJournal, houseAccount, LedgerError } from './ledger.ts'
-import { TransferError, withNotice } from './transfers.ts'
+import { TransferError, withNotice, checkPin } from './transfers.ts'
 import { notify, notifyJournal } from './inbox.ts'
-import { verifyPassword } from './auth.ts'
 
 // Cards (stories S1.23–S1.26). A credit card is a Card on a Credit Account whose floor is minus the credit limit.
 
@@ -74,8 +73,7 @@ export async function updateCard(sql: Sql, customerId: string, cardId: string, p
 /** Full number, CVV and expiry, only after the PIN (S1.23 AC3). */
 export async function cardDetails(sql: Sql, customerId: string, cardId: string, pin: string) {
   const c = await ownCard(sql, customerId, cardId)
-  const [cu] = await sql`select pin_hash from customers where id = ${customerId}`
-  if (!cu.pin_hash || !(await verifyPassword(pin, cu.pin_hash))) throw new TransferError('WRONG_PIN', 'Wrong PIN. Try again.')
+  await checkPin(sql, customerId, pin) // counts toward the 5 tries like every other PIN (K6)
   return { number: c.number, cvv: c.cvv, expiry: c.expiry }
 }
 
@@ -118,8 +116,7 @@ export async function spendOnCard(sql: Sql | TransactionSql, s: CardSpend): Prom
 export async function payCardBill(sql: Sql, customerId: string, cardId: string, amount: number, pin: string, idempotencyKey: string) {
   const c = await ownCard(sql, customerId, cardId)
   if (c.kind !== 'credit') throw new TransferError('BAD_METHOD', 'Only credit cards have a bill.')
-  const [cu] = await sql`select pin_hash from customers where id = ${customerId}`
-  if (!cu.pin_hash || !(await verifyPassword(pin, cu.pin_hash))) throw new TransferError('WRONG_PIN', 'Wrong PIN. Try again.')
+  await checkPin(sql, customerId, pin)
   const [credit] = await sql`select balance from accounts where id = ${c.account_id}`
   const owed = Math.max(0, -Number(credit.balance))
   if (!(amount >= 10_000 && amount <= owed)) throw new TransferError('BAD_AMOUNT', owed === 0 ? 'Nothing to pay right now.' : `Pay between Rp10,000 and Rp${owed.toLocaleString('en-US')}.`)

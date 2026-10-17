@@ -17,7 +17,7 @@ export type NewCustomer = {
 }
 
 export class CustomerError extends Error {
-  code: 'PHONE_TAKEN' | 'WEAK_PIN' | 'BAD_PHONE'
+  code: 'PHONE_TAKEN' | 'WEAK_PIN' | 'BAD_PHONE' | 'PIN_TIMEOUT'
   constructor(code: CustomerError['code'], message: string) {
     super(message)
     this.code = code
@@ -68,28 +68,52 @@ async function openSavings(tx: TransactionSql, customerId: string) {
 
 type SignIn = { ok: true; deviceToken?: string; sessionToken: string; needsPin: boolean } | { ok: false; reason: 'invalid' | 'locked' }
 
-async function failAttempt(sql: Sql, customerId: string): Promise<SignIn> {
+/**
+ * K6: one counter for every PIN and password check (unlock, payments, Change PIN, Change password, password sign-in).
+ * The 5th wrong try locks the Customer and ends their sessions. Returns the tries left (0 once locked).
+ */
+export async function countWrongTry(sql: Sql, customerId: string) {
   const [c] = await sql`
     update customers set failed_attempts = failed_attempts + 1, locked = failed_attempts + 1 >= ${MAX_ATTEMPTS}
-    where id = ${customerId} returning locked`
-  return { ok: false, reason: c.locked ? 'locked' : 'invalid' }
+    where id = ${customerId} returning locked, ${MAX_ATTEMPTS} - failed_attempts as left`
+  if (c.locked) await sql`delete from customer_sessions where customer_id = ${customerId}`
+  return { locked: c.locked as boolean, left: Math.max(0, Number(c.left)) }
 }
 
-async function openSession(sql: Sql, customerId: string) {
+/** "4 tries left." / "1 try left." */
+export const triesLeft = (n: number) => `${n} ${n === 1 ? 'try' : 'tries'} left.`
+
+async function failAttempt(sql: Sql, customerId: string): Promise<SignIn> {
+  return { ok: false, reason: (await countWrongTry(sql, customerId)).locked ? 'locked' : 'invalid' }
+}
+
+/** [byPassword]: the session starts from a password or passkey check, so for 10 minutes it may set a new PIN (PO-6). */
+async function openSession(sql: Sql, customerId: string, byPassword = false) {
   const token = randomBytes(32).toString('base64url')
   await sql`update customers set failed_attempts = 0 where id = ${customerId}`
-  await sql`insert into customer_sessions (token, customer_id) values (${token}, ${customerId})`
+  await sql`insert into customer_sessions (token, customer_id, password_at) values (${token}, ${customerId}, ${byPassword ? new Date() : null})`
   return token
 }
 
 /** First sign-in on a phone. Makes it the Registered Device, signing out any previous phone (S1.5). */
-export async function signInWithPassword(sql: Sql, phoneInput: string, password: string): Promise<SignIn> {
+/**
+ * [deviceToken]: sent by the app when this phone is already registered (Forgot PIN, Q-D6). If it is this customer's
+ * Registered Device, the phone stays registered and gets no "new phone" message.
+ */
+export async function signInWithPassword(sql: Sql, phoneInput: string, password: string, deviceToken?: string): Promise<SignIn> {
   let phone: string
   try { phone = normalizePhone(phoneInput) } catch { return { ok: false, reason: 'invalid' } }
   const [c] = await sql`select * from customers where phone = ${phone}`
   if (!c || !c.password_hash) return { ok: false, reason: 'invalid' }
   if (c.locked) return { ok: false, reason: 'locked' }
   if (!(await verifyPassword(password, c.password_hash))) return failAttempt(sql, c.id)
+  if (deviceToken) {
+    const [same] = await sql`select 1 from registered_devices where customer_id = ${c.id} and device_token = ${deviceToken}`
+    if (same) {
+      await sql`delete from customer_sessions where customer_id = ${c.id}`
+      return { ok: true, deviceToken, sessionToken: await openSession(sql, c.id, true), needsPin: !c.pin_hash }
+    }
+  }
   return registerDevice(sql, c)
 }
 
@@ -102,7 +126,13 @@ export async function registerDevice(sql: Sql, c: { id: string, pin_hash: string
   await sql`
     insert into registered_devices (customer_id, device_token) values (${c.id}, ${deviceToken})
     on conflict (customer_id) do update set device_token = excluded.device_token, push_token = null, created_at = now()`
-  return { ok: true, deviceToken, sessionToken: await openSession(sql, c.id), needsPin: !c.pin_hash }
+  return { ok: true, deviceToken, sessionToken: await openSession(sql, c.id, true), needsPin: !c.pin_hash }
+}
+
+/** Q-B9: whether the customer on this Registered Device is locked. Reveals nothing else, and nothing for unknown phones. */
+export async function deviceStatus(sql: Sql, deviceToken: string) {
+  const c = await customerForDevice(sql, deviceToken)
+  return c ? { locked: c.locked as boolean, firstName: String(c.full_name).split(' ')[0] } : null
 }
 
 async function customerForDevice(sql: Sql, deviceToken: string) {
@@ -127,7 +157,19 @@ export async function signInWithDevice(sql: Sql, deviceToken: string): Promise<S
   return { ok: true, sessionToken: await openSession(sql, c.id), needsPin: false }
 }
 
-export async function setPin(sql: Sql, customerId: string, pin: string) {
+export const PIN_WINDOW_MINUTES = 10
+
+/**
+ * First PIN after sign-in, or a new PIN after Forgot PIN (Q-D6). Once a PIN exists, the old one isn't needed only within
+ * 10 minutes of a password sign-in in this same session.
+ */
+export async function setPin(sql: Sql, customerId: string, pin: string, sessionToken?: string) {
+  const [c] = await sql`select pin_hash from customers where id = ${customerId}`
+  if (c.pin_hash) {
+    const [s] = await sql`select 1 from customer_sessions where token = ${sessionToken ?? ''} and customer_id = ${customerId}
+      and password_at > now() - ${PIN_WINDOW_MINUTES + ' minutes'}::interval`
+    if (!s) throw new CustomerError('PIN_TIMEOUT', 'That took too long. Sign in with your password again.')
+  }
   if (!isAcceptablePin(pin)) throw new CustomerError('WEAK_PIN', "Choose 6 digits that aren't all the same or in a row.")
   await sql`update customers set pin_hash = ${await hashPassword(pin)} where id = ${customerId}`
 }

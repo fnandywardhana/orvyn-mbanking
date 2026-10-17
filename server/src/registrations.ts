@@ -32,6 +32,27 @@ export async function verifyOtp(sql: Sql, phoneInput: string, code: string) {
   return token
 }
 
+const NIK_TAKEN = 'This NIK is already registered with ORVYN.'
+const MAX_NIK_CHECKS = 10
+
+/** A Customer has it, or an application waiting for an officer does. */
+async function nikTaken(sql: Sql, nik: string) {
+  return (await sql`select 1 from customers where nik = ${nik} union all select 1 from registrations where nik = ${nik} and status = 'pending'`).length > 0
+}
+
+/**
+ * Q-D2 (PO-2): checked when About you is done, so a taken NIK doesn't surface five steps later. Needs the token of a phone
+ * that passed the OTP; answers only "available" or NIK_TAKEN; at most 10 checks per sign-up. The NIK is never logged.
+ */
+export async function checkNik(sql: Sql, token: string, nik: string) {
+  const [r] = await sql`update registrations set nik_checks = nik_checks + 1 where token = ${token} and verified and status = 'draft' returning nik_checks`
+  if (!r) throw new RegistrationError('NOT_FOUND', 'Start again from your phone number.')
+  if (r.nik_checks > MAX_NIK_CHECKS) throw new RegistrationError('TOO_MANY_CHECKS', 'Too many NIK checks for this sign-up. Start again from your phone number.')
+  if (!/^\d{16}$/.test(nik)) throw new RegistrationError('INVALID', 'NIK has 16 digits.')
+  if (await nikTaken(sql, nik)) throw new RegistrationError('NIK_TAKEN', NIK_TAKEN)
+  return { available: true }
+}
+
 export type Details = { fullName: string; nik: string; birthDate: string; address: string; occupation: string; incomeRange: string; purpose: string }
 
 /** S1.1 AC2–AC4 and S1.3. Everything is checked here even though the app checks too. */
@@ -50,8 +71,7 @@ export async function submitRegistration(sql: Sql, token: string, d: Details, pa
   if (!isStrongPassword(password)) problems.push('Use a password with at least 8 characters, with letters and numbers.')
   if (!isAcceptablePin(pin)) problems.push("Choose a PIN that isn't all the same digit or in a row.")
   if (problems.length) throw new RegistrationError('INVALID', problems.join(' '))
-  const [nikTaken] = await sql`select 1 from customers where nik = ${d.nik} union all select 1 from registrations where nik = ${d.nik} and status = 'pending'`
-  if (nikTaken) throw new RegistrationError('NIK_TAKEN', 'This NIK is already registered with ORVYN.')
+  if (await nikTaken(sql, d.nik)) throw new RegistrationError('NIK_TAKEN', NIK_TAKEN) // checked again: someone may have used it since About you
   await sql`update registrations set full_name = ${d.fullName.trim()}, nik = ${d.nik}, birth_date = ${d.birthDate}, address = ${d.address.trim()},
     occupation = ${d.occupation}, income_range = ${d.incomeRange}, purpose = ${d.purpose},
     password_hash = ${await hashPassword(password)}, pin_hash = ${await hashPassword(pin)}, status = 'pending', submitted_at = now()
@@ -79,6 +99,8 @@ export async function approveRegistration(sql: Sql, id: string, tier: 'everyday'
   return customer
 }
 
+/** S1.4 AC4: the applicant always learns why, so the server refuses an empty reason (Q-C7), not just the admin form. */
 export async function rejectRegistration(sql: Sql, id: string, reason: string) {
-  await sql`update registrations set status = 'rejected', reason = ${reason} where id = ${id} and status = 'pending'`
+  if (!reason.trim()) throw new RegistrationError('NO_REASON', 'Write a reason first. The applicant sees it in the app.')
+  await sql`update registrations set status = 'rejected', reason = ${reason.trim()} where id = ${id} and status = 'pending'`
 }

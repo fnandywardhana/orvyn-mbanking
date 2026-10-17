@@ -11,7 +11,8 @@ export function registrationRoutes(sql: Sql) {
   const app = new Hono<Env>()
   app.use('*', requireRole('super_admin', 'operator'))
 
-  app.get('/', async c => {
+  /** [rejectError]: the application whose Reject the server just refused for having no reason (Q-C7). */
+  const list = async (c: any, rejectError?: string) => {
     const pending = await sql`select * from registrations where status = 'pending' order by submitted_at`
     const recent = await sql`select full_name, phone, status, reason, submitted_at from registrations where status in ('approved', 'rejected') order by submitted_at desc limit 10`
     const done = c.req.query('done')
@@ -28,12 +29,15 @@ ${[['Phone', r.phone], ['NIK', r.nik], ['Date of birth', r.birth_date?.toISOStri
 <label>Tier<select name="tier" style="height:40px;border-radius:10px;padding:0 10px;font:inherit"><option value="everyday">Everyday</option><option value="prestige">Prestige</option><option value="private">Private</option></select></label>
 <button class="btn">Approve</button></form>
 <form method="post" action="/admin/applications/${r.id}/reject" class="actions" style="align-items:end">
-<label style="flex:1">Reason (the applicant sees it)<input name="reason" required maxlength="120" placeholder="The name doesn't match the NIK."></label>
+${rejectError === r.id ? html`<div class="err-box" role="alert" style="flex-basis:100%">Write a reason first. The applicant sees it in the app.</div>` : ''}
+<label style="flex:1">Reason (the applicant sees it)<input name="reason" required maxlength="120" placeholder="The name doesn't match the NIK."
+${rejectError === r.id ? html`aria-invalid="true" autofocus` : ''}></label>
 <button class="btn danger">Reject</button></form></div>`)}
 ${recent.length ? html`<div class="tablewrap"><table><thead><tr><th>Recent</th><th>Phone</th><th>Result</th></tr></thead><tbody>
 ${recent.map(r => html`<tr><td>${r.full_name}</td><td class="mono">${r.phone}</td><td>${r.status === 'approved' ? html`<span class="chip ok">Approved</span>` : html`<span class="chip bad">Rejected</span> <span class="hint">${r.reason}</span>`}</td></tr>`)}
-</tbody></table></div>` : ''}</div>`))
-  })
+</tbody></table></div>` : ''}</div>`), rejectError ? 400 : 200)
+  }
+  app.get('/', c => list(c))
 
   app.post('/:id/approve', async c => {
     const tier = String((await c.req.parseBody()).tier) as any
@@ -49,7 +53,8 @@ ${recent.map(r => html`<tr><td>${r.full_name}</td><td class="mono">${r.phone}</t
 
   app.post('/:id/reject', async c => {
     const reason = String((await c.req.parseBody()).reason ?? '').trim().slice(0, 120)
-    await rejectRegistration(sql, c.req.param('id'), reason)
+    try { await rejectRegistration(sql, c.req.param('id'), reason) }
+    catch (e) { if (e instanceof RegistrationError && e.code === 'NO_REASON') return list(c, c.req.param('id')); throw e }
     await audit(sql, c.get('officer').id, 'application.reject', c.req.param('id'), null, { reason })
     return c.redirect(`/admin/applications?done=${encodeURIComponent('Rejected. The applicant sees your reason in the app.')}`)
   })
