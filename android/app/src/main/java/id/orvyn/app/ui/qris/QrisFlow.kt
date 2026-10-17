@@ -277,7 +277,7 @@ private fun PayPin(m: Merchant, amount: Long, key: String, onBack: () -> Unit, o
     FlowScreen("Enter your PIN", "To pay ${Money.format(amount)} to ${m.name}.", onBack) {
         Spacer(Modifier.weight(1f))
         PinPad(
-            onComplete = { pin -> scope.launch { try { onPaid(Api.qrisPay(m.id, amount, pin, key)) } catch (e: ApiException) { error = e.message; errors++ } } },
+            onComplete = { pin -> scope.launch { try { onPaid(Api.qrisPay(m.id, amount, pin, key).reference) } catch (e: ApiException) { error = e.message; errors++ } } },
             errorCount = errors, errorText = error, onBiometric = null, modifier = Modifier.padding(bottom = 24.dp),
         )
     }

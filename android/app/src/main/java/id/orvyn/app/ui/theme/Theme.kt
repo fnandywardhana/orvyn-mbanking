@@ -43,6 +43,7 @@ data class OrvynColors(
     val successContainer: Color,
     val warning: Color,
     val warningContainer: Color,
+    val chartBarMuted: Color, // single-series charts: the bars that aren't selected (design.md 4.2)
 )
 
 private val LightScheme = lightColorScheme(
@@ -72,15 +73,17 @@ private val DarkScheme = darkColorScheme(
 )
 
 private val LightExtra = OrvynColors(
-    textSecondary = Color(0xFF4D5872), textTertiary = Color(0xFF6B7690),
+    textSecondary = Color(0xFF4D5872), textTertiary = Color(0xFF616D86), // 4.81:1 on background (Q-E2)
     success = Color(0xFF0E7A47), successContainer = Color(0xFFE3F4EA),
     warning = Color(0xFF9A5B00), warningContainer = Color(0xFFFFF1D6),
+    chartBarMuted = Color(0xFF7088C4),
 )
 
 private val DarkExtra = OrvynColors(
     textSecondary = Color(0xFFA3ADC2), textTertiary = Color(0xFF7C879E),
     success = Color(0xFF4CC78A), successContainer = Color(0xFF0F2A1E),
     warning = Color(0xFFF0B44C), warningContainer = Color(0xFF33240A),
+    chartBarMuted = Color(0xFF55689C),
 )
 
 @OptIn(ExperimentalTextApi::class)
@@ -97,20 +100,27 @@ private fun style(size: Int, line: Int, weight: Int, tracking: Double = 0.0) = T
     fontWeight = FontWeight(weight), letterSpacing = tracking.em, fontFeatureSettings = "tnum",
 )
 
+// All 15 Material 3 roles, so no text and no Material component (date picker, dialog, snackbar, segmented button) falls back to Roboto (Q-E2).
 private val OrvynTypography = Typography(
+    displayLarge = style(44, 52, 800),
+    displayMedium = style(40, 48, 800),
+    displaySmall = style(34, 40, 800, -0.005),
     headlineLarge = style(28, 34, 700),
     headlineMedium = style(24, 30, 700),
+    headlineSmall = style(22, 28, 700),
     titleLarge = style(20, 26, 600),
     titleMedium = style(16, 22, 600),
+    titleSmall = style(14, 20, 600),
     bodyLarge = style(16, 24, 400),
     bodyMedium = style(14, 20, 400),
+    bodySmall = style(12, 16, 400), // only for captions under charts
     labelLarge = style(15, 20, 600),
     labelMedium = style(12, 16, 600),
     labelSmall = style(11, 16, 700, 0.08),
 )
 
 object OrvynType {
-    val displayBalance = style(34, 40, 800, -0.005)
+    val displayBalance = OrvynTypography.displaySmall
 }
 
 private val LocalOrvynColors = staticCompositionLocalOf { LightExtra }

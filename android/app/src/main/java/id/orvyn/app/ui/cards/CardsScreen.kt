@@ -78,7 +78,9 @@ import org.json.JSONObject
 
 /** Stories S1.23–S1.25. */
 @Composable
-fun CardsScreen(onPayBill: (Card) -> Unit, say: (String) -> Unit) {
+fun CardsScreen(onPayBill: (Card) -> Unit, onOpenTransaction: (String) -> Unit) {
+    val snacks = id.orvyn.app.ui.components.LocalSnacks.current
+    val say: (String) -> Unit = { snacks?.show(it) }
     var cards by remember { mutableStateOf<List<Card>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()

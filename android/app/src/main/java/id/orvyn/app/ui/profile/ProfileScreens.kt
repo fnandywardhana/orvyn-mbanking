@@ -206,7 +206,7 @@ fun ChangePasswordScreen(onDone: () -> Unit) {
 
 /** Story S1.31 AC1: FAQs by category, searchable. */
 @Composable
-fun HelpScreen(onBack: () -> Unit) {
+fun HelpScreen(onBack: () -> Unit, onAskVyna: (() -> Unit)? = null) {
     var faqs by remember { mutableStateOf<List<Faq>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }

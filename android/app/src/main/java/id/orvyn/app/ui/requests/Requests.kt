@@ -182,7 +182,7 @@ fun RequestScreen(id: String, onBack: () -> Unit) {
         Spacer(Modifier.weight(1f))
         PinPad(onComplete = { pin ->
             scope.launch {
-                try { reference = Api.payRequest(q.id, pin); DataVersion.count++ }
+                try { reference = Api.payRequest(q.id, pin).reference; DataVersion.count++ }
                 catch (e: ApiException) { if (e.code == "WRONG_PIN") { pinError = e.message; pinErrors++ } else { error = e.message; paying = false } }
             }
         }, errorCount = pinErrors, errorText = pinError, onBiometric = null, modifier = Modifier.padding(bottom = 24.dp))

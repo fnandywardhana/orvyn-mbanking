@@ -17,7 +17,10 @@ import androidx.compose.runtime.setValue
 /** Something the customer should read: server messages are already written for them. */
 class ApiException(val code: String, override val message: String, val status: Int, val body: JSONObject? = null) : Exception(message)
 
-data class Account(val id: String, val kind: String, val name: String, val number: String?, val balance: Long)
+data class Account(val id: String, val kind: String, val name: String, val number: String?, val balance: Long, val openedOn: Instant? = null)
+
+/** What a success screen needs from the server (Q-F2): the reference, the Journal Entry for "Share receipt", and its time for "Date". */
+data class Paid(val reference: String, val transactionId: String?, val at: Instant?)
 
 data class Transaction(
     val id: String,
@@ -74,6 +77,7 @@ data class Home(
     val firstName: String,
     val fullName: String,
     val tier: String,
+    val phone: String? = null,
     val totalBalance: Long,
     val accounts: List<Account>,
     val recent: List<Transaction>,
@@ -127,7 +131,7 @@ data class Banner(val id: String, val title: String, val body: String, val detai
 data class Faq(val id: String, val category: String, val question: String, val answer: String)
 data class Content(val banners: List<Banner>, val faqs: List<Faq>)
 
-data class BillPaid(val reference: String, val token: String?, val amount: Long, val fee: Long, val label: String)
+data class BillPaid(val reference: String, val token: String?, val amount: Long, val fee: Long, val label: String, val transactionId: String? = null, val at: Instant? = null)
 
 /**
  * Tiny JSON-over-HTTPS client on the platform's HttpURLConnection and org.json (no extra libraries).
@@ -137,6 +141,8 @@ object Api {
     @Volatile var session: String? = null
     /** Called when the server says the session is gone (idle timeout, signed in elsewhere, locked). */
     var onSignedOut: () -> Unit = {}
+    /** Set when a PIN or password check just locked the customer (K6): the app shows the locked screen. */
+    var lockedNow by androidx.compose.runtime.mutableStateOf(false)
 
     /** Every network step, sending the body included, is inside the try, so a lost connection always ends as "offline". Tests swap [base]. */
     internal suspend fun call(method: String, path: String, body: JSONObject? = null, base: String = BuildConfig.API_URL): JSONObject = withContext(Dispatchers.IO) {
@@ -160,6 +166,10 @@ object Api {
             if (status >= 400) {
                 // Only someone who was signed in can be signed out; sign-up and sign-in screens just show the message.
                 if (json.optString("error") == "signed_out" && hadSession) { session = null; onSignedOut() }
+                // The 5th wrong PIN or password anywhere locks the customer: straight to the locked screen (PO-5).
+                if (json.optString("error") == "LOCKED" && hadSession) { session = null; lockedNow = true; onSignedOut() }
+                // Any answer that says maintenance switches the app to the maintenance screen (PO-8).
+                if (json.optString("error") == "MAINTENANCE") AppConfig.maintenance = json.optString("message")
                 throw ApiException(json.optString("error", "http_$status"), json.optString("message", "Something went wrong on our side. Try again in a moment."), status, json)
             }
             json
@@ -172,8 +182,9 @@ object Api {
 
     data class SignIn(val deviceToken: String?, val sessionToken: String, val needsPin: Boolean)
 
-    suspend fun signInWithPassword(phone: String, password: String): SignIn {
-        val r = call("POST", "/auth/password", JSONObject().put("phone", phone).put("password", password))
+    /** [deviceToken]: this phone is already registered (Forgot PIN), so it stays registered. */
+    suspend fun signInWithPassword(phone: String, password: String, deviceToken: String? = null): SignIn {
+        val r = call("POST", "/auth/password", JSONObject().put("phone", phone).put("password", password).apply { deviceToken?.let { put("deviceToken", it) } })
         return SignIn(r.getString("deviceToken"), r.getString("sessionToken"), r.getBoolean("needsPin")).also { session = it.sessionToken }
     }
 
@@ -191,6 +202,10 @@ object Api {
     suspend fun signInWithPin(deviceToken: String, pin: String) {
         session = call("POST", "/auth/pin", JSONObject().put("deviceToken", deviceToken).put("pin", pin)).getString("sessionToken")
     }
+
+    /** Q-B9: (locked, first name) for this phone's customer, without a PIN. */
+    suspend fun deviceStatus(deviceToken: String): Pair<Boolean, String> =
+        call("POST", "/auth/status", JSONObject().put("deviceToken", deviceToken)).let { it.getBoolean("locked") to it.getString("firstName") }
 
     suspend fun signInWithDevice(deviceToken: String) {
         session = call("POST", "/auth/device", JSONObject().put("deviceToken", deviceToken)).getString("sessionToken")
@@ -251,16 +266,15 @@ object Api {
         )
     }
 
-    /** Returns the reference shown on the success screen. */
-    suspend fun sendTransfer(to: Recipient, amount: Long, method: String, note: String, pin: String, idempotencyKey: String): String =
-        call("POST", "/transfers", JSONObject().put("bank", to.bank).put("accountNumber", to.accountNumber).put("amount", amount)
-            .put("method", method).put("note", note).put("pin", pin).put("idempotencyKey", idempotencyKey)).getString("reference")
+    suspend fun sendTransfer(to: Recipient, amount: Long, method: String, note: String, pin: String, idempotencyKey: String): Paid =
+        paid(call("POST", "/transfers", JSONObject().put("bank", to.bank).put("accountNumber", to.accountNumber).put("amount", amount)
+            .put("method", method).put("note", note).put("pin", pin).put("idempotencyKey", idempotencyKey)))
 
     // Scheduled Transfers (stories S2.4–S2.5). [repeat] is once, weekly or monthly; [firstDate] YYYY-MM-DD.
-    suspend fun createSchedule(to: Recipient, amount: Long, method: String, note: String, repeat: String, firstDate: String, pin: String) {
+    /** Returns when the schedule was made, for the success screen's "Date". */
+    suspend fun createSchedule(to: Recipient, amount: Long, method: String, note: String, repeat: String, firstDate: String, pin: String): Instant? =
         call("POST", "/scheduled", JSONObject().put("bank", to.bank).put("accountNumber", to.accountNumber).put("amount", amount)
-            .put("method", method).put("note", note).put("repeat", repeat).put("firstDate", firstDate).put("pin", pin))
-    }
+            .put("method", method).put("note", note).put("repeat", repeat).put("firstDate", firstDate).put("pin", pin)).instantOrNull("createdAt")
     suspend fun scheduled(): List<Scheduled> = call("GET", "/scheduled").getJSONArray("scheduled").map {
         val last = it.optJSONObject("lastResult")
         Scheduled(it.getString("id"), it.getString("name"), it.getString("bank"), it.getString("accountNumber"), it.getLong("amount"),
@@ -308,7 +322,8 @@ object Api {
     }.flowOn(Dispatchers.IO)
 
     // Wealth (stories S3.1–S3.9)
-    private fun ref(r: JSONObject) = r.getString("reference")
+    private fun ref(r: JSONObject) = paid(r)
+    fun paid(r: JSONObject) = Paid(r.getString("reference"), r.optStringOrNull("transactionId"), r.instantOrNull("at"))
     suspend fun wealth(): Wealth {
         val r = call("GET", "/wealth")
         return Wealth(r.getLong("total"), r.getJSONArray("parts").map { WealthPart(it.getString("key"), it.getString("label"), it.getLong("value")) }, r.getLong("creditOwed"))
@@ -321,7 +336,7 @@ object Api {
     /** [minor] is in the currency's smallest unit (cents; yen). Returns the Rupiah amount and the rate used. */
     suspend fun fxQuote(currency: String, buy: Boolean, minor: Long): Pair<Long, Double> =
         call("POST", "/fx/quote", JSONObject().put("currency", currency).put("side", if (buy) "buy" else "sell").put("amount", minor)).let { it.getLong("idr") to it.getDouble("rate") }
-    suspend fun fxExchange(currency: String, buy: Boolean, minor: Long, pin: String, key: String): String =
+    suspend fun fxExchange(currency: String, buy: Boolean, minor: Long, pin: String, key: String): Paid =
         ref(call("POST", "/fx/exchange", JSONObject().put("currency", currency).put("side", if (buy) "buy" else "sell").put("amount", minor).put("pin", pin).put("idempotencyKey", key)))
     suspend fun fxClose(currency: String) { call("POST", "/fx/$currency/close") }
 
@@ -334,10 +349,12 @@ object Api {
     suspend fun depositQuote(amount: Long, tenor: Int): DepositQuote = call("POST", "/deposits/quote", JSONObject().put("amount", amount).put("tenor", tenor)).let {
         DepositQuote(it.getInt("rateBp"), it.getString("maturityDate"), it.getLong("gross"), it.getLong("tax"), it.getLong("net"))
     }
-    suspend fun openDeposit(amount: Long, tenor: Int, rollover: Boolean, pin: String, key: String): String =
+    suspend fun openDeposit(amount: Long, tenor: Int, rollover: Boolean, pin: String, key: String): Paid =
         ref(call("POST", "/deposits", JSONObject().put("amount", amount).put("tenor", tenor).put("instruction", if (rollover) "rollover" else "payout").put("pin", pin).put("idempotencyKey", key)))
     suspend fun setDepositInstruction(id: String, rollover: Boolean) { call("POST", "/deposits/$id/instruction", JSONObject().put("instruction", if (rollover) "rollover" else "payout")) }
-    suspend fun withdrawDeposit(id: String, pin: String) { call("POST", "/deposits/$id/withdraw", JSONObject().put("pin", pin)) }
+    /** Q-B2: the Rupiah that went back to savings (the Journal Entry's amount) and the receipt. */
+    suspend fun withdrawDeposit(id: String, pin: String): Pair<Long, Paid> =
+        call("POST", "/deposits/$id/withdraw", JSONObject().put("pin", pin)).let { it.optLong("amount") to paid(it) }
 
     suspend fun invest(): Invest {
         val r = call("GET", "/invest")
@@ -352,9 +369,9 @@ object Api {
     suspend fun prices(productId: String, days: Int): List<Pair<String, Double>> =
         call("GET", "/invest/$productId/prices?days=$days").getJSONArray("prices").map { it.getString("day") to it.getDouble("price") }
     suspend fun setRiskProfile(answers: List<Int>): String = call("POST", "/invest/profile", JSONObject().put("answers", JSONArray(answers))).getString("profile")
-    suspend fun buyProduct(id: String, amount: Long?, grams: Double?, acknowledgeRisk: Boolean, pin: String, key: String): String =
+    suspend fun buyProduct(id: String, amount: Long?, grams: Double?, acknowledgeRisk: Boolean, pin: String, key: String): Paid =
         ref(call("POST", "/invest/$id/buy", JSONObject().put("amount", amount ?: JSONObject.NULL).put("grams", grams ?: JSONObject.NULL).put("acknowledgeRisk", acknowledgeRisk).put("pin", pin).put("idempotencyKey", key)))
-    suspend fun sellProduct(id: String, quantity: Double?, pin: String, key: String): String =
+    suspend fun sellProduct(id: String, quantity: Double?, pin: String, key: String): Paid =
         ref(call("POST", "/invest/$id/sell", JSONObject().put("quantity", quantity ?: JSONObject.NULL).put("pin", pin).put("idempotencyKey", key)))
 
     // E-statements (story S2.17)
@@ -398,7 +415,7 @@ object Api {
         call("POST", "/splits", JSONObject().put("total", total).put("note", note).put("shares",
             org.json.JSONArray(shares.map { (number, amount) -> JSONObject().put("accountNumber", number).put("amount", amount) })))
     }
-    suspend fun payRequest(id: String, pin: String): String = call("POST", "/requests/$id/pay", JSONObject().put("pin", pin)).getString("reference")
+    suspend fun payRequest(id: String, pin: String): Paid = paid(call("POST", "/requests/$id/pay", JSONObject().put("pin", pin)))
     suspend fun declineRequest(id: String) { call("POST", "/requests/$id/decline") }
     suspend fun cancelRequest(id: String) { call("POST", "/requests/$id/cancel") }
 
@@ -422,8 +439,8 @@ object Api {
         else r.getJSONObject("merchant").let { Scan.Pay(Merchant(it.getString("id"), it.getString("name"), it.getString("city"), it.getString("category")), amount) }
     }
 
-    suspend fun qrisPay(merchantId: String, amount: Long, pin: String, idempotencyKey: String): String =
-        call("POST", "/qris/pay", JSONObject().put("merchantId", merchantId).put("amount", amount).put("pin", pin).put("idempotencyKey", idempotencyKey)).getString("reference")
+    suspend fun qrisPay(merchantId: String, amount: Long, pin: String, idempotencyKey: String): Paid =
+        paid(call("POST", "/qris/pay", JSONObject().put("merchantId", merchantId).put("amount", amount).put("pin", pin).put("idempotencyKey", idempotencyKey)))
 
     suspend fun myQr(amount: Long?): MyQr {
         val r = call("GET", "/qris/mine" + (amount?.let { "?amount=$it" } ?: ""))
@@ -450,7 +467,8 @@ object Api {
     suspend fun payBill(biller: String, number: String, productId: String?, amount: Long?, pin: String, idempotencyKey: String): BillPaid {
         val r = call("POST", "/bills/pay", JSONObject().put("biller", biller).put("number", number).put("productId", productId ?: JSONObject.NULL)
             .put("amount", amount ?: JSONObject.NULL).put("pin", pin).put("idempotencyKey", idempotencyKey))
-        return BillPaid(r.getString("reference"), if (r.isNull("token")) null else r.getString("token"), r.getLong("amount"), r.getLong("fee"), r.getString("label"))
+        return BillPaid(r.getString("reference"), if (r.isNull("token")) null else r.getString("token"), r.getLong("amount"), r.getLong("fee"), r.getString("label"),
+            r.optStringOrNull("transactionId"), r.instantOrNull("at"))
     }
 
     private fun parseCards(r: JSONObject) = r.getJSONArray("cards").map { c ->
@@ -469,8 +487,8 @@ object Api {
 
     suspend fun cardTransactions(id: String): List<Transaction> = call("GET", "/cards/$id/transactions").getJSONArray("items").map(::parseTransaction)
 
-    suspend fun payCard(id: String, amount: Long, pin: String, idempotencyKey: String): String =
-        call("POST", "/cards/$id/pay", JSONObject().put("amount", amount).put("pin", pin).put("idempotencyKey", idempotencyKey)).getString("reference")
+    suspend fun payCard(id: String, amount: Long, pin: String, idempotencyKey: String): Paid =
+        paid(call("POST", "/cards/$id/pay", JSONObject().put("amount", amount).put("pin", pin).put("idempotencyKey", idempotencyKey)))
 
     suspend fun inbox(): List<InboxItem> = call("GET", "/inbox").getJSONArray("items").map {
         InboxItem(it.getString("id"), it.getString("title"), it.getString("body"), if (it.isNull("link")) null else it.getString("link"),
@@ -493,6 +511,8 @@ object Api {
         )
     }
 
+    /** Q-C1 step 1: the current PIN, checked before a new one is typed. */
+    suspend fun checkPin(pin: String) { call("POST", "/me/pin/check", JSONObject().put("pin", pin)) }
     suspend fun changePin(oldPin: String, newPin: String) { call("POST", "/me/pin", JSONObject().put("oldPin", oldPin).put("newPin", newPin)) }
 
     suspend fun changePassword(old: String, new: String) { call("POST", "/me/password", JSONObject().put("oldPassword", old).put("newPassword", new)) }
@@ -503,6 +523,9 @@ object Api {
 
     suspend fun registerVerify(phone: String, code: String): String =
         call("POST", "/register/verify", JSONObject().put("phone", phone).put("code", code)).getString("token")
+
+    /** Q-D2: is this NIK free? Throws NIK_TAKEN or TOO_MANY_CHECKS with the server's message. */
+    suspend fun registerNik(token: String, nik: String) { call("POST", "/register/nik", JSONObject().put("token", token).put("nik", nik)) }
 
     suspend fun registerSubmit(token: String, details: JSONObject, password: String, pin: String) {
         call("POST", "/register/submit", JSONObject().put("token", token).put("details", details).put("password", password).put("pin", pin))
@@ -530,9 +553,10 @@ fun parseHome(j: JSONObject): Home {
         firstName = c.getString("firstName"),
         fullName = c.getString("name"),
         tier = c.getString("tier"),
+        phone = c.optStringOrNull("phone"),
         totalBalance = j.getLong("totalBalance"),
         accounts = j.getJSONArray("accounts").map {
-            Account(it.getString("id"), it.getString("kind"), it.getString("name"), it.optString("number").takeIf { n -> n.isNotEmpty() && n != "null" }, it.getLong("balance"))
+            Account(it.getString("id"), it.getString("kind"), it.getString("name"), it.optString("number").takeIf { n -> n.isNotEmpty() && n != "null" }, it.getLong("balance"), it.instantOrNull("openedOn"))
         },
         recent = j.getJSONArray("recent").map(::parseTransaction),
         pockets = j.optJSONArray("pockets")?.map(::parsePocket) ?: emptyList(),
@@ -577,4 +601,5 @@ fun parseTransaction(t: JSONObject) = Transaction(
 )
 
 private fun JSONObject.optStringOrNull(key: String) = if (isNull(key) || !has(key)) null else getString(key)
+private fun JSONObject.instantOrNull(key: String) = optStringOrNull(key)?.let { runCatching { Instant.parse(it) }.getOrNull() }
 private inline fun <T> JSONArray.map(f: (JSONObject) -> T) = List(length()) { f(getJSONObject(it)) }

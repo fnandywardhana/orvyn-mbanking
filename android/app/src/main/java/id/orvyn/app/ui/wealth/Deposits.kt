@@ -192,7 +192,7 @@ fun OpenDepositFlow(onExit: () -> Unit) {
             OrvynButton("Open deposit", onClick = { step = 3 }, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp))
         }
         3 -> PinConfirm("To open a ${Money.format(amount)} deposit.", onBack = { step = 2 }, onRefused = { error = it; step = 1 }) { pin ->
-            reference = Api.openDeposit(amount, tenor, rollover, pin, key); DataVersion.count++; step = 4
+            reference = Api.openDeposit(amount, tenor, rollover, pin, key).reference; DataVersion.count++; step = 4
         }
         else -> SuccessScreen("Deposit opened", Money.format(amount), "for $tenor ${if (tenor == 1) "month" else "months"} at ${percent(quote!!.rateBp)}",
             details = { ReceiptLine("Matures", formatDay(quote!!.maturityDate)); ReceiptLine("Interest after tax", Money.format(quote!!.net)); ReceiptLine("Reference", reference) },

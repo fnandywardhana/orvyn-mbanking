@@ -288,8 +288,8 @@ fun TradeFlow(id: String, buy: Boolean, onExit: () -> Unit, onQuiz: () -> Unit) 
             OrvynButton(if (buy) "Buy ${Money.format(amount)}" else "Sell ${Money.format(amount)}", enabled = ok, onClick = { step = 1 }, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp))
         }
         1 -> PinConfirm("To ${if (buy) "buy" else "sell"} ${Money.format(amount)} of ${p.name}.", onBack = { step = 0 }, onRefused = { error = it; step = 0 }) { pin ->
-            reference = if (buy) Api.buyProduct(id, amount, null, acknowledged, pin, key)
-                else Api.sellProduct(id, if (sellAll) null else quantity, pin, key)
+            reference = (if (buy) Api.buyProduct(id, amount, null, acknowledged, pin, key)
+                else Api.sellProduct(id, if (sellAll) null else quantity, pin, key)).reference
             DataVersion.count++; step = 2
         }
         else -> SuccessScreen(if (buy) "Bought" else "Sold", Money.format(amount), "of ${p.name}",

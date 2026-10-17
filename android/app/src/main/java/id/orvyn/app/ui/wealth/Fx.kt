@@ -161,7 +161,7 @@ fun FxExchangeFlow(startCurrency: String, startBuy: Boolean, onExit: () -> Unit)
                 modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp))
         }
         1 -> PinConfirm("To ${if (buy) "buy" else "sell"} ${formatForeign(minor, currency, decimals)} for ${Money.format(quote!!.first)}.", onBack = { step = 0 },
-            onRefused = { error = it; step = 0 }) { pin -> reference = Api.fxExchange(currency, buy, minor, pin, key); DataVersion.count++; step = 2 }
+            onRefused = { error = it; step = 0 }) { pin -> reference = Api.fxExchange(currency, buy, minor, pin, key).reference; DataVersion.count++; step = 2 }
         else -> SuccessScreen(if (buy) "Bought" else "Sold", formatForeign(minor, currency, decimals), "for ${Money.format(quote!!.first)}",
             details = { ReceiptLine("Rate", formatRate(quote!!.second)); ReceiptLine("Reference", reference) }, primaryLabel = "Done", onPrimary = onExit)
     }

@@ -92,7 +92,7 @@ private fun numberLabel(kind: String) = when (kind) {
 
 /** Stories S1.18–S1.21. [ewalletsOnly] is the "Top up" shortcut. */
 @Composable
-fun BillsFlow(onExit: () -> Unit, ewalletsOnly: Boolean = false) {
+fun BillsFlow(onExit: () -> Unit, ewalletsOnly: Boolean = false, phone: String? = null) {
     var step by remember { mutableStateOf<BStep>(BStep.Hub) }
     var billers by remember { mutableStateOf<List<Biller>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -246,6 +246,6 @@ private fun Receipt(q: Inquiry, paid: BillPaid, onDone: () -> Unit) {
             ReceiptLine("Reference", paid.reference)
         },
         primaryLabel = "Done", onPrimary = onDone,
-        secondary = paid.token?.let { token -> { WhiteTextButton(if (copied) "Token copied" else "Copy token") { clipboard.setText(AnnotatedString(token)); copied = true } } },
+        textAction = paid.token?.let { token -> { WhiteTextButton(if (copied) "Token copied" else "Copy token") { clipboard.setText(AnnotatedString(token)); copied = true } } },
     )
 }

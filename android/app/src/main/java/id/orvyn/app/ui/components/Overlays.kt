@@ -8,7 +8,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -28,7 +27,11 @@ fun OrvynBottomSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() 
     )
 }
 
-/** Only for destructive or irreversible confirmations: a title, one sentence, two actions. */
+/**
+ * Only for destructive or irreversible confirmations (design.md 4.16): a title, one sentence, two actions. A destructive
+ * confirm is a filled `error` button; [dismissLabel] names what stays ("Cancel", "Keep request"). While [busy] the confirm
+ * button spins and the dialog stays open.
+ */
 @Composable
 fun ConfirmDialog(
     title: String,
@@ -37,18 +40,18 @@ fun ConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     destructive: Boolean = false,
+    dismissLabel: String = "Cancel",
+    busy: Boolean = false,
 ) {
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(title, style = MaterialTheme.typography.titleLarge) },
         text = { Text(body, style = MaterialTheme.typography.bodyLarge, color = OrvynTheme.colors.textSecondary) },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(confirmLabel, style = MaterialTheme.typography.labelLarge,
-                    color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
-            }
+            if (destructive) OrvynButton(confirmLabel, onClick = onConfirm, kind = ButtonKind.Destructive, loading = busy, fill = false)
+            else OrvynTextButton(confirmLabel, onClick = onConfirm, enabled = !busy)
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", style = MaterialTheme.typography.labelLarge) } },
+        dismissButton = { OrvynTextButton(dismissLabel, onClick = onDismiss, enabled = !busy) },
         shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.surface,
     )

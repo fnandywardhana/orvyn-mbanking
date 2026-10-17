@@ -22,6 +22,13 @@ object Money {
     fun signed(rupiah: Long): String = (if (rupiah < 0) "−" else "+") + format(rupiah)
 }
 
+/** Same rule as the server (PO-3): six digits, not all the same, not a straight run like 123456 or 654321. */
+fun isAcceptablePin(pin: String): Boolean {
+    if (!Regex("^\\d{6}$").matches(pin) || pin.all { it == pin[0] }) return false
+    val steps = pin.zipWithNext { a, b -> b - a }.toSet()
+    return !(steps.size == 1 && (1 in steps || -1 in steps))
+}
+
 /** "1234567890" → "1234 5678 90" */
 fun groupAccountNumber(number: String) = number.chunked(4).joinToString(" ")
 

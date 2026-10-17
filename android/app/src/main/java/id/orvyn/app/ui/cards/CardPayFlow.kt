@@ -87,7 +87,7 @@ fun CardPayFlow(card: Card, onExit: () -> Unit) {
             Spacer(Modifier.weight(1f))
             PinPad(onComplete = { pin ->
                 scope.launch {
-                    try { reference = Api.payCard(card.id, amount, pin, key); DataVersion.count++; step = 2 }
+                    try { reference = Api.payCard(card.id, amount, pin, key).reference; DataVersion.count++; step = 2 }
                     catch (e: ApiException) { if (e.code == "WRONG_PIN") { error = e.message; errors++ } else { error = e.message; step = 0 } }
                 }
             }, errorCount = errors, errorText = error, onBiometric = null, modifier = Modifier.padding(bottom = 24.dp))

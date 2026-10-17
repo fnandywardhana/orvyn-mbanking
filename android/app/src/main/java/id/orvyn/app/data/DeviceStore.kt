@@ -61,6 +61,11 @@ class DeviceStore(context: Context) {
         get() = prefs.getBoolean("vyna_speaks", false)
         set(v) = prefs.edit().putBoolean("vyna_speaks", v).apply()
 
+    /** Q-G5 AC5: "Welcome back, Raka" on Unlock, also after an idle sign-out or a restart. Kept with the device token. */
+    var firstName: String?
+        get() = prefs.getString("first_name", null)
+        set(v) = prefs.edit().putString("first_name", v).apply()
+
     fun forgetDevice() {
         val theme = themeMode
         prefs.edit().clear().putString("theme", theme).apply()

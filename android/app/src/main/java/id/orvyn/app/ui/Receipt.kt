@@ -64,3 +64,6 @@ fun shareReceipt(context: Context, t: Transaction) {
         type = "image/png"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }, "Share receipt"))
 }
+
+/** "Share receipt" on a success screen (Q-F2): the same picture as from History, from the transaction the server just made. */
+suspend fun shareTransaction(context: Context, transactionId: String) = shareReceipt(context, id.orvyn.app.data.Api.transaction(transactionId))

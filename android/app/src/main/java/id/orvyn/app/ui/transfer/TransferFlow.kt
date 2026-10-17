@@ -6,6 +6,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
@@ -47,28 +50,43 @@ import id.orvyn.app.data.ApiException
 import id.orvyn.app.data.Bank
 import id.orvyn.app.data.DataVersion
 import id.orvyn.app.data.Method
+import id.orvyn.app.data.Paid
 import id.orvyn.app.data.Recipient
-import id.orvyn.app.data.Recipients
 import id.orvyn.app.data.TransferOptions
 import id.orvyn.app.ui.Money
 import id.orvyn.app.ui.auth.FlowScreen
 import id.orvyn.app.ui.components.AmountDisplay
 import id.orvyn.app.ui.components.AmountKeypad
+import id.orvyn.app.ui.components.AmountScreen
 import id.orvyn.app.ui.components.ButtonKind
+import id.orvyn.app.ui.components.Chip
+import id.orvyn.app.ui.components.ConfirmDialog
+import id.orvyn.app.ui.components.ErrorBox
+import id.orvyn.app.ui.components.FlowSteps
 import id.orvyn.app.ui.components.InitialsAvatar
+import id.orvyn.app.ui.components.InlineLoadError
+import id.orvyn.app.ui.components.LoadContent
+import id.orvyn.app.ui.components.LocalSnacks
 import id.orvyn.app.ui.components.MessageState
+import id.orvyn.app.ui.components.OFFLINE
 import id.orvyn.app.ui.components.OrvynBottomSheet
 import id.orvyn.app.ui.components.OrvynButton
-import id.orvyn.app.ui.components.OrvynTextField
-import id.orvyn.app.ui.components.PinPad
 import id.orvyn.app.ui.components.OrvynTextButton
+import id.orvyn.app.ui.components.OrvynTextField
+import id.orvyn.app.ui.components.PinScreen
 import id.orvyn.app.ui.components.ReceiptLine
+import id.orvyn.app.ui.components.Segmented
 import id.orvyn.app.ui.components.Skeleton
 import id.orvyn.app.ui.components.SuccessScreen
 import id.orvyn.app.ui.components.WhiteTextButton
+import id.orvyn.app.ui.components.rememberLoad
+import id.orvyn.app.ui.components.rememberOnce
+import id.orvyn.app.ui.components.say
 import id.orvyn.app.ui.groupAccountNumber
+import id.orvyn.app.ui.shareTransaction
 import id.orvyn.app.ui.theme.OrvynTheme
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.util.UUID
 
 private enum class Step { Pick, New, Amount, Review, Pin, Done }
@@ -87,65 +105,95 @@ fun repeatLabel(repeat: String, firstDate: String?): String {
 
 private fun ordinal(n: Int) = "$n" + if (n in 11..13) "th" else when (n % 10) { 1 -> "st"; 2 -> "nd"; 3 -> "rd"; else -> "th" }
 
-/** Stories S1.12–S1.14: recipient → amount → review → PIN → done, with back going one step at a time. */
+/**
+ * Stories S1.12–S1.14: recipient → amount → review → PIN → done, with back going one step at a time. Started with a
+ * recipient and an amount (a scanned My QR, or Vyna), it opens on review, and Back from there leaves the flow (Q-G7).
+ */
 @Composable
 fun TransferFlow(onExit: () -> Unit, startWith: Recipient? = null, startAmount: Long? = null, onScheduled: () -> Unit = {}) {
-    // Coming from a scanned My QR: skip straight to the amount (or review, if the QR carried one).
-    var step by remember { mutableStateOf(if (startWith == null) Step.Pick else if (startAmount != null) Step.Review else Step.Amount) }
+    val entry = remember { if (startWith == null) Step.Pick else if (startAmount != null) Step.Review else Step.Amount }
+    var step by remember { mutableStateOf(entry) }
     var to by remember { mutableStateOf(startWith) }
     var amount by remember { mutableLongStateOf(startAmount ?: 0L) }
     var note by remember { mutableStateOf("") }
     var method by remember { mutableStateOf<Method?>(null) }
     var later by remember { mutableStateOf<Later?>(null) }
-    var reference by remember { mutableStateOf("") }
+    var paid by remember { mutableStateOf<Paid?>(null) }
+    var scheduledAt by remember { mutableStateOf<Instant?>(null) }
     var reviewError by remember { mutableStateOf<String?>(null) }
-    // One key per review screen: a double tap or a retry after a timeout can't send twice.
+    // One key per review: a double tap or a retry after a timeout can't send twice (kept until the transfer goes through).
     var idempotencyKey by remember { mutableStateOf(UUID.randomUUID().toString()) }
 
     BackHandler(step != Step.Done) {
-        step = when (step) {
-            Step.Pick -> { onExit(); Step.Pick }
-            Step.New, Step.Amount -> if (to?.id != null || step == Step.New) Step.Pick else Step.New
-            Step.Review -> Step.Amount
-            Step.Pin -> Step.Review
-            Step.Done -> Step.Done
+        step = when {
+            step == entry -> { onExit(); step }
+            step == Step.Pick -> { onExit(); step }
+            step == Step.New -> Step.Pick
+            step == Step.Amount -> if (to?.id != null || entry != Step.Pick) Step.Pick else Step.New
+            step == Step.Review -> Step.Amount
+            else -> Step.Review
         }
     }
 
-    when (step) {
-        Step.Pick -> PickRecipient(onBack = onExit, onNew = { step = Step.New }, onScheduled = onScheduled, onPick = { to = it; amount = 0; step = Step.Amount })
-        Step.New -> NewRecipient(onBack = { step = Step.Pick }, onFound = { to = it; amount = 0; step = Step.Amount })
-        Step.Amount -> EnterAmount(to!!, amount, onBack = { step = Step.Pick }) { a -> amount = a; reviewError = null; idempotencyKey = UUID.randomUUID().toString(); step = Step.Review }
-        Step.Review -> Review(to!!, amount, note, { note = it }, reviewError, later, { later = it }, onBack = { step = Step.Amount }) { m -> method = m; step = Step.Pin }
-        Step.Pin -> EnterPin(to!!, amount, method!!, note, idempotencyKey, later, onBack = { step = Step.Review },
-            onSent = { ref -> reference = ref; DataVersion.count++; step = Step.Done },
-            onRefused = { msg -> reviewError = msg; step = Step.Review })
-        Step.Done -> Done(to!!, amount, method!!, note, reference, later, onDone = onExit)
+    FlowSteps(step, index = { it.ordinal }, success = { it == Step.Done }) { s ->
+        when (s) {
+            Step.Pick -> PickRecipient(onBack = onExit, onNew = { step = Step.New }, onScheduled = onScheduled, onPick = { to = it; amount = 0; step = Step.Amount })
+            Step.New -> NewRecipient(onBack = { step = Step.Pick }, onFound = { to = it; amount = 0; step = Step.Amount })
+            Step.Amount -> EnterAmount(to!!, amount, onBack = { if (entry == Step.Amount) onExit() else step = Step.Pick }) { a ->
+                amount = a; reviewError = null; idempotencyKey = UUID.randomUUID().toString(); step = Step.Review
+            }
+            Step.Review -> Review(to!!, amount, note, { note = it }, reviewError, { reviewError = null }, later, { later = it },
+                onBack = { if (entry == Step.Review) onExit() else step = Step.Amount }) { m -> method = m; step = Step.Pin }
+            Step.Pin -> EnterPin(to!!, amount, method!!, note, idempotencyKey, later, onBack = { step = Step.Review },
+                onSent = { p, at -> paid = p; scheduledAt = at; DataVersion.count++; step = Step.Done },
+                onRefused = { msg -> reviewError = msg; step = Step.Review })
+            Step.Done -> Done(to!!, amount, method!!, note, paid, scheduledAt, later, onDone = onExit)
+        }
     }
 }
 
 @Composable
 private fun PickRecipient(onBack: () -> Unit, onNew: () -> Unit, onScheduled: () -> Unit, onPick: (Recipient) -> Unit) {
-    var list by remember { mutableStateOf<Recipients?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    val list = rememberLoad { Api.recipients() }
     var query by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<Recipient?>(null) }
-    var reload by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(reload) { try { list = Api.recipients() } catch (e: ApiException) { error = e.message } }
 
-    // Story S1.14 AC3: nickname or remove a saved recipient.
+    // Story S1.14 AC3: nickname or remove a saved recipient. Failures stay in the sheet (design.md 6.1).
     editing?.let { r ->
         var nick by remember(r.id) { mutableStateOf(r.nickname ?: "") }
+        var saving by remember(r.id) { mutableStateOf(false) }
+        var removing by remember(r.id) { mutableStateOf(false) }
+        var confirm by remember(r.id) { mutableStateOf(false) }
+        var error by remember(r.id) { mutableStateOf<String?>(null) }
         OrvynBottomSheet(onDismiss = { editing = null }) {
-            Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(r.name, style = MaterialTheme.typography.titleLarge)
                 Text("${r.bankName} · ${groupAccountNumber(r.accountNumber)}", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
-                OrvynTextField("Nickname", nick, { nick = it.take(30) }, helper = "Only you see this, for example \"Mom\" or \"Rent\".")
-                OrvynButton("Save", onClick = { scope.launch { runCatching { Api.renameRecipient(r.id!!, nick) }; editing = null; reload++ } })
-                OrvynButton("Remove from saved", kind = ButtonKind.Destructive, onClick = { scope.launch { runCatching { Api.deleteRecipient(r.id!!) }; editing = null; reload++ } })
+                OrvynTextField("Nickname", nick, { nick = it.take(30); error = null }, helper = "Only you see this, for example \"Mom\" or \"Rent\".")
+                error?.let { ErrorBox(it) }
+                OrvynButton("Save", loading = saving, onClick = {
+                    saving = true
+                    scope.launch {
+                        try { Api.renameRecipient(r.id!!, nick); editing = null; list.reload() } catch (e: ApiException) { error = e.message }
+                        saving = false
+                    }
+                })
+                Spacer(Modifier.height(12.dp)) // 24dp between the primary action and the destructive one (Q-C5 AC4)
+                OrvynButton("Remove from saved", kind = ButtonKind.DestructiveText, onClick = { confirm = true }, modifier = Modifier.align(Alignment.CenterHorizontally))
             }
         }
+        if (confirm) ConfirmDialog(
+            "Remove ${r.name} from saved?", "You can save them again after your next transfer.", "Remove", destructive = true, busy = removing,
+            onDismiss = { confirm = false },
+            onConfirm = {
+                removing = true
+                scope.launch {
+                    try { Api.deleteRecipient(r.id!!); editing = null; list.reload() } catch (e: ApiException) { error = e.message }
+                    removing = false; confirm = false
+                }
+            },
+        )
     }
 
     FlowScreen("Send money", null, onBack) {
@@ -161,17 +209,23 @@ private fun PickRecipient(onBack: () -> Unit, onNew: () -> Unit, onScheduled: ()
             shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = MaterialTheme.colorScheme.outline, unfocusedContainerColor = MaterialTheme.colorScheme.surface, focusedContainerColor = MaterialTheme.colorScheme.surface),
         )
-        val l = list
         val match = { r: Recipient -> query.isBlank() || listOfNotNull(r.name, r.nickname, r.accountNumber).any { it.contains(query.trim(), ignoreCase = true) } }
-        LazyColumn(Modifier.padding(top = 8.dp)) {
-            when {
-                error != null -> item { MessageState(R.drawable.ph_warning_circle, "Couldn't load your recipients", error!!) }
-                l == null -> items(4) { Skeleton(Modifier.padding(vertical = 10.dp).fillMaxWidth().height(44.dp)) }
-                l.saved.isEmpty() && l.recent.isEmpty() -> item {
-                    MessageState(R.drawable.ph_arrows_left_right, "No recipients yet", "Tap New recipient to send money to someone for the first time.")
-                }
-                else -> {
-                    for ((title, group) in listOf("Saved" to l.saved.filter(match), "Recent" to l.recent.filter(match))) {
+        LoadContent(list, "Couldn't load your recipients", skeleton = {
+            Column(Modifier.padding(top = 8.dp)) { repeat(4) { Skeleton(Modifier.padding(vertical = 10.dp).fillMaxWidth().height(44.dp)) } }
+        }) { l ->
+            val saved = l.saved.filter(match)
+            val recent = l.recent.filter(match)
+            LazyColumn(Modifier.padding(top = 8.dp)) {
+                when {
+                    l.saved.isEmpty() && l.recent.isEmpty() -> item {
+                        MessageState(R.drawable.ph_arrows_left_right, "No recipients yet", "Tap New recipient to send money to someone for the first time.")
+                    }
+                    saved.isEmpty() && recent.isEmpty() -> item {
+                        // Q-G6: say what was searched for, and what to do next.
+                        MessageState(R.drawable.ph_magnifying_glass, "No matches for \"${query.trim()}\"", "Check the spelling, or send to a new recipient.",
+                            action = { OrvynButton("New recipient", onClick = onNew, kind = ButtonKind.Secondary, fill = false) })
+                    }
+                    else -> for ((title, group) in listOf("Saved" to saved, "Recent" to recent)) {
                         if (group.isEmpty()) continue
                         item { Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, color = OrvynTheme.colors.textSecondary, modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)) }
                         items(group, key = { title + it.bank + it.accountNumber }) { r ->
@@ -187,7 +241,7 @@ private fun PickRecipient(onBack: () -> Unit, onNew: () -> Unit, onScheduled: ()
 // Rows inside FlowScreen already have the 20dp gutter, so drop the row's own horizontal padding.
 @Composable
 private fun RecipientRowFlush(r: Recipient, onEdit: (() -> Unit)? = null, onClick: () -> Unit) = Row(
-    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).heightIn(min = 64.dp).padding(vertical = 10.dp),
+    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClick = rememberOnce(onClick)).heightIn(min = 64.dp).padding(vertical = 10.dp),
     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
 ) {
     InitialsAvatar(r.nickname ?: r.name)
@@ -258,7 +312,7 @@ private fun NewRecipient(onBack: () -> Unit, onFound: (Recipient) -> Unit) {
 }
 
 @Composable
-private fun RecipientHeader(to: Recipient) {
+fun RecipientHeader(to: Recipient) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -273,84 +327,119 @@ private fun RecipientHeader(to: Recipient) {
 
 private const val MIN_TRANSFER = 10_000L
 
+/** design.md 4.7: the balance and today's limit load under the amount; if they can't, the screen says so and offers Try again. */
 @Composable
 private fun EnterAmount(to: Recipient, initial: Long, onBack: () -> Unit, onContinue: (Long) -> Unit) {
     var amount by remember { mutableLongStateOf(initial) }
-    var opts by remember { mutableStateOf<TransferOptions?>(null) }
-    LaunchedEffect(Unit) { runCatching { opts = Api.transferOptions(to.bank, 0) } }
-    val o = opts
+    val opts = rememberLoad { Api.transferOptions(to.bank, 0) }
+    val o = opts.value
     val error = when {
         o == null || amount == 0L -> null
         amount > o.balance -> "You're ${Money.format(amount - o.balance)} short."
         amount > o.remainingToday -> "That's over your daily limit. You can still send ${Money.format(o.remainingToday)} today."
         else -> null
     }
-    FlowScreen("How much?", null, onBack) {
-        RecipientHeader(to)
-        Spacer(Modifier.weight(1f))
-        AmountDisplay(amount, o?.balance, error, onQuickPick = { amount = it })
-        Spacer(Modifier.weight(1f))
-        AmountKeypad(amount, { amount = it })
+    val failed = opts.error?.let { if (it == OFFLINE) it else "Couldn't load your balance and daily limit." }
+    AmountScreen("How much?", null, onBack, keypad = { AmountKeypad(amount, { amount = it }) }, button = {
         OrvynButton(
-            when { amount == 0L -> "Enter an amount"; amount < MIN_TRANSFER -> "Minimum ${Money.format(MIN_TRANSFER)}"; else -> "Continue" },
+            when { amount == 0L -> "Enter an amount"; amount < MIN_TRANSFER -> "Minimum ${Money.format(MIN_TRANSFER)}"; o == null && failed != null -> "Balance didn't load"; else -> "Continue" },
             enabled = amount >= MIN_TRANSFER && error == null && o != null,
-            onClick = { onContinue(amount) }, modifier = Modifier.padding(vertical = 16.dp),
+            onClick = { onContinue(amount) },
         )
+    }) {
+        RecipientHeader(to)
+        AmountDisplay(amount, o?.balance, error, onQuickPick = { amount = it }, loading = o == null && opts.busy,
+            loadError = if (o == null) failed else null, retrying = opts.busy, onRetry = opts::reload)
     }
 }
 
+/**
+ * Q-B4 (design.md 6.4): the fee and arrival load here. If they don't, the card says so with Try again and the button says
+ * why it's off. Coming back from the PIN with any error other than a wrong PIN reloads them and shows the message.
+ */
 @Composable
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-private fun Review(to: Recipient, amount: Long, note: String, onNote: (String) -> Unit, error: String?, later: Later?, onLater: (Later?) -> Unit, onBack: () -> Unit, onConfirm: (Method) -> Unit) {
+@OptIn(ExperimentalLayoutApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
+private fun Review(
+    to: Recipient, amount: Long, note: String, onNote: (String) -> Unit, error: String?, onClearError: () -> Unit,
+    later: Later?, onLater: (Later?) -> Unit, onBack: () -> Unit, onConfirm: (Method) -> Unit,
+) {
     var picking by remember { mutableStateOf(false) }
     var opts by remember { mutableStateOf<TransferOptions?>(null) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(true) }
     var chosen by remember { mutableStateOf<Method?>(null) }
-    LaunchedEffect(Unit) {
-        runCatching { Api.transferOptions(to.bank, amount) }.onSuccess { opts = it; chosen = it.methods.firstOrNull() }
+    val scope = rememberCoroutineScope()
+    suspend fun load(): Boolean {
+        loading = true
+        return try {
+            val o = Api.transferOptions(to.bank, amount)
+            opts = o; loadError = null
+            if (chosen == null || o.methods.none { it.method == chosen?.method }) chosen = o.methods.firstOrNull()
+            true
+        } catch (e: ApiException) { loadError = e.message; false } finally { loading = false }
     }
+    LaunchedEffect(Unit) { load() }
     val fee = chosen?.fee ?: 0
     FlowScreen("Check the details", null, onBack) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             RecipientHeader(to)
             val o = opts
-            if (o == null) Skeleton(Modifier.fillMaxWidth().height(180.dp)) else {
-                if (o.methods.size > 1) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("How to send", style = MaterialTheme.typography.titleMedium)
-                    for (m in o.methods) MethodOption(m, m == chosen) { chosen = m }
+            when {
+                o != null -> {
+                    if (o.methods.size > 1) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("How to send", style = MaterialTheme.typography.titleMedium)
+                        for (m in o.methods) MethodOption(m, m == chosen) { chosen = m }
+                    }
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface).padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        ReviewRow("Amount", Money.format(amount))
+                        ReviewRow("Fee", if (fee == 0L) "Free" else Money.format(fee))
+                        chosen?.let { ReviewRow("Arrives", it.note) }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        ReviewRow("Total", Money.format(amount + fee), strong = true)
+                        if (later == null) ReviewRow("Balance after", Money.format(o.balance - amount - fee))
+                    }
                 }
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface).padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ReviewRow("Amount", Money.format(amount))
-                    ReviewRow("Fee", if (fee == 0L) "Free" else Money.format(fee))
-                    chosen?.let { ReviewRow("Arrives", it.note) }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    ReviewRow("Total", Money.format(amount + fee), strong = true)
-                    if (later == null) ReviewRow("Balance after", Money.format(o.balance - amount - fee))
+                loadError != null && !loading -> Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface).padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    InlineLoadError("Couldn't load the fee and arrival time.", retrying = loading, onRetry = { scope.launch { load() } })
+                    Text(loadError!!, style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
                 }
+                else -> Skeleton(Modifier.fillMaxWidth().height(180.dp))
             }
             if (id.orvyn.app.data.AppConfig.on("scheduled")) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("When", style = MaterialTheme.typography.titleMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    id.orvyn.app.ui.components.Chip("Send now", later == null) { onLater(null) }
-                    id.orvyn.app.ui.components.Chip("Schedule", later != null) { if (later == null) picking = true }
-                }
+                Segmented(listOf("Send now", "Schedule"), if (later == null) 0 else 1, { if (it == 0) onLater(null) else if (later == null) picking = true })
                 later?.let { l ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("First on ${java.time.LocalDate.parse(l.firstDate).format(java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM yyyy", java.util.Locale.US))}",
                             style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                         OrvynTextButton("Change", onClick = { picking = true })
                     }
-                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        for (r in listOf("once", "weekly", "monthly")) id.orvyn.app.ui.components.Chip(repeatLabel(r, l.firstDate), l.repeat == r) { onLater(l.copy(repeat = r)) }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (r in listOf("once", "weekly", "monthly")) Chip(repeatLabel(r, l.firstDate), l.repeat == r) { onLater(l.copy(repeat = r)) }
                     }
                     Text("Sent at 07:00 WIB. Your PIN now covers every send, and fees and limits apply on the day.",
                         style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
                 }
             }
             OrvynTextField("Note (optional)", note, { onNote(it.take(50)) }, helper = "${note.length}/50 · The recipient sees this.")
-            if (error != null) Text(error, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            error?.let { ErrorBox(it) }
         }
-        OrvynButton("${if (later == null) "Send" else "Schedule"} ${Money.format(amount)}", enabled = chosen != null, onClick = { chosen?.let(onConfirm) }, modifier = Modifier.padding(vertical = 16.dp))
+        val label = when {
+            opts != null -> "${if (later == null) "Send" else "Schedule"} ${Money.format(amount)}"
+            loadError != null && !loading -> "Details didn't load"
+            else -> "Loading the details…"
+        }
+        var sending by remember { mutableStateOf(false) }
+        OrvynButton(label, enabled = opts != null && chosen != null, loading = sending, modifier = Modifier.padding(vertical = 16.dp), onClick = {
+            if (error == null) chosen?.let(onConfirm)
+            else {
+                // After a failed send (offline, server): fetch the details again first, then ask for the PIN.
+                sending = true
+                scope.launch { if (load()) { onClearError(); chosen?.let(onConfirm) }; sending = false }
+            }
+        })
     }
     if (picking) {
         val tomorrow = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Jakarta")).plusDays(1)
@@ -371,7 +460,7 @@ private fun Review(to: Recipient, amount: Long, note: String, onNote: (String) -
 
 /** Label left, value right: easy to scan before approving money. */
 @Composable
-private fun ReviewRow(label: String, value: String, strong: Boolean = false) = Row(verticalAlignment = Alignment.Top) {
+fun ReviewRow(label: String, value: String, strong: Boolean = false) = Row(Modifier.semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.Top) {
     Text(label, style = MaterialTheme.typography.bodyLarge, color = OrvynTheme.colors.textSecondary, modifier = Modifier.weight(1f))
     Text(value, style = if (strong) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge,
         textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.weight(1.4f))
@@ -394,61 +483,72 @@ private fun MethodOption(m: Method, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
+/** Q-B5: "Sending Rp500,000…" while the server works. A wrong PIN stays here; anything else goes back to review. */
 @Composable
-private fun EnterPin(to: Recipient, amount: Long, method: Method, note: String, key: String, later: Later?, onBack: () -> Unit, onSent: (String) -> Unit, onRefused: (String) -> Unit) {
+private fun EnterPin(to: Recipient, amount: Long, method: Method, note: String, key: String, later: Later?, onBack: () -> Unit,
+                     onSent: (Paid?, Instant?) -> Unit, onRefused: (String) -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var errors by remember { mutableIntStateOf(0) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    FlowScreen("Enter your PIN", if (later == null) "To send ${Money.format(amount)} to ${to.name}." else "To schedule ${Money.format(amount)} to ${to.name}.", onBack) {
-        Spacer(Modifier.weight(1f))
-        if (busy) Text("Sending…", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.align(Alignment.CenterHorizontally))
-        PinPad(
-            onComplete = { pin ->
-                busy = true
-                scope.launch {
-                    try {
-                        if (later == null) onSent(Api.sendTransfer(to, amount, method.method, note, pin, key))
-                        else { Api.createSchedule(to, amount, method.method, note, later.repeat, later.firstDate, pin); onSent("") }
-                    } catch (e: ApiException) {
-                        when (e.code) {
-                            "WRONG_PIN" -> { error = e.message; errors++ }
-                            "LOCKED", "signed_out" -> { error = e.message; errors++ } // the app signs out and returns to the PIN screen
-                            else -> onRefused(e.message)
-                        }
-                    } finally { busy = false }
-                }
-            },
-            errorCount = errors, errorText = error, onBiometric = null, modifier = Modifier.padding(bottom = 24.dp),
-        )
-    }
+    PinScreen(
+        "Enter your PIN", if (later == null) "To send ${Money.format(amount)} to ${to.name}." else "To schedule ${Money.format(amount)} to ${to.name}.", onBack,
+        errorCount = errors, errorText = error,
+        busyText = if (busy) "${if (later == null) "Sending" else "Scheduling"} ${Money.format(amount)}…" else null,
+        onComplete = { pin ->
+            busy = true; error = null
+            scope.launch {
+                try {
+                    if (later == null) onSent(Api.sendTransfer(to, amount, method.method, note, pin, key), null)
+                    else onSent(null, Api.createSchedule(to, amount, method.method, note, later.repeat, later.firstDate, pin) ?: Instant.now())
+                } catch (e: ApiException) {
+                    when (e.code) {
+                        "WRONG_PIN" -> { error = e.message; errors++ }
+                        "LOCKED", "signed_out" -> {} // the app moves to the locked or unlock screen
+                        else -> onRefused(e.message)
+                    }
+                } finally { busy = false }
+            }
+        },
+    )
 }
 
 @Composable
-private fun Done(to: Recipient, amount: Long, method: Method, note: String, reference: String, later: Later?, onDone: () -> Unit) {
+private fun Done(to: Recipient, amount: Long, method: Method, note: String, paid: Paid?, scheduledAt: Instant?, later: Later?, onDone: () -> Unit) {
     var saved by remember { mutableStateOf(to.id != null) }
+    var saving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val snacks = LocalSnacks.current
     SuccessScreen(
         headline = if (later == null) "Sent" else "Scheduled",
         amount = Money.format(amount),
         subline = "to ${to.name}",
+        date = if (later == null) paid?.at else scheduledAt,
         details = {
             ReceiptLine("To", "${to.bankName} · ${groupAccountNumber(to.accountNumber)}")
             ReceiptLine("Method", if (method.fee == 0L) method.label else "${method.label} · fee ${Money.format(method.fee)}")
             if (note.isNotBlank()) ReceiptLine("Note", note)
-            if (later == null) ReceiptLine("Reference", reference)
+            if (later == null) ReceiptLine("Reference", paid?.reference ?: "")
             else {
                 ReceiptLine("First send", java.time.LocalDate.parse(later.firstDate).format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.US)) + ", 07:00 WIB")
                 ReceiptLine("Repeats", repeatLabel(later.repeat, later.firstDate))
             }
         },
-        primaryLabel = "Done",
         onPrimary = onDone,
-        secondary = when {
+        onShare = paid?.transactionId?.takeIf { later == null }?.let { id -> { shareTransaction(context, id) } },
+        textAction = when {
             to.id != null -> null
             saved -> { { Text("${to.name.substringBefore(' ')} is in your saved recipients", style = MaterialTheme.typography.labelLarge,
-                color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.padding(vertical = 14.dp)) } }
-            else -> { { WhiteTextButton("Save ${to.name.substringBefore(' ')} as a recipient") { scope.launch { runCatching { Api.saveRecipient(to, null) }.onSuccess { saved = true } } } } }
+                color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center) } }
+            else -> { { WhiteTextButton("Save ${to.name.substringBefore(' ')} as a recipient", loading = saving) {
+                saving = true
+                scope.launch {
+                    try { Api.saveRecipient(to, null); saved = true } catch (e: Exception) { snacks?.show(e.say(), error = true) }
+                    saving = false
+                }
+            } } }
         },
     )
 }
