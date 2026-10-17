@@ -116,3 +116,20 @@ Sumber: `qa-report.md` (NOT READY, 3 temuan IT). Commit `72c499b`.
 | H91-F1 (polish) | Nilai baris di detail transaksi (`Type` dan lainnya) yang berisi nomor kartu bertopeng dibacakan `{kartu} card ending {4 digit}` lewat `spokenCard` | `ui/history/HistoryScreen.kt` | `spokenCard` sudah diuji di `Hotfix091Test` |
 
 **Hasil:** `npm test` 118/118 lolos. `./gradlew --rerun-tasks testDebugUnitTest assembleDebug` dua kali: keduanya 111/111 lolos, APK debug ter-build. Izin APK tetap sama persis dengan `releases/orvyn-0.9.0.apk`. Tanpa HP, produksi, rilis, atau dev server.
+
+## Perbaikan QA putaran 2
+
+Sumber: `qa-report.md` bagian Putaran 2 (NOT READY, H91-F4) dan catatan tombol di R2.5. Commit `c46791e`.
+
+| Temuan | Perbaikan | File |
+|---|---|---|
+| H91-F4 (minor) | `RequestRow` bertumpuk di font besar (≥ 1,5) seperti `ShareRow` dan ListRow besar (MASTER List row, Q-A6): avatar, lalu judul, subjudul, nominal, dan chip status di bawahnya. Kolom teks tidak lagi disempitkan kolom nominal | `ui/requests/Requests.kt` |
+| Tombol berdampingan (catatan R2.5: `New recipien`/`t`, `Schedul`/`ed`, `Messa`/`ge`) | Komponen baru `ButtonRow`: berdampingan di font biasa, bertumpuk selebar layar di font ≥ 1,5, jadi label membungkus di antara kata (MASTER Button). Dipakai di semua pasangan tombol berbobot: Send money, Requests, kartu RM, Pockets, Invest, pemindai QRIS | `ui/components/Buttons.kt`, `TransferFlow.kt`, `Requests.kt`, `wealth/RelationshipManagerCard.kt`, `pockets/Pockets.kt`, `wealth/Invest.kt`, `qris/QrisFlow.kt` |
+
+**Layar lain yang memakai avatar:** `Who's in?`, `Check the shares`, daftar penerima, kepala penerima (Transfer), detail permintaan. QA R2.4 sudah meloloskannya, dan render test baru di bawah mengecek ulang daftar Requests, detail permintaan, dan daftar penerima.
+
+**Test baru** (`FontScaleTest`, 200%, 360dp dan 411dp, terang dan gelap, render di `build/font-scale/`): `requestsList`, `requestDetail`, `recipientList`, `relationshipManagerCard`. Masing-masing memakai `avoidableWordBreaks()` (`app/src/test/.../TestSupport.kt`), yang gagal bila ada kata yang patah di tengah padahal muat di satu baris sendiri. Kata yang lebih lebar dari seluruh baris, misalnya alamat email RM atau `Kusumawardhani` di 360dp, hanya bisa patah; itu batas lebar, bukan cacat tata letak. Server tiruan `StubServer` dipindah ke `TestSupport.kt` dan dipakai juga oleh `Hotfix091Test`. Test H91-F2 sekarang menunggu daftar dimuat ulang sebelum memeriksa Hendra (sebelumnya bisa balapan dengan muatnya daftar).
+
+**Hasil:** `npm test` 118/118 lolos. `./gradlew --rerun-tasks testDebugUnitTest assembleDebug` dua kali: keduanya 127/127 lolos, APK debug 0.9.1 (13) ter-build. Izin APK sama persis dengan `releases/orvyn-0.9.0.apk`. Tanpa HP, produksi, rilis, atau dev server.
+
+**Catatan:** satu kali, saat menjalankan hanya `FontScaleTest` dalam mode rekam Roborazzi, test lama `accountDetail` (411dp gelap) gagal dengan `IndexOutOfBoundsException` di dalam LazyColumn. Penyebabnya: data `AccountScreen` dimuat di latar belakang saat test menggulir. `AccountScreen` dan test itu tidak diubah di 0.9.1. Dua putaran ulang `FontScaleTest` dan dua putaran penuh `--rerun-tasks` lolos semua. Dicatat untuk backlog test.
