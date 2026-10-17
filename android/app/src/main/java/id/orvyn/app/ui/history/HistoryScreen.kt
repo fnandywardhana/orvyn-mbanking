@@ -379,5 +379,6 @@ fun TransactionDetailScreen(id: String, account: String? = null, onBack: () -> U
 @Composable
 private fun Field(label: String, value: String) = Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
     Text(label, style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
-    Text(value, style = MaterialTheme.typography.bodyLarge)
+    // H91-F1: a masked card number is read "… card ending 4821" (MASTER List row).
+    Text(value, style = MaterialTheme.typography.bodyLarge, modifier = if (value.contains("•")) Modifier.semantics { contentDescription = spokenCard(value) } else Modifier)
 }

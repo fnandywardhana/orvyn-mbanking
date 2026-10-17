@@ -64,7 +64,9 @@ import java.time.Instant
 @Composable
 fun InitialsAvatar(name: String, modifier: Modifier = Modifier) {
     val initials = name.split(' ').filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }
-    Box(modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+    // 40dp; at large font sizes it grows with the initials so they are never clipped (H91-F3). No font cap: MASTER keeps caps for keypad and bottom nav only.
+    val size = 40.dp * maxOf(1f, androidx.compose.ui.platform.LocalDensity.current.fontScale * 0.75f)
+    Box(modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
         Text(initials, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
     }
 }

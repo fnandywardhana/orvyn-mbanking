@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.runtime.getValue
@@ -34,6 +35,8 @@ import id.orvyn.app.ui.components.doneAction
 import id.orvyn.app.data.Api
 import id.orvyn.app.ui.components.spokenCard
 import id.orvyn.app.ui.insights.CategoryScreen
+import id.orvyn.app.ui.requests.SplitFlow
+import androidx.compose.ui.test.onNodeWithContentDescription
 import java.net.ServerSocket
 import id.orvyn.app.data.AppConfig
 import id.orvyn.app.ui.requests.belowMinimum
@@ -93,14 +96,20 @@ class Hotfix091Test {
     @After fun restore() { server?.close(); Api.url = realUrl }
 
     /** Answers every request with [json], like the server's category endpoint. Plain sockets: no test libraries. */
-    private fun serve(json: String) {
+    private fun serve(json: String) = serve { json }
+
+    /** Answers each request with [answer] of its path (e.g. "/api/recipients"). */
+    private fun serve(answer: (path: String) -> String) {
         val socket = ServerSocket(0).also { server = it }
         Thread {
             while (!socket.isClosed) runCatching {
                 socket.accept().use { c ->
                     val input = c.getInputStream().bufferedReader()
-                    while (input.readLine()?.isNotEmpty() == true) Unit // request line and headers
-                    val body = json.toByteArray()
+                    val path = input.readLine().orEmpty().split(' ').getOrElse(1) { "" }.substringBefore('?')
+                    var length = 0
+                    while (true) { val h = input.readLine() ?: break; if (h.isEmpty()) break; if (h.startsWith("Content-Length:", true)) length = h.substringAfter(':').trim().toInt() }
+                    repeat(length) { input.read() } // the request body, unread
+                    val body = answer(path).toByteArray()
                     c.getOutputStream().apply {
                         write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n".toByteArray()); write(body); flush()
                     }
@@ -187,4 +196,24 @@ class Hotfix091Test {
 
     @Test fun `H91-5 AC1 the snackbar clears the raised QRIS button`() = snackClearOfQris(1f)
     @Test fun `H91-5 AC3 the snackbar clears the raised QRIS button at 200 percent`() = snackClearOfQris(2f)
+
+    // ---- QA round 1, H91-F2: a friend added with Find stays on "Who's in?" after going back (H91-1 AC4)
+
+    @Test fun `H91-F2 a friend found by account number is still shown and can be unticked after going back`() {
+        val sinta = """{"bank":"ORVYN","bankName":"ORVYN Bank","accountNumber":"4000000001","name":"Sinta Maharani"}"""
+        val hendra = """{"bank":"ORVYN","bankName":"ORVYN Bank","accountNumber":"4000000002","name":"Hendra Wijaya"}"""
+        serve { path -> if (path.endsWith("/recipients")) """{"saved":[$sinta],"recent":[]}""" else hendra }
+        set { SplitFlow(15_000) {} }
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Sinta Maharani")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Sinta Maharani").performClick()
+        compose.onAllNodes(hasSetTextAction())[0].performTextInput("4000000002")
+        compose.onNodeWithText("Find").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Next: 2 friends")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Next: 2 friends").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("This bill is too small for 2 friends at Rp10,000 each. Go back and pick fewer friends.")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Next: 2 friends")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Hendra Wijaya").assertExists().performClick() // seen, and can be unticked
+        compose.onNodeWithText("Next: 1 friend").assertExists()
+    }
 }

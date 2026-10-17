@@ -12,6 +12,7 @@ import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import id.orvyn.app.data.DeviceStore
 import id.orvyn.app.data.Paid
@@ -36,6 +37,11 @@ import id.orvyn.app.ui.home.TransactionRow
 import id.orvyn.app.ui.theme.OrvynTheme
 import id.orvyn.app.ui.transfer.RecipientHeader
 import id.orvyn.app.ui.wealth.OpenDepositFlow
+import id.orvyn.app.ui.auth.FlowScreen
+import id.orvyn.app.ui.requests.ShareRow
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import org.json.JSONObject
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -194,5 +200,33 @@ class FontScaleTest(private val night: Boolean, private val qualifiers: String) 
         compose.onNode(hasText("Copy number")).performScrollTo()
         inside("account", "Copy" to hasText("Copy number"))
     }
-}
 
+    /** The lines [text] was laid out in (unmerged tree). */
+    private fun lines(text: String): List<String> {
+        val node = compose.onAllNodes(hasText(text), useUnmergedTree = true).fetchSemanticsNodes().first()
+        val r = mutableListOf<TextLayoutResult>().also { node.config[SemanticsActions.GetTextLayoutResult].action!!(it) }.first()
+        return (0 until r.lineCount).map { text.substring(r.getLineStart(it), r.getLineEnd(it)) }
+    }
+
+    /** 0.9.1 QA H91-F3 (design.md 2.3): Check the shares stacks at 200%; no amount, name or initials is broken or clipped. */
+    @Test fun checkShares() {
+        render("check-shares") {
+            FlowScreen("Check the shares", "Total Rp15,000. Tap a share to change it.", {}) {
+                androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ShareRow("Sinta Maharani", "Sinta Maharani", 7_500, 10_000) {}
+                    ShareRow("Bambang Wicaksono Hadiningrat", "Bambang Wicaksono Hadiningrat", 7_500, 10_000) {}
+                }
+            }
+        }
+        inside("check-shares", "Sinta" to hasText("Sinta Maharani"), "amount" to hasText("Rp7,500"))
+        for (l in listOf("Needs at least Rp10,000")) assertTrue("$tag: Rp10,000 broken in ${lines(l)}", lines(l).any { "Rp10,000" in it })
+        for (n in listOf("Sinta Maharani", "Bambang Wicaksono Hadiningrat")) {
+            val ls = lines(n)
+            assertTrue("$tag: $n broken mid-word: $ls", ls.dropLast(1).all { it.endsWith(" ") })
+        }
+        for (i in listOf("SM", "BW")) assertTrue("$tag: initials $i clipped: ${lines(i)}", lines(i).size == 1)
+        val name = compose.onAllNodes(hasText("Sinta Maharani"), true).fetchSemanticsNodes().first().boundsInRoot
+        val amount = compose.onAllNodes(hasText("Rp7,500"), true).fetchSemanticsNodes().first().boundsInRoot
+        assertTrue("$tag: amount sits under the name when stacked ($amount, $name)", amount.top >= name.bottom)
+    }
+}

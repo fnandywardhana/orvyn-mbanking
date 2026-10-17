@@ -107,6 +107,28 @@ internal fun sendSharesButton(shares: List<Long>, total: Long, min: Long): Pair<
 internal fun tooSmallForFriends(total: Long, friends: Int, min: Long) =
     if (total < friends * min) "This bill is too small for $friends friends at ${Money.format(min)} each. Go back and pick fewer friends." else null
 
+/**
+ * One friend's share on "Check the shares" (design.md 2.3). At large font sizes it stacks like a large ListRow: the name,
+ * then "Needs at least …" wrapping under it, then the amount on its own line (H91-F3, Q-A4).
+ */
+@Composable
+internal fun ShareRow(name: String, avatarName: String, amount: Long, min: Long, onClick: () -> Unit) {
+    val low = amount < min
+    val label = "$name, ${Money.format(amount)}" + if (low) ", Needs at least ${Money.format(min)}" else ""
+    val large = isLargeFont()
+    Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface)
+        .clickable(role = Role.Button, onClickLabel = "Change share", onClick = onClick).semantics { contentDescription = label }.padding(12.dp),
+        verticalAlignment = if (large) Alignment.Top else Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        InitialsAvatar(avatarName)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(name, style = MaterialTheme.typography.titleMedium)
+            if (low) GroupError("Needs at least ${Money.format(min)}")
+            if (large) Text(Money.format(amount), style = MaterialTheme.typography.titleMedium)
+        }
+        if (!large) Text(Money.format(amount), style = MaterialTheme.typography.titleMedium)
+    }
+}
+
 /** An icon and a sentence in `error`; [live] announces it once when it appears. */
 @Composable
 private fun Warning(text: String, live: Boolean = false) =
@@ -316,7 +338,11 @@ private fun PeoplePicker(title: String, body: String, multi: Boolean, initial: L
     var lookupError by remember { mutableStateOf<String?>(null) }
     var looking by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { known = runCatching { Api.recipients().let { (it.saved + it.recent).filter { r -> r.internal }.distinctBy { r -> r.accountNumber } } }.getOrDefault(emptyList()) }
+    LaunchedEffect(Unit) {
+        val loaded = runCatching { Api.recipients().let { (it.saved + it.recent).filter { r -> r.internal }.distinctBy { r -> r.accountNumber } } }.getOrDefault(emptyList())
+        // H91-F2: friends picked earlier with Find aren't saved or recent; keep them on the list so they can be seen and unticked.
+        known = initial.filter { i -> loaded.none { it.accountNumber == i.accountNumber } } + loaded
+    }
     fun toggle(r: Recipient) {
         if (!multi) return onDone(listOf(r))
         if (chosen.any { it.accountNumber == r.accountNumber }) chosen.removeAll { it.accountNumber == r.accountNumber }
@@ -451,21 +477,7 @@ fun SplitFlow(startTotal: Long?, onExit: () -> Unit) {
             }
             FlowScreen("Check the shares", "Total ${Money.format(total)}. Tap a share to change it.", { step = 1 }) {
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    friends.forEachIndexed { i, f ->
-                        val name = f.nickname ?: f.name
-                        val low = shares[i] < min
-                        val label = "$name, ${Money.format(shares[i])}" + if (low) ", Needs at least ${Money.format(min)}" else ""
-                        Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface)
-                            .clickable(role = Role.Button, onClickLabel = "Change share") { editing = i }.semantics { contentDescription = label }.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            InitialsAvatar(f.name)
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(name, style = MaterialTheme.typography.titleMedium)
-                                if (low) GroupError("Needs at least ${Money.format(min)}")
-                            }
-                            Text(Money.format(shares[i]), style = MaterialTheme.typography.titleMedium)
-                        }
-                    }
+                    friends.forEachIndexed { i, f -> ShareRow(f.nickname ?: f.name, f.name, shares[i], min) { editing = i } }
                     Row(Modifier.fillMaxWidth().padding(12.dp)) {
                         Text("Your share", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                         Text((if (friendsTotal > total) "−" else "") + Money.format(total - friendsTotal), style = MaterialTheme.typography.titleMedium, color = if (friendsTotal > total) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground)
