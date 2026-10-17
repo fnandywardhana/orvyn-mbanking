@@ -106,6 +106,16 @@ internal fun OrvynButtonFrame(
     }
 }
 
+/**
+ * Buttons side by side, each given [content]'s modifier. At large font sizes (1.5× and up) they stack full width instead,
+ * so a label wraps between words and never breaks inside one (MASTER Button, 0.9.1 QA H91-F4).
+ */
+@Composable
+fun ButtonRow(modifier: Modifier = Modifier, spacing: androidx.compose.ui.unit.Dp = 10.dp, content: @Composable (Modifier) -> Unit) {
+    if (isLargeFont()) androidx.compose.foundation.layout.Column(modifier, verticalArrangement = Arrangement.spacedBy(spacing)) { content(Modifier.fillMaxWidth()) }
+    else androidx.compose.foundation.layout.Row(modifier, horizontalArrangement = Arrangement.spacedBy(spacing)) { content(Modifier.weight(1f)) }
+}
+
 /** Low-emphasis action, e.g. "Forgot PIN?". Fires once per 600ms like every button. */
 @Composable
 fun OrvynTextButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {

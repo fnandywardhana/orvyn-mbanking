@@ -37,7 +37,6 @@ import id.orvyn.app.ui.components.spokenCard
 import id.orvyn.app.ui.insights.CategoryScreen
 import id.orvyn.app.ui.requests.SplitFlow
 import androidx.compose.ui.test.onNodeWithContentDescription
-import java.net.ServerSocket
 import id.orvyn.app.data.AppConfig
 import id.orvyn.app.ui.requests.belowMinimum
 import id.orvyn.app.ui.requests.quickAmountsFrom
@@ -91,33 +90,15 @@ class Hotfix091Test {
 
     // ---- H91-2: category detail with savings and cards (design.md 3)
 
-    private var server: ServerSocket? = null
+    private var server: StubServer? = null
     private val realUrl = Api.url
     @After fun restore() { server?.close(); Api.url = realUrl }
 
-    /** Answers every request with [json], like the server's category endpoint. Plain sockets: no test libraries. */
+    /** Answers every request with [json], like the server's category endpoint. */
     private fun serve(json: String) = serve { json }
 
     /** Answers each request with [answer] of its path (e.g. "/api/recipients"). */
-    private fun serve(answer: (path: String) -> String) {
-        val socket = ServerSocket(0).also { server = it }
-        Thread {
-            while (!socket.isClosed) runCatching {
-                socket.accept().use { c ->
-                    val input = c.getInputStream().bufferedReader()
-                    val path = input.readLine().orEmpty().split(' ').getOrElse(1) { "" }.substringBefore('?')
-                    var length = 0
-                    while (true) { val h = input.readLine() ?: break; if (h.isEmpty()) break; if (h.startsWith("Content-Length:", true)) length = h.substringAfter(':').trim().toInt() }
-                    repeat(length) { input.read() } // the request body, unread
-                    val body = answer(path).toByteArray()
-                    c.getOutputStream().apply {
-                        write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n".toByteArray()); write(body); flush()
-                    }
-                }
-            }
-        }.apply { isDaemon = true }.start()
-        Api.url = "http://127.0.0.1:${socket.localPort}/api"
-    }
+    private fun serve(answer: (path: String) -> String) { server = StubServer(answer).also { Api.url = it.url } }
 
     @Test fun `H91-2 AC2 a masked card number is read as card ending`() {
         assertEquals("ORVYN Voyage card ending 4821 · Thu, 15 Oct, 20:12", spokenCard("ORVYN Voyage ·••• 4821 · Thu, 15 Oct, 20:12"))
@@ -212,8 +193,9 @@ class Hotfix091Test {
         compose.onNodeWithText("Next: 2 friends").performClick()
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("This bill is too small for 2 friends at Rp10,000 each. Go back and pick fewer friends.")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("Back").performClick()
-        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Next: 2 friends")).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Hendra Wijaya").assertExists().performClick() // seen, and can be unticked
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Hendra Wijaya")).fetchSemanticsNodes().isNotEmpty() } // the list reloads after going back
+        compose.onNodeWithText("Next: 2 friends").assertExists()
+        compose.onNodeWithText("Hendra Wijaya").performClick() // seen, and can be unticked
         compose.onNodeWithText("Next: 1 friend").assertExists()
     }
 }

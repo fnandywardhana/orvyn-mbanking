@@ -59,6 +59,7 @@ import id.orvyn.app.data.TransferOptions
 import id.orvyn.app.ui.Money
 import id.orvyn.app.ui.auth.FlowScreen
 import id.orvyn.app.ui.components.doneAction
+import id.orvyn.app.ui.components.ButtonRow
 import id.orvyn.app.ui.components.closeKeyboard
 import id.orvyn.app.ui.components.AmountDisplay
 import id.orvyn.app.ui.components.AmountKeypad
@@ -204,9 +205,9 @@ private fun PickRecipient(onBack: () -> Unit, onNew: () -> Unit, onScheduled: ()
     }
 
     FlowScreen("Send money", null, onBack) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OrvynButton("New recipient", onClick = onNew, kind = ButtonKind.Secondary, modifier = Modifier.weight(1f))
-            if (id.orvyn.app.data.AppConfig.on("scheduled")) OrvynButton("Scheduled", onClick = onScheduled, kind = ButtonKind.Secondary, modifier = Modifier.weight(1f))
+        ButtonRow { m ->
+            OrvynButton("New recipient", onClick = onNew, kind = ButtonKind.Secondary, modifier = m)
+            if (id.orvyn.app.data.AppConfig.on("scheduled")) OrvynButton("Scheduled", onClick = onScheduled, kind = ButtonKind.Secondary, modifier = m)
         }
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(

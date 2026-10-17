@@ -231,9 +231,9 @@ private fun Scanner(onExit: () -> Unit, onMine: () -> Unit, onScanned: (Scan) ->
                 style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, color = Color.White,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(bottom = 16.dp)) {
-                OrvynButton("Gallery", onClick = fromGallery, kind = ButtonKind.Secondary, modifier = Modifier.weight(1f))
-                OrvynButton("My QR", onClick = onMine, kind = ButtonKind.Secondary, modifier = Modifier.weight(1f))
+            ButtonRow(Modifier.padding(bottom = 16.dp), spacing = 12.dp) { m ->
+                OrvynButton("Gallery", onClick = fromGallery, kind = ButtonKind.Secondary, modifier = m)
+                OrvynButton("My QR", onClick = onMine, kind = ButtonKind.Secondary, modifier = m)
             }
         }
     }

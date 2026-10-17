@@ -39,6 +39,11 @@ import id.orvyn.app.ui.transfer.RecipientHeader
 import id.orvyn.app.ui.wealth.OpenDepositFlow
 import id.orvyn.app.ui.auth.FlowScreen
 import id.orvyn.app.ui.requests.ShareRow
+import id.orvyn.app.ui.requests.RequestsScreen
+import id.orvyn.app.ui.requests.RequestScreen
+import id.orvyn.app.ui.transfer.TransferFlow
+import id.orvyn.app.ui.wealth.RelationshipManagerCard
+import id.orvyn.app.data.RelationshipManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.text.TextLayoutResult
@@ -79,9 +84,10 @@ class FontScaleTest(private val night: Boolean, private val qualifiers: String) 
     @get:Rule val compose = createComposeRule()
     private val tag get() = "${qualifiers.substringBefore('-')}-${if (night) "dark" else "light"}"
 
-    private fun render(name: String, content: @Composable () -> Unit) {
+    /** [server]: a stub answering the screen's calls (0.9.1); [ready]: wait for it before the render is captured. */
+    private fun render(name: String, server: StubServer? = null, ready: SemanticsMatcher? = null, content: @Composable () -> Unit) {
         // Never the dev server on this machine: a running one would answer 401 and change what screens show (Q-01-F1).
-        id.orvyn.app.data.Api.url = "http://127.0.0.1:1/api"
+        id.orvyn.app.data.Api.url = server?.url ?: "http://127.0.0.1:1/api"
         RuntimeEnvironment.setQualifiers(qualifiers); RuntimeEnvironment.setQualifiers(if (night) "+night" else "+notnight")
         compose.setContent {
             val d = LocalDensity.current
@@ -89,6 +95,7 @@ class FontScaleTest(private val night: Boolean, private val qualifiers: String) 
         }
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
+        if (ready != null) compose.waitUntil(5_000) { compose.onAllNodes(ready, true).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(isRoot()).captureRoboImage("build/font-scale/$name-$tag.png")
     }
 
@@ -228,5 +235,49 @@ class FontScaleTest(private val night: Boolean, private val qualifiers: String) 
         val name = compose.onAllNodes(hasText("Sinta Maharani"), true).fetchSemanticsNodes().first().boundsInRoot
         val amount = compose.onAllNodes(hasText("Rp7,500"), true).fetchSemanticsNodes().first().boundsInRoot
         assertTrue("$tag: amount sits under the name when stacked ($amount, $name)", amount.top >= name.bottom)
+    }
+
+    // ---- 0.9.1 QA round 2 (H91-F4): screens with the avatar or side-by-side buttons never break a word at 200%
+
+    private fun noWordBreaks(name: String) {
+        val broken = compose.avoidableWordBreaks()
+        assertTrue("$name $tag: ${broken.joinToString("; ")}", broken.isEmpty())
+    }
+
+    /** QA's data: a long name, a nine-digit amount, a split. */
+    private val requestsJson = """{"requests":[
+        {"id":"r1","amount":10000,"note":"Lunch","status":"open","mine":false,"from":"Raka Pratama","to":"Sinta Maharani","splitId":null,"createdAt":"2026-10-17T05:00:00Z","fromAccount":"4073979004"},
+        {"id":"r2","amount":150000000,"note":null,"status":"open","mine":true,"from":"Sinta Maharani","to":"Hendra Wijaya Kusumawardhani","splitId":null,"createdAt":"2026-10-16T05:00:00Z"},
+        {"id":"r3","amount":10000,"note":null,"status":"paid","mine":false,"from":"Bambang Wicaksono","to":"Sinta Maharani","splitId":null,"createdAt":"2026-10-15T05:00:00Z"}],
+      "splits":[{"id":"s1","total":30000,"note":"Dinner at Bakmi 88","people":[{"requestId":"r9","name":"Raka Pratama","amount":10000,"status":"paid"}]}]}"""
+
+    @Test fun requestsList() {
+        StubServer { requestsJson }.use { s ->
+            render("requests", s, hasText("Raka Pratama asks you")) { RequestsScreen(onBack = {}, onAsk = {}, onSplit = {}, onOpen = {}) }
+            inside("requests", "Ask for money" to hasText("Ask for money"), "first request" to hasText("Raka Pratama asks you"))
+            noWordBreaks("requests")
+        }
+    }
+
+    @Test fun requestDetail() {
+        StubServer { """{"id":"r2","amount":150000000,"note":"Rent for October","status":"open","mine":true,"from":"Sinta Maharani","to":"Hendra Wijaya Kusumawardhani","splitId":null,"createdAt":"2026-10-16T05:00:00Z"}""" }.use { s ->
+            render("request-detail", s, hasText("Cancel request")) { RequestScreen("r2") {} }
+            noWordBreaks("request-detail")
+        }
+    }
+
+    @Test fun recipientList() {
+        val r = { name: String, nick: String?, bank: String, bankName: String, n: String -> """{"id":"$n","bank":"$bank","bankName":"$bankName","accountNumber":"$n","name":"$name","nickname":${nick?.let { "\"$it\"" } ?: "null"}}""" }
+        StubServer { path -> if (path.endsWith("/recipients")) """{"saved":[${r("Raka Pratama", "Rent", "BCA", "Bank Central Asia", "8730012345")},${r("PT Griya Properti Utama Sejahtera", null, "MANDIRI", "Mandiri", "1230004567890")}],"recent":[${r("Sinta Maharani", null, "ORVYN", "ORVYN Bank", "4073979004")}]}""" else "{}" }.use { s ->
+            render("recipients", s, hasText("Rent")) { TransferFlow(onExit = {}) }
+            inside("recipients", "New recipient" to hasText("New recipient"))
+            noWordBreaks("recipients")
+        }
+    }
+
+    @Test fun relationshipManagerCard() {
+        render("rm-card") { RelationshipManagerCard(RelationshipManager("Ayu Prameswari", "Relationship Manager", "+62 812 1234 5678", "ayu.prameswari@orvyn.co.id")) }
+        inside("rm-card", "Call" to hasText("Call"), "Message" to hasText("Message"))
+        noWordBreaks("rm-card")
     }
 }

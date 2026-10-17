@@ -143,9 +143,9 @@ private fun Section(text: String) = Text(text.uppercase(), style = MaterialTheme
 fun RequestsScreen(onBack: () -> Unit, onAsk: () -> Unit, onSplit: () -> Unit, onOpen: (String) -> Unit) {
     val data = rememberLoad(DataVersion.count) { Api.requests() }
     FlowScreen("Requests", null, onBack) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OrvynButton("Ask for money", onClick = onAsk, kind = ButtonKind.Secondary, modifier = Modifier.weight(1f))
-            OrvynButton("Split a bill", onClick = onSplit, kind = ButtonKind.Secondary, modifier = Modifier.weight(1f))
+        ButtonRow { m ->
+            OrvynButton("Ask for money", onClick = onAsk, kind = ButtonKind.Secondary, modifier = m)
+            OrvynButton("Split a bill", onClick = onSplit, kind = ButtonKind.Secondary, modifier = m)
         }
         LoadContent(data, "Couldn't load your requests", skeleton = { Skeleton(Modifier.padding(top = 16.dp).fillMaxWidth().height(160.dp)) }) { d ->
             if (d.first.isEmpty() && d.second.isEmpty()) MessageState(R.drawable.ph_hand_coins, "No requests yet",
@@ -171,18 +171,22 @@ fun RequestsScreen(onBack: () -> Unit, onAsk: () -> Unit, onSplit: () -> Unit, o
 @Composable
 private fun RequestRow(r: MoneyRequest, onOpen: (String) -> Unit) {
     val other = if (r.mine) r.to else r.from
+    // H91-F4: at large font sizes the amount and status move under the text, like a large ListRow, so words never break.
+    val large = isLargeFont()
+    val trailing: @Composable () -> Unit = {
+        Text(Money.format(r.amount), style = MaterialTheme.typography.titleMedium)
+        StatusChip(statusOf(r.status, r.mine))
+    }
     Column {
         Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = rememberOnce { onOpen(r.id) }).heightIn(min = 64.dp).padding(vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            verticalAlignment = if (large) Alignment.Top else Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             InitialsAvatar(other)
-            Column(Modifier.weight(1f)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (large) 4.dp else 0.dp)) {
                 Text(if (r.mine) "You asked $other" else "$other asks you", style = MaterialTheme.typography.titleMedium)
                 Text(listOfNotNull(r.note, dayLabel(r.at)).joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
+                if (large) trailing()
             }
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(Money.format(r.amount), style = MaterialTheme.typography.titleMedium)
-                StatusChip(statusOf(r.status, r.mine))
-            }
+            if (!large) Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) { trailing() }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }

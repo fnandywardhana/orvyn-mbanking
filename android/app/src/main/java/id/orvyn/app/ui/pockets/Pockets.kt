@@ -202,9 +202,9 @@ fun PocketScreen(id: String, onBack: () -> Unit, onMove: (intoPocket: Boolean) -
                     Text(Money.format(p.balance), style = OrvynType.displayBalance)
                     p.progress?.let { GoalBar(it) }
                     goalLine(p)?.let { Text(if (p.reached) "Goal reached · $it" else it, style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary) }
-                    Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OrvynButton("Add money", onClick = { onMove(true) }, modifier = Modifier.weight(1f))
-                        OrvynButton("Take out", onClick = { onMove(false) }, kind = ButtonKind.Secondary, enabled = p.balance > 0, modifier = Modifier.weight(1f))
+                    ButtonRow(Modifier.padding(top = 12.dp)) { m ->
+                        OrvynButton("Add money", onClick = { onMove(true) }, modifier = m)
+                        OrvynButton("Take out", onClick = { onMove(false) }, kind = ButtonKind.Secondary, enabled = p.balance > 0, modifier = m)
                     }
                 }
                 Spacer(Modifier.height(16.dp))

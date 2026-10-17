@@ -280,9 +280,9 @@ fun ProductScreen(id: String, onBack: () -> Unit, onTrade: (buy: Boolean) -> Uni
             if (p.suitable == false) Text("This is riskier than your profile. You can still buy it after confirming you understand the risk.",
                 style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.warning)
         }
-        Row(Modifier.padding(vertical = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OrvynButton("Buy", onClick = { onTrade(true) }, modifier = Modifier.weight(1f))
-            if (h != null && p.kind != "bond") OrvynButton("Sell", kind = ButtonKind.Secondary, onClick = { onTrade(false) }, modifier = Modifier.weight(1f))
+        ButtonRow(Modifier.padding(vertical = 16.dp)) { m ->
+            OrvynButton("Buy", onClick = { onTrade(true) }, modifier = m)
+            if (h != null && p.kind != "bond") OrvynButton("Sell", kind = ButtonKind.Secondary, onClick = { onTrade(false) }, modifier = m)
         }
     }
 }

@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import id.orvyn.app.data.RelationshipManager
 import id.orvyn.app.ui.components.ButtonKind
+import id.orvyn.app.ui.components.ButtonRow
 import id.orvyn.app.ui.components.OrvynButton
 import id.orvyn.app.ui.theme.Brand
 import id.orvyn.app.ui.theme.OrvynTheme
@@ -45,10 +46,10 @@ fun RelationshipManagerCard(rm: RelationshipManager, modifier: Modifier = Modifi
                 Text("${rm.phone} · ${rm.email}", style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        ButtonRow { m ->
             // ACTION_DIAL and SENDTO open the phone's own apps with the number filled in; ORVYN needs no permission and calls nothing itself.
-            OrvynButton("Call", kind = ButtonKind.Secondary, modifier = Modifier.weight(1f), onClick = { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$tel"))) })
-            OrvynButton("Message", kind = ButtonKind.Secondary, modifier = Modifier.weight(1f), onClick = { context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$tel"))) })
+            OrvynButton("Call", kind = ButtonKind.Secondary, modifier = m, onClick = { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$tel"))) })
+            OrvynButton("Message", kind = ButtonKind.Secondary, modifier = m, onClick = { context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$tel"))) })
         }
     }
 }
