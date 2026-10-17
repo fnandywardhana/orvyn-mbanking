@@ -353,3 +353,133 @@ Raka (Everyday) dulu dengan tema ORVYN `Match my phone` (gelap), lalu `Light`; k
 - **Q-B10 AC1–2:** E-statements Raka offline → ketuk September 2026 → daftar tetap, snackbar `Couldn't make your September 2026 statement.` + `Try again` (terlihat ±10 detik); online + `Try again` → menu bagikan Android terbuka (ditutup satu Back). `qa-shots-0.9.0/qb10-statement-offline.png`
 - **Q-G1 AC3:** pil `Scan to pay` di banner membuka `Scan to pay` (izin kamera sudah ditolak).
 - **Q-C3:** lihat bagian 2. `pg_dump` sebelum reset, passkey palsu disisipkan, `RESET` salah → `Not reset: type RESET and your own password.` (33 nasabah tetap), reset → `Demo reset. 33 customers removed. Create new testers from Customers.`, 0 nasabah/passkey/JE, 4 petugas, audit 79 → 80, dashboard `Ledger ✓ Balanced`. Dump dipulihkan.
+
+---
+
+# Putaran 2 (17 Okt 2026, malam)
+
+QA putaran 2, sekitar 22.00 sampai 23.00 WIB. Build: `main` c225570 (perbaikan IT bc43b15, 2b3952a, 88e242e, 50a6a56, dan c225570 dari orkestrator), debug **0.9.0 (versionCode 12)** di Galaxy Note10+ lewat `adb reverse tcp:8790`, dev server lokal port 8790, DB dev `orvyn-dev-db-1`, admin dev. Screenshot `qa-shots-0.9.0/r2-*.png` (status bar dipotong; `-light`/`-dark` = tema ORVYN). Raka dengan tema ORVYN gelap, Hendra dan nasabah baru dengan tema terang. Produksi tidak disentuh (lihat R2.7).
+
+## R2.0 Ringkasan dan putusan
+
+Semua 11 temuan putaran 1 dan perbaikan c225570 **tertutup**. Perintah build wajib sekarang hijau: `testDebugUnitTest --rerun-tasks` lolos 97/97 tiga kali berturut-turut, server 111/111, izin APK identik dengan 0.8.1. Regresi P0 di HP lolos, dan buku besar dev **Balanced** setelah setiap uang bergerak (1133 → 1142, sembilan aksi = sembilan Journal Entry, tidak ada `kind` baru). Hal yang belum dicapai di putaran 1 sekarang teruji: keluar otomatis 5 menit, Insights, bukti nama 40 huruf, beranda saat server 500, riwayat halaman berikutnya offline, ganti kategori dan tutup rekening valas offline, token PLN, BPJS, e-wallet, split, jual reksa dana, dan Mature now.
+
+Ada 5 temuan baru, tidak ada yang blocker atau major. Tiga di antaranya sudah ada sejak 0.8.x (Q-02-F2, Q-02-F4) atau di luar lingkup perbaikan (Q-02-F1), dan tidak ada yang membuat uang salah: setiap kegagalan di-rollback dan buku besar tetap OK.
+
+| Severity | Jumlah | Temuan dan pemilik |
+|---|---|---|
+| Blocker | 0 | |
+| Major | 0 | |
+| Minor | 3 | Q-02-F2 (PO), Q-02-F3 (CX), Q-02-F4 (IT) |
+| Polish | 2 | Q-02-F1 (IT), Q-02-F5 (IT) |
+
+**Putusan putaran 2: READY FOR RELEASE.** Target PRD bagian 3 (0 blocker, 0 major, buku besar Balanced, izin sama dengan 0.8.1) terpenuhi. Temuan minor dan polish bisa masuk backlog atau dikerjakan sebelum rilis atas keputusan orkestrator dan tim bisnis; tidak ada yang wajib diulang QA penuh.
+
+## R2.1 Otomatis dan build
+
+| ID | Cek | Hasil |
+|---|---|---|
+| A1 | `cd server && npm test` | **111/111 lolos** (110 + 1 baru Q-01-F7) |
+| A2 / F1 | `./gradlew testDebugUnitTest --rerun-tasks` tiga kali berturut-turut, lalu `assembleDebug` | **97/97 lolos di ketiga run** (31 task dieksekusi tiap run, `FontScaleTest.accountDetail` 360dp terang/gelap lolos), `assembleDebug` BUILD SUCCESSFUL |
+| A3 | `aapt2 dump badging` | `versionName='0.9.0'`, `versionCode='12'` |
+| A4 | Izin debug 0.9.0 vs `releases/orvyn-0.8.1.apk` | **Identik** (10 izin, `diff` kosong) |
+| A8 | Buku besar awal | OK, 1133 Journal Entry |
+| A9 | `adb install` debug 0.9.0 | Terpasang (release 0.8.1 di-uninstall dulu karena tanda tangan berbeda) |
+
+## R2.2 Uji ulang temuan putaran 1 dan c225570
+
+| Temuan | Hasil | Bukti di HP |
+|---|---|---|
+| Q-01-F1 (major) | **Tertutup** | R2.1: 97/97 tiga run berturut-turut dengan `--rerun-tasks`, `accountDetail` 360dp terang/gelap lolos setiap run |
+| Q-01-F2 | **Tertutup** | Sukses BI-FAST ke penerima baru → offline → `Save as a recipient`: snackbar `You're offline. Check your connection and try again.` tepat di atas `Save as a recipient`; tombol itu, `Share receipt`, dan `Done` tidak tertutup (`r2-f2-snackbar-success.png`). Beranda offline → ketuk `Transfer`: snackbar di atas bottom nav (`r2-f2-snackbar-home-offline.png`, lihat polish Q-02-F5). Snackbar di layar keypad tidak terpicu di HP; anchor di `AmountScreen` dicek di kode dan `QualityPassTest` |
+| Q-01-F3 | **Tertutup** | Vyna "Ringkas rekening saya dalam daftar bullet dengan angka tebal": layar menampilkan `•`; node pengumuman TalkBack berisi baris tanpa `- ` dan tanpa `**` (`r2-f3-vyna-bullets.png`). Vyna dipakai 1 pesan |
+| Q-01-F4 | **Tertutup** | BI-FAST Rp10,000 → offline → `Send` → PIN → kembali ke review dengan `Couldn't load the fee and arrival time.` + kotak offline → online → `Try again`: rincian kembali, kotak error offline hilang, `Send Rp10,000` aktif |
+| Q-01-F5 | **Tertutup** | Penerima `Koperasi Simpan Pinjam Sejahtera Bersama`: tombol `Save as a recipient` (`r2-f5-success-save.png`); setelah simpan `Saved to your recipients` dengan ikon centang (`r2-f5-saved.png`) |
+| Q-01-F6 | **Tertutup** | Buka deposito: kosong `Enter an amount`, Rp5,000 `Minimum Rp1,000,000`, Rp5,000,000 `Next`. Gold mode Rupiah (Hendra, terang): `Enter an amount`, Rp1,000 `Minimum Rp50,000`, Rp50,000 `Buy Rp50,000` (`r2-f6-gold-minimum-light.png`). Jual Fund: `Enter an amount` lalu `Sell Rp100,000` |
+| Q-01-F7 | **Tertutup** | Raka → Cards → ORVYN Cashback → `RECENT CARD PAYMENTS`: `Payment from your savings` `+Rp3,489,000` → detail sama: `Payment from your savings`, `+Rp3,489,000`, `Credit card payment` (`r2-f7-card-payment-detail.png`). Server: judul dihitung saat dibaca, entri lama ikut |
+| Q-01-F8 | **Tertutup** | Nasabah baru Rp0, Sinta (API) minta Rp50,000 → `Pay Rp50,000` → `Check the details`: Amount, Fee, Note, Total, **tanpa** `Balance after`, kotak `You're Rp50,000 short.`, tombol nonaktif (`r2-f8-pay-request-short.png`). Review Transfer tidak bisa dicapai dengan saldo kurang (layar nominal sudah berhenti di `You're Rp10,000 short.`, `r2-transfer-amount-rp0.png`); jalurnya dicek di kode |
+| Q-01-F9 | **Tertutup** | Label banner: `Scan. Pay. Done. Pay at any QRIS sticker with your camera.`, `Flying soon? Switch on overseas payments before you go.`, `ORVYN Prestige. A much higher daily limit for bigger plans.` dan dua lainnya, tanpa tanda baca ganda |
+| Q-01-F10 | **Tertutup** | `Buy SGD` → `SGD 10.00` rata tengah sejajar `You pay Rp126,600 at 1 SGD = Rp12,660` (`r2-f10-fx-centered-light.png`) |
+| Q-01-F11 | **Tertutup** | Pendaftaran 0812-9002-0004 dengan Enter (`keyevent 66`): `Phone number` 4 digit → keyboard tertutup, 12 digit → `Enter the code`; kode 5 digit → keyboard tertutup, 6 digit → `About you`; `Full name` → `NIK` → `Date of birth` → `Address` dengan Next (isi masuk ke field yang benar); Done di `Address` → keyboard tertutup, `Work` tergulir ke layar, tetap di `About you`; `Password` lemah → keyboard tertutup, kuat → `Create your PIN`. Kapitalisasi keyboard tidak bisa dicek lewat `input text` (dicek di kode) |
+| c225570 | **Tertutup** | Split GoPay Rp11,000, bagian Sinta Rp50,000: `Your share` `−Rp39,000` merah + `Your friends' shares add up to more than the bill.`, `Send 1 request` nonaktif (`r2-c225570-split-minus.png`). Bagian Sinta Rp5,000 → `Your share` `Rp6,000` tanpa minus |
+
+## R2.3 Yang belum dicapai di putaran 1
+
+| Butir | Hasil | Catatan |
+|---|---|---|
+| X10 / Q-G5 AC5 keluar otomatis 5 menit | Lolos | Diam di review Transfer Raka → Sinta Rp10,000 selama ±6 menit (layar HP tetap menyala) → layar Unlock `Welcome back, Raka`, tanpa Journal Entry (tetap 1137). PIN benar → beranda |
+| Q-E11 Insights | Lolos sebagian | Tema gelap: batang lain abu-biru, `Oct` `primary`, ringkasan TalkBack `Spending by month: May Rp10,125,500, …` (`r2-qe11-insights-dark.png`; piksel #596798 vs token `#55689C`, token di `Theme.kt` benar, selisih dari rendering layar). AC3 keadaan kosong tidak bisa dibuat dengan data Raka, lihat Q-02-F3 |
+| Q-E13 AC2 bukti nama 40 huruf | Lolos | Penerima `Koperasi Simpan Pinjam Sejahtera Bersama` (40 huruf, ditambahkan ke direktori bank dev lewat admin) → `Share receipt` → gambar di `cache/receipts/` (diambil dengan `run-as`): nama 2 baris tanpa terpotong, semua baris lain utuh (`r2-qe13-receipt-40-name.png`). Menu bagikan ditutup dengan satu Back |
+| Q-B6 AC3 beranda saat server 500 | Lolos | Proxy LAMBAT menjawab 500 untuk `/api/home`: `Couldn't refresh. Showing balances from Today, 22:26.` + `Try again` di bawah aksi cepat (`r2-qb6-home-500.png`); 500 dimatikan → `Try again` → banner hilang. Seperti putaran 1, tarikan pertama setelah pindah koneksi tidak memicu refresh, tarikan kedua ya |
+| Q-F3 AC4–5 riwayat | Lolos | Offline → gulir ke akhir halaman pertama → `Couldn't load more. Try again` (`r2-qf3-load-more-offline.png`); online + ketuk → halaman berikutnya (13 Okt). Tarik dengan filter `Money out` → filter tetap |
+| Q-B1 ganti kategori offline | Lolos | GoPay → `Change` → `Bills` offline: sheet tetap, kotak `You're offline. Check your connection and try again.` di sheet, `Current` tetap `Transport` (`r2-qb1-category-offline.png`). Online → `Bills` tersimpan |
+| Q-B1 tutup valas offline | Lolos | Hendra beli SGD 10.00 lalu jual semua → `Close` → dialog `Close your SGD account?` / `It's empty, so nothing moves. You can open it again when you buy SGD.` / `Cancel` / `Close account` → offline: snackbar offline, baris SGD tetap (`r2-qb1-close-fx-offline.png`). Online → baris hilang |
+| Q-C5 hapus anggaran | Lolos | Budget `Fun` dibuat lalu `Remove budget` → `Remove your Fun budget?` / `Reminders for this category stop.` / `Cancel` / `Remove` (`r2-qc5-remove-budget-dialog.png`) |
+| Token PLN | Lolos | Meter 141234567890 Rp20,000: PIN salah `Wrong PIN. 4 tries left.`, PIN benar → `Paid` Rp22,500 dengan token, `Copy token`, `Share receipt`. 1 `bill_payment` (1135) |
+| BPJS | Lolos | Nomor yang sudah lunas → `This month's bill is already paid.`; nomor lain `Bill for Oct 2026` Rp84,000 + fee → `Paid` Rp86,500 `BPJS Kesehatan · Oct 2026` (1136) |
+| E-wallet | Lolos | GoPay Rp5,000 → `Minimum Rp10,000` nonaktif; Rp10,000 → `Pay Rp11,000` → PIN → `GoPay top-up` (1137). Q-G6 AC2–3 tertutup di HP |
+| Split | Lolos | Dari detail transaksi: `Split this bill` → Sinta → ketuk ganda `Send 1 request` → satu permintaan, `Requests sent`. Split Raka (API) Rp30,000 dengan bagian Sinta Rp15,000 dibayar Sinta (API) → 1 `internal_transfer` (1142). Bagian Rp5,000 tidak bisa dibayar: Q-02-F2 |
+| Jual reksa dana | Lolos | Hendra `Cahaya Ekuitas Indonesia` → `Sell` → `Sell Rp100,000` → PIN `To sell Rp100,000 of Cahaya Ekuitas Indonesia.` → `Sold` dengan Date, NAV per unit (1138 `investment`) |
+| Jual obligasi | Tidak berlaku | ORI-D01 dan SR-D01 hanya punya `Buy`; server: obligasi dipegang sampai jatuh tempo (`investments.ts:184`) |
+| Valas beli/jual | Lolos | SGD 10.00 beli Rp126,600 (1139), jual Rp125,400 (1140), masing-masing satu `fx_exchange` |
+| Mature now (admin) | Lolos dengan temuan | `Renew` dengan bunga Rp0 → `Matured. Interest after tax: Rp0.`, tanpa Journal Entry, inbox `Deposit renewed`. `Pay out` (diubah di HP) dengan bunga Rp0 → HTTP 500: Q-02-F4. Setelah `opened_on` dimundurkan → `Interest after tax: Rp2,301`, 1 `deposit_close` (1141), Wealth `Time deposits` Rp0, inbox `Deposit paid out` |
+
+## R2.4 Regresi cepat P0 di HP
+
+| Alur | Hasil |
+|---|---|
+| Sign in dengan keyboard terbuka | Lolos: field password dan `Sign in` terlihat di atas keyboard (`r2-signin-keyboard.png`), Next pindah ke password, Done masuk |
+| Unlock | Lolos: `Welcome back, Raka` setelah keluar otomatis dan `Welcome back, QA` setelah buka ulang; PIN salah (nasabah baru) `Wrong PIN. 4 tries left.`, PIN benar → beranda |
+| Transfer sampai sukses + Share receipt | Lolos: BI-FAST Rp10,000, ketuk ganda `Send` → PIN `0 of 6 digits entered`, `Sent` dengan `Date`, satu `external_transfer` (1134); `Share receipt` membuka menu bagikan Android (ditutup satu Back) |
+| Bayar tagihan | Lolos: PLN token, BPJS, GoPay (R2.3) |
+| Ganti PIN salah → sisa percobaan | Lolos: `That's not your current PIN. 4 tries left.`, `failed_attempts` 1; PIN benar → `Choose a new PIN`, `failed_attempts` 0 (PIN tidak diganti) |
+| Pendaftaran sampai PIN | Lolos: 0812-9002-0004, KTP dan selfie `Skip this step`, PIN `123456` ditolak, PIN cocok → `We're checking your details` → approve admin → `Your account is ready` → Sign in → pengumuman `Demo tonight` → beranda Rp0 |
+| Buku besar | `checkLedger` OK setelah setiap aksi; 1133 → 1142. Jenis baru putaran ini: `bill_payment` 3, `external_transfer` 1, `internal_transfer` 1, `investment` 1, `fx_exchange` 2, `deposit_close` 1 |
+
+## R2.5 Temuan baru
+
+
+### Q-02-F1 (polish, IT): aksi keyboard Done/Enter belum mengikuti aturan MASTER di luar pendaftaran
+**Langkah:** Transfer → `New recipient` → BCA → ketik nomor rekening 10 digit (tombol `Check account` aktif) → Enter (`input keyevent 66`). Sama di `Pay` → `PLN token` → `Meter number` 12 digit (`Continue` aktif) → Enter.
+**Diharapkan:** MASTER Text field (design 17.3, aturan umum): Done di field terakhir menjalankan tombol utama bila aktif; Enter keyboard fisik sama.
+**Aktual:** tidak terjadi apa-apa, keyboard tetap terbuka (`mInputShown=true`). IT hanya memasang aksi keyboard di pendaftaran dan kantong (laporan IT 9.1). Tombol utama tetap bisa diketuk, jadi hanya jalan pintas yang hilang.
+
+### Q-02-F2 (minor, PO): permintaan uang Rp1,000 sampai Rp9,999 tidak bisa dibayar
+**Langkah:** Raka → transaksi GoPay Rp11,000 → `Split this bill` → Sinta Rp5,000 → `Send 1 request` (berhasil, `Requests sent`). Sinta membayar (API `POST /requests/{id}/pay` dengan PIN benar).
+**Diharapkan:** permintaan yang boleh dibuat juga bisa dibayar.
+**Aktual:** `{"error":"BAD_AMOUNT","message":"The smallest transfer is Rp10,000."}`. Server menerima permintaan/split mulai Rp1,000 (`requests.ts:29`) tetapi pembayarannya memakai minimum transfer Rp10,000 (`transfers.ts:157`). Sudah ada sejak 49e1eae (0.8.x), bukan regresi 0.9.0; uang tidak bergerak salah. PO tentukan satu minimum (misalnya Rp10,000 untuk minta uang dan bagian split), lalu IT dan CX menyamakan.
+
+### Q-02-F3 (minor, CX): detail kategori Insights hanya dari tabungan, total kategori termasuk kartu
+**Langkah:** History → `Insights` → `Shopping` (`Rp2,110,000`).
+**Diharapkan:** angka di baris kategori dan isi layar detailnya cocok, atau perbedaannya dijelaskan.
+**Aktual:** detail `Shopping` / `This month, from ORVYN Everyday.` hanya berisi satu baris `Minimarket Sejahtera −Rp240,000`; sisanya belanja kartu kredit yang tidak tampil. Design 9.11 menghapus kalimat tentang kartu kredit dari keadaan kosong, jadi untuk kategori yang belanjanya hanya dari kartu, Insights menampilkan nominal tetapi detailnya akan berkata `No {kategori} spending this month.` (kasus ini tidak bisa dibuat di data Raka; dari kode `Insights.kt:281`). CX tentukan: detail ikut menampilkan transaksi kartu, atau subjudul/keadaan kosong menjelaskannya.
+**Bukti:** `qa-shots-0.9.0/r2-insights-shopping-detail.png`
+
+### Q-02-F4 (minor, IT): pencairan deposito `Pay out` dengan bunga Rp0 gagal dengan HTTP 500
+**Langkah:** Hendra buka deposito hari ini (atau deposito apa pun yang bunganya Rp0 saat jatuh tempo), ubah `At maturity` ke `Pay out`, lalu admin → Customers → Hendra → `Mature now`.
+**Diharapkan:** pokok kembali ke ORVYN Everyday dalam satu Journal Entry `deposit_close`, bunga Rp0.
+**Aktual:** admin mendapat `HTTP 500`; log server: `PostgresError: ... violates check constraint "postings_amount_check"` (posting 0 untuk beban bunga dan pajak). Transaksi di-rollback, buku besar tetap OK (1140), deposito tetap terbuka. Penyebab: `matureDeposit` di `server/src/deposits.ts:119-122` selalu menulis posting beban bunga dan pajak, sedangkan jalur `rollover` sudah memakai `if (i.gross > 0)`. Kasus yang sama terjadi pada `runMaturities` bila admin menyetel suku bunga deposito 0% (form Settings menerima 0), dan karena perulangannya tidak menangkap error, deposito lain yang jatuh tempo setelahnya di menit yang sama ikut tertahan. Sudah ada sejak 5539014 (bukan regresi 0.9.0). Setelah `opened_on` deposito uji dimundurkan ke 17 Sep di DB dev, `Mature now` berhasil: `Interest after tax: Rp2,301`, satu `deposit_close` (deposit −1,000,000, beban −2,876, pajak 575, tabungan +1,002,301), buku besar OK (1141).
+
+### Q-02-F5 (polish, IT): snackbar di beranda menempel di atas tombol QRIS yang menonjol
+**Langkah:** beranda offline → ketuk aksi `Transfer`.
+**Diharapkan:** design 4.11: snackbar tepat di atas area menempel, tidak menutupi apa pun.
+**Aktual:** snackbar diletakkan di atas tepi atas bottom nav (`snackAnchor` di `BottomBar`), tetapi tombol QRIS bundar menonjol ±10dp di atas bottom nav, jadi tepi bawah snackbar menutupi sedikit bagian atas tombol QRIS selama snackbar tampil. Tombol tetap bisa diketuk.
+**Bukti:** `qa-shots-0.9.0/r2-f2-snackbar-home-offline.png`
+
+## R2.6 Yang tidak teruji putaran ini
+
+- Sama dengan putaran 1 bagian 8 untuk hal yang butuh setelan HP (font 2,0 di HP, TalkBack asli, animasi mati, notifikasi mati), kamera, passkey sungguhan, widget, dan Recents.
+- Snackbar di layar keypad (Q-01-F2): tidak ada aksi di layar nominal yang memunculkan snackbar di HP; dicek di kode (`AmountScreen` memakai `snackAnchor`) dan `QualityPassTest`.
+- `Balance after` di review Transfer saat saldo kurang (Q-01-F8): layar nominal sudah menahan nominal di atas saldo, jadi hanya dicek di kode.
+- Q-E11 AC3 keadaan kosong kategori: tidak bisa dibuat dengan data yang ada (Q-02-F3).
+- Kapitalisasi keyboard pendaftaran (`Words`, `Sentences`): `adb input text` melewati keyboard, jadi dicek di kode.
+- Jual obligasi: memang tidak ada (dipegang sampai jatuh tempo).
+
+## R2.7 Kondisi HP dan lingkungan di akhir sesi
+
+- Di awal launcher di depan dengan 0.8.1 terpasang; tidak ada input selain ke ORVYN. Penjaga `mCurrentFocus` dijalankan sebelum setiap ketukan, teks, swipe, dan keyevent. Satu-satunya jendela sistem yang disentuh adalah menu bagikan yang dibuka `Share receipt` ORVYN, ditutup dengan satu Back tanpa memilih aplikasi. Back tidak pernah dikirim di beranda (kembali memakai panah `Back` di layar). Kamera tidak aktif (KTP dan selfie dilewati). Setelan HP tidak diubah; layar tetap menyala karena setelan pemilik "tetap menyala saat diisi daya" (dibaca saja). `am force-stop` dipakai sekali untuk membuka ulang ORVYN sendiri.
+- **Akhir:** debug di-uninstall, `releases/orvyn.apk` **0.8.1 (versionCode 11)** terpasang lagi (sesi ORVYN pemilik ikut keluar), `adb reverse --remove-all` (daftar kosong), `/data/local/tmp/orvyn_ui.xml` dihapus, launcher di depan.
+- Dev server dan proxy lambat dimatikan, port 8790 dan 8791 di host tidak lagi mendengarkan. **Catatan insiden kecil:** perintah `pkill -f "src/main.ts"` untuk mematikan dev server juga cocok dengan proses server produksi di dalam container `orvyn-server-1` (uid sama). Server produksi tidak terhenti: container tetap `Up 2 days`, `RestartCount=0`, waktu mulai tidak berubah, dan `/api/config` di dalam container menjawab 200. Proxy lalu dimatikan dengan PID-nya sendiri. Ke depan dev server sebaiknya dimatikan dengan PID atau TaskStop, bukan `pkill -f`.
+- Setelan dev: semua fitur menyala, maintenance off dengan pesan semula, batas Vyna 30, banner tidak diubah. Vyna dipakai 1 pesan. Produksi tidak disentuh selain pemeriksaan kesehatan di atas (baca saja).
+- Data uji baru di dev: nasabah `QA Rondedua` (nomor uji 0812-9002-0004, Everyday, saldo Rp0, password dan PIN uji hanya di catatan QA), entri direktori BCA `5550004040` `Koperasi Simpan Pinjam Sejahtera Bersama` (juga tersimpan sebagai penerima Raka), permintaan Rp5,000 dan Rp50,000 yang masih terbuka, kategori satu transaksi GoPay Raka diubah ke `Bills`, rekening SGD Hendra dibuka lalu ditutup, deposito Rp1,000,000 Hendra dicairkan (`opened_on` dimundurkan di DB dev untuk uji). Buku besar akhir OK, 1142 Journal Entry.
+- `git status`: hanya `qa-report.md` dan `qa-shots-0.9.0/r2-*.png` dari QA (`docs/DECISIONS-PENDING.md` juga berubah selama sesi ini, tetapi bukan oleh QA). Tidak ada commit.

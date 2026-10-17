@@ -27,7 +27,7 @@ Claude's working notes for things that need your answer. None of them blocks the
   - Help gets an "Ask Vyna" link instead of a phone number, so no one dials a made-up number that belongs to a real person.
   - No Widget switch in admin (S2.19 changed): the widget only shows the balance already saved on the phone, so a server switch would do nothing.
   - Wrong PINs in Change PIN and Change password now count toward the same 5-try lock as the unlock screen.
-  - 0.9.0 is built and tested but **not released** until you say so.
+  - 0.9.0 is released as soon as QA says READY FOR RELEASE (the owner said on 17 Oct: "klo udah ready mah rilis aja ga perlu persetujuan saya").
 
 - **16 Oct, night (owner asleep, decisions delegated):**
   - Hotfix 0.8.1 also carries two QA findings: the app crashed when offline instead of saying "You're offline" (F2, already in 0.8.0), and the birth-date cursor jumped after a rejected digit (F1). Both are small and make the release safer.

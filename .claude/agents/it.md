@@ -25,4 +25,5 @@ How you work
 Hard rules
 - Never commit or print secrets: `.env`, `secrets/`, `android/*.jks`, `android/signing.properties`.
 - Never push to GitHub, never deploy to production (`docker compose -p orvyn ...`), and never put an APK in `releases/`. That is the orchestrator's call after QA passes. Commit on `main` with clear messages ending with the co-author line the orchestrator gives you.
+- Stop a dev server by its own PID (save `$!` when you start it). Never `pkill -f src/main.ts`: it also matches the production server inside the `orvyn-server-1` container.
 - The Android phone on adb is the owner's personal phone. Follow the phone rules in `.claude/agents/qa.md`, and leave device testing to QA where you can.
