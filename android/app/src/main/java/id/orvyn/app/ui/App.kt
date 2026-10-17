@@ -44,6 +44,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.layout
@@ -371,7 +372,7 @@ private fun MaintenanceScreen(message: String, onOver: () -> Unit) {
     }
 }
 
-private enum class Tab(val label: String, val icon: Int, val iconActive: Int) {
+internal enum class Tab(val label: String, val icon: Int, val iconActive: Int) {
     Home("Home", R.drawable.ph_house, R.drawable.ph_house_fill),
     History("History", R.drawable.ph_clock_counter_clockwise, R.drawable.ph_clock_counter_clockwise_fill),
     Qris("QRIS", R.drawable.ph_qr_code, R.drawable.ph_qr_code),
@@ -424,7 +425,7 @@ private fun Modifier.raise(by: androidx.compose.ui.unit.Dp) = layout { measurabl
 }
 
 @Composable
-private fun BottomBar(current: Tab, onSelect: (Tab) -> Unit) {
+internal fun BottomBar(current: Tab, onSelect: (Tab) -> Unit) {
     Column(Modifier.snackAnchor().background(MaterialTheme.colorScheme.surface).navigationBarsPadding()) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         CapFontScale { // labels stop growing at 1.5×, so "Profile" never breaks in its fifth of the width (design.md 4.1)
@@ -436,7 +437,7 @@ private fun BottomBar(current: Tab, onSelect: (Tab) -> Unit) {
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Bottom),
                     ) {
                         if (t == Tab.Qris) Box(
-                            Modifier.raise(20.dp).size(52.dp).shadow(6.dp, RoundedCornerShape(16.dp)).clip(RoundedCornerShape(16.dp))
+                            Modifier.raise(20.dp).snackAnchor(unclipped = true).testTag("qris").size(52.dp).shadow(6.dp, RoundedCornerShape(16.dp)).clip(RoundedCornerShape(16.dp))
                                 .background(MaterialTheme.colorScheme.primary),
                             contentAlignment = Alignment.Center,
                         ) { Icon(painterResource(t.icon), contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary) }

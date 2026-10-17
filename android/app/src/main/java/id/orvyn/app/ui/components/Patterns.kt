@@ -64,10 +64,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -432,13 +434,15 @@ fun rememberSay(): (String, Boolean) -> Unit {
 /**
  * Marks a sticky action area (keypad, bottom buttons, bottom nav) so the snackbar never covers it (design.md 4.11).
  * Screens without a marked area keep the default spot, 76dp above the bottom, clear of one sticky button.
+ * [unclipped]: the element is drawn above its parent (the raised QRIS button, 0.9.1 design.md 5), so its real top counts,
+ * not the top clipped to the bar.
  */
 @Composable
-fun Modifier.snackAnchor(): Modifier {
+fun Modifier.snackAnchor(unclipped: Boolean = false): Modifier {
     val s = LocalSnacks.current ?: return this
     val key = remember { Any() }
     DisposableEffect(s) { onDispose { s.anchors.remove(key) } }
-    return onGloballyPositioned { s.anchors[key] = it.boundsInWindow().top }
+    return onGloballyPositioned { s.anchors[key] = if (unclipped) it.positionInWindow().y else it.boundsInWindow().top }
 }
 
 /** Fills the window; the snackbar sits at the bottom, just above the highest [snackAnchor]. */
@@ -458,7 +462,7 @@ private fun SnackbarBox(snacks: Snacks, modifier: Modifier) {
     SnackbarHost(snacks.host, modifier) { data ->
         val v = data.visuals as? OrvynSnack
         Snackbar(
-            modifier = Modifier.padding(12.dp), shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.padding(12.dp).testTag("snackbar"), shape = RoundedCornerShape(14.dp),
             containerColor = MaterialTheme.colorScheme.inverseSurface, contentColor = MaterialTheme.colorScheme.inverseOnSurface,
             action = data.visuals.actionLabel?.let { label -> { TextButton(onClick = { data.performAction() }) { Text(label, color = MaterialTheme.colorScheme.inversePrimary) } } },
             dismissAction = if (data.visuals.withDismissAction) ({

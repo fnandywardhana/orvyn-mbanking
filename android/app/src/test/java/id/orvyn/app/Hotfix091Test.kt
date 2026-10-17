@@ -13,6 +13,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import id.orvyn.app.ui.BottomBar
+import id.orvyn.app.ui.Tab
+import id.orvyn.app.ui.components.LocalSnacks
+import id.orvyn.app.ui.components.OrvynSnackbarHost
+import id.orvyn.app.ui.components.Snacks
+import id.orvyn.app.ui.components.rememberSnacks
 import id.orvyn.app.ui.components.OrvynTextField
 import id.orvyn.app.ui.components.closeKeyboard
 import id.orvyn.app.ui.components.doneAction
@@ -144,4 +159,32 @@ class Hotfix091Test {
         fields[1].performImeAction()
         compose.runOnIdle { assertEquals(1, ran) }
     }
+
+    // ---- H91-5: the snackbar sits 12dp above the raised QRIS button (design.md 5)
+
+    private fun snackClearOfQris(fontScale: Float) {
+        var snacks: Snacks? = null
+        var px = 0f
+        set {
+            val d = LocalDensity.current
+            px = d.density
+            CompositionLocalProvider(LocalDensity provides Density(d.density, fontScale)) {
+                val s = rememberSnacks().also { snacks = it }
+                CompositionLocalProvider(LocalSnacks provides s) {
+                    Box(Modifier.fillMaxSize()) {
+                        Box(Modifier.align(Alignment.BottomCenter)) { BottomBar(Tab.Home) {} }
+                        OrvynSnackbarHost(s)
+                    }
+                }
+            }
+        }
+        compose.runOnIdle { snacks!!.show("You're offline. Try again when you're connected.", error = true) }
+        compose.waitForIdle()
+        val snack = compose.onNodeWithTag("snackbar", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val qrisTop = compose.onNodeWithTag("qris", useUnmergedTree = true).fetchSemanticsNode().positionInRoot.y
+        assertEquals("12dp between the snackbar and the top of QRIS at font ${fontScale}x", 12f, (qrisTop - snack.bottom) / px, 1f)
+    }
+
+    @Test fun `H91-5 AC1 the snackbar clears the raised QRIS button`() = snackClearOfQris(1f)
+    @Test fun `H91-5 AC3 the snackbar clears the raised QRIS button at 200 percent`() = snackClearOfQris(2f)
 }
