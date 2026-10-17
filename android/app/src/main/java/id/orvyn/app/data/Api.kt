@@ -121,6 +121,8 @@ data class Credit(val limit: Long, val owed: Long, val available: Long, val mini
 data class Card(
     val id: String, val kind: String, val product: String, val name: String, val last4: String,
     val frozen: Boolean, val online: Boolean, val overseas: Boolean, val contactless: Boolean, val dailyLimit: Long, val credit: Credit?,
+    /** The account the card's list is on; a detail opened from that list shows the same side (design.md 17.2). */
+    val accountId: String? = null,
 )
 data class CardSecret(val number: String, val cvv: String, val expiry: String)
 
@@ -480,7 +482,8 @@ object Api {
     private fun parseCards(r: JSONObject) = r.getJSONArray("cards").map { c ->
         Card(c.getString("id"), c.getString("kind"), c.getString("product"), c.getString("name"), c.getString("last4"),
             c.getBoolean("frozen"), c.getBoolean("online"), c.getBoolean("overseas"), c.getBoolean("contactless"), c.getLong("dailyLimit"),
-            c.optJSONObject("credit")?.let { Credit(it.getLong("limit"), it.getLong("owed"), it.getLong("available"), it.getLong("minimum"), it.getString("dueDate")) })
+            c.optJSONObject("credit")?.let { Credit(it.getLong("limit"), it.getLong("owed"), it.getLong("available"), it.getLong("minimum"), it.getString("dueDate")) },
+            c.optStringOrNull("accountId"))
     }
 
     suspend fun cards(): List<Card> = parseCards(call("GET", "/cards"))

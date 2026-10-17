@@ -140,6 +140,20 @@ test('Q-G10 (PO-20): a pocket\'s history says which way the money went, for old 
   assert.deepEqual(await checkLedger(sql), { ok: true, problems: [] })
 })
 
+test('Q-01-F7 (design.md 17.2): a card bill payment reads the same in the card list and the detail opened from it', async () => {
+  const card = (await call('GET', '/cards')).body.cards.find((c: any) => c.kind === 'credit')
+  assert.ok(card?.accountId, 'the card says which account its list is on')
+  const paid = await call('POST', `/cards/${card.id}/pay`, { amount: 100_000, pin: '482915', idempotencyKey: 'qpa-f7' })
+  assert.equal(paid.status, 200)
+  const row = (await call('GET', `/cards/${card.id}/transactions`)).body.items.find((t: any) => t.id === paid.body.transactionId)
+  assert.deepEqual([row.title, row.amount], ['Payment from your savings', 100_000])
+  const detail = (await call('GET', `/transactions/${row.id}?account=${card.accountId}`)).body
+  assert.deepEqual([detail.title, detail.amount, detail.subtitle], ['Payment from your savings', 100_000, 'Credit card payment'])
+  const savings = (await call('GET', `/transactions/${row.id}`)).body
+  assert.deepEqual([savings.title, savings.amount], [`${card.name} bill`, -100_000], 'savings side unchanged')
+  assert.deepEqual(await checkLedger(sql), { ok: true, problems: [] })
+})
+
 test('Q-F3: History filters by several kinds at once, and a reversal shows under the type it reversed', async () => {
   const [savings] = await sql`select a.id from accounts a join customers c on c.id = a.customer_id where c.phone = '081300008001' and a.kind = 'savings'`
   const [q] = await sql`select j.id from journal_entries j join postings p on p.journal_id = j.id where p.account_id = ${savings.id} and j.kind = 'qris_payment' limit 1`

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -539,10 +541,15 @@ private fun Done(to: Recipient, amount: Long, method: Method, note: String, paid
         onShare = paid?.transactionId?.takeIf { later == null }?.let { id -> { shareTransaction(context, id) } },
         textAction = when {
             to.id != null -> null
-            saved -> { { Text("${to.name.substringBefore(' ')} is in your saved recipients", style = MaterialTheme.typography.labelLarge,
-                color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center) } }
-            else -> { { WhiteTextButton("Save ${to.name.substringBefore(' ')} as a recipient", loading = saving) {
+            // No name in either line (design.md 17.1): the subline already shows it in full, and a first word can be "PT".
+            saved -> { {
+                Row(Modifier.fillMaxWidth().padding(vertical = 14.dp).semantics(mergeDescendants = true) { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite },
+                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(painterResource(R.drawable.ph_check), null, Modifier.size(16.dp), tint = androidx.compose.ui.graphics.Color.White)
+                    Text("Saved to your recipients", style = MaterialTheme.typography.labelLarge, color = androidx.compose.ui.graphics.Color.White)
+                }
+            } }
+            else -> { { WhiteTextButton("Save as a recipient", loading = saving) {
                 saving = true
                 scope.launch {
                     try { Api.saveRecipient(to, null); saved = true } catch (e: Exception) { snacks?.show(e.say(), error = true) }

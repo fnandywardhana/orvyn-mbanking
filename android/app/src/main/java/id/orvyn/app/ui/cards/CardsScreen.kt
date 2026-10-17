@@ -78,7 +78,7 @@ import org.json.JSONObject
 
 /** Stories S1.23–S1.25. */
 @Composable
-fun CardsScreen(onPayBill: (Card) -> Unit, onOpenTransaction: (String) -> Unit) {
+fun CardsScreen(onPayBill: (Card) -> Unit, onOpenTransaction: (id: String, account: String?) -> Unit) {
     val cards = rememberLoad(DataVersion.count) { Api.cards() }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().verticalScroll(rememberScrollState())) {
         Text("Cards", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 16.dp).semantics { heading() })
@@ -146,7 +146,7 @@ private fun switchedMessage(key: String, on: Boolean) = when (key) {
 }
 
 @Composable
-private fun CardControls(card: Card, onUpdated: (List<Card>) -> Unit, onPayBill: () -> Unit, onOpenTransaction: (String) -> Unit) {
+private fun CardControls(card: Card, onUpdated: (List<Card>) -> Unit, onPayBill: () -> Unit, onOpenTransaction: (id: String, account: String?) -> Unit) {
     var showDetails by remember(card.id) { mutableStateOf(false) }
     var limitSheet by remember { mutableStateOf(false) }
     val txs = rememberLoad(card.id, DataVersion.count) { Api.cardTransactions(card.id) }
@@ -197,7 +197,7 @@ private fun CardControls(card: Card, onUpdated: (List<Card>) -> Unit, onPayBill:
             if (t.isEmpty()) Text(if (card.kind == "debit") "Debit card payments show in your History." else "No card payments yet.",
                 style = MaterialTheme.typography.bodyMedium, color = OrvynTheme.colors.textSecondary)
             else Column(Modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface)) {
-                t.take(10).forEach { tx -> TransactionRow(tx, onClick = { onOpenTransaction(tx.id) }) } // Q-E8 AC1
+                t.take(10).forEach { tx -> TransactionRow(tx, onClick = { onOpenTransaction(tx.id, card.accountId) }) } // Q-E8 AC1; the card's side, like the row (17.2)
             }
         }
     }

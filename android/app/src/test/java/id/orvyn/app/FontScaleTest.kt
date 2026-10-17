@@ -142,9 +142,9 @@ class FontScaleTest(private val night: Boolean, private val qualifiers: String) 
         render("success-transfer") {
             SuccessScreen("Sent", "Rp150,000,000", "to PT Griya Properti Utama Sejahtera", date = Instant.parse("2026-10-16T12:27:00Z"), details = {
                 ReceiptLine("To", "Mandiri · 5626 2903 32"); ReceiptLine("Method", "RTGS · fee Rp25,000"); ReceiptLine("Note", "Down payment"); ReceiptLine("Reference", "CB2CC8CA1F52")
-            }, onPrimary = {}, onShare = {}, textAction = { WhiteTextButton("Save PT as a recipient") {} })
+            }, onPrimary = {}, onShare = {}, textAction = { WhiteTextButton("Save as a recipient") {} })
         }
-        inside("success-transfer", "Done" to hasText("Done"), "Share" to hasText("Share receipt"), "Save" to hasText("Save PT as a recipient"))
+        inside("success-transfer", "Done" to hasText("Done"), "Share" to hasText("Share receipt"), "Save" to hasText("Save as a recipient"))
     }
 
     @Test fun scheduledSuccess() {

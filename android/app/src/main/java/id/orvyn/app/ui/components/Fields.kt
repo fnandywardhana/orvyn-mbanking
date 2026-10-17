@@ -67,6 +67,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
@@ -104,6 +105,8 @@ fun OrvynTextField(
     imeAction: ImeAction = ImeAction.Default,
     onImeAction: (() -> Unit)? = null,
     fieldModifier: Modifier = Modifier,
+    capitalization: KeyboardCapitalization = KeyboardCapitalization.None,
+    autoCorrect: Boolean = true,
 ) {
     var visible by rememberSaveable { mutableStateOf(false) }
     FieldFrame(label, helper, error, modifier) { bring ->
@@ -114,8 +117,9 @@ fun OrvynTextField(
             isError = error != null,
             textStyle = MaterialTheme.typography.bodyLarge,
             shape = RoundedCornerShape(10.dp),
-            keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else keyboardType, imeAction = imeAction),
-            keyboardActions = KeyboardActions(onAny = { onImeAction?.invoke() }),
+            keyboardOptions = KeyboardOptions(capitalization = capitalization, autoCorrectEnabled = autoCorrect,
+                keyboardType = if (password) KeyboardType.Password else keyboardType, imeAction = imeAction),
+            keyboardActions = imeActions(onImeAction),
             visualTransformation = if (password && !visible) PasswordVisualTransformation() else visualTransformation,
             trailingIcon = if (password) {
                 {
@@ -147,6 +151,8 @@ fun OrvynTextField(
     keyboardType: KeyboardType = KeyboardType.Text,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     fieldModifier: Modifier = Modifier,
+    imeAction: ImeAction = ImeAction.Default,
+    onImeAction: (() -> Unit)? = null,
 ) {
     FieldFrame(label, helper, error, modifier) { bring ->
         OutlinedTextField(
@@ -156,13 +162,17 @@ fun OrvynTextField(
             isError = error != null,
             textStyle = MaterialTheme.typography.bodyLarge,
             shape = RoundedCornerShape(10.dp),
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
+            keyboardActions = imeActions(onImeAction),
             visualTransformation = visualTransformation,
             colors = fieldColors(),
             modifier = fieldModifier.fillMaxWidth().semantics { if (error != null) error(error) }.onFocusEvent { if (it.isFocused) bring() },
         )
     }
 }
+
+/** The keyboard's action key (and Enter on a hardware keyboard) runs [onImeAction]; without one, Android's default (Next moves on, Done closes). */
+private fun imeActions(onImeAction: (() -> Unit)?) = if (onImeAction == null) KeyboardActions.Default else KeyboardActions(onAny = { onImeAction() })
 
 @Composable
 private fun fieldColors() = OutlinedTextFieldDefaults.colors(

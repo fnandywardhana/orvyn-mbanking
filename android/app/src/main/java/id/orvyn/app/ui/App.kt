@@ -409,7 +409,7 @@ private fun MainShell(store: DeviceStore, onOpenTransaction: (String) -> Unit, o
                 }, onCopied = say, onInbox = { onRoute("inbox") }, onRoute = onRoute)
                 Tab.History -> HistoryScreen(savingsId(store), onOpenTransaction, onInsights = { onRoute("insights") })
                 Tab.Profile -> ProfileScreen(store, onSignedOut, onRoute)
-                Tab.Cards -> CardsScreen(onPayBill = onPayCard, onOpenTransaction = onOpenTransaction)
+                Tab.Cards -> CardsScreen(onPayBill = onPayCard, onOpenTransaction = { id, account -> onRoute(if (account == null) "tx/$id" else "tx/$id?account=$account") })
                 else -> {}
             }
         }

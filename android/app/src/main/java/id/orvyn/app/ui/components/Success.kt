@@ -176,10 +176,11 @@ fun ReceiptLine(label: String, value: String, onSurfaceWhite: Boolean = true) {
     }
 }
 
-/** A text action in white on the hero, e.g. "Save Sinta as a recipient". [loading] shows a spinner in its place. */
+/** A text action in white on the hero, e.g. "Save as a recipient". [loading] shows a spinner in its place. */
 @Composable
 fun WhiteTextButton(text: String, loading: Boolean = false, onClick: () -> Unit) {
-    Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(enabled = !loading, onClick = rememberOnce(onClick)), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(enabled = !loading, role = androidx.compose.ui.semantics.Role.Button, onClick = rememberOnce(onClick)),
+        contentAlignment = Alignment.Center) {
         if (loading) androidx.compose.material3.CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
         else Text(text, style = MaterialTheme.typography.labelLarge, color = Color.White, textAlign = TextAlign.Center)
     }

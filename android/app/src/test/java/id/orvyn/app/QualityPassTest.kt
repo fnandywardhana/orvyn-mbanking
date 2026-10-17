@@ -26,6 +26,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -155,7 +157,7 @@ class QualityPassTest {
             CompositionLocalProvider(LocalSnacks provides s) {
                 Box {
                     SuccessScreen("Sent", "Rp50,000", "to Sinta Maharani", details = { ReceiptLine("To", "ORVYN Bank") }, onPrimary = {}, onShare = {},
-                        textAction = { WhiteTextButton("Save Sinta as a recipient") {} }, buzz = false)
+                        textAction = { WhiteTextButton("Save as a recipient") {} }, buzz = false)
                     OrvynSnackbarHost(s)
                 }
             }
@@ -163,8 +165,26 @@ class QualityPassTest {
         compose.runOnIdle { snacks!!.show("You're offline. Check your connection and try again.", error = true) }
         compose.waitForIdle()
         val snack = compose.onNodeWithText("You're offline. Check your connection and try again.").fetchSemanticsNode().boundsInRoot
-        val save = compose.onNodeWithText("Save Sinta as a recipient").fetchSemanticsNode().boundsInRoot
+        val save = compose.onNodeWithText("Save as a recipient").fetchSemanticsNode().boundsInRoot
         assertTrue("snackbar $snack overlaps $save", snack.bottom <= save.top)
+    }
+
+    @Test fun `the keyboard action key runs the field's action, and Next moves to the next field (Q-01-F11, design 17_3)`() {
+        var done = 0
+        set {
+            val next = androidx.compose.runtime.remember { androidx.compose.ui.focus.FocusRequester() }
+            Column {
+                id.orvyn.app.ui.components.OrvynTextField("Full name", "Raka", {}, imeAction = androidx.compose.ui.text.input.ImeAction.Next, onImeAction = { next.requestFocus() })
+                id.orvyn.app.ui.components.OrvynTextField("Password", "rahasia123", {}, password = true, imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                    onImeAction = { done++ }, fieldModifier = Modifier.focusRequester(next))
+            }
+        }
+        compose.onNode(hasText("Raka") and androidx.compose.ui.test.hasSetTextAction()).performClick()
+        compose.onNode(hasText("Raka") and androidx.compose.ui.test.hasSetTextAction()).performImeAction()
+        compose.onNode(androidx.compose.ui.test.hasSetTextAction() and androidx.compose.ui.test.isFocused()).assert(SemanticsMatcher("is the password field") { n ->
+            SemanticsProperties.Password in n.config })
+        compose.onNode(androidx.compose.ui.test.hasSetTextAction() and androidx.compose.ui.test.isFocused()).performImeAction()
+        assertEquals(1, done)
     }
 
     // ---- Components

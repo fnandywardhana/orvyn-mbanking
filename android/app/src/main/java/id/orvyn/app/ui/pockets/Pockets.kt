@@ -317,7 +317,7 @@ fun PocketEditor(id: String?, onBack: () -> Unit, onSaved: (String) -> Unit, onC
     val targetError = if (targetValue != null && targetValue < 10_000) "A target needs to be at least Rp10,000." else null
     FlowScreen(if (id == null) "New pocket" else "Edit pocket", if (id == null) "Money in a pocket stays yours. Move it back any time." else null, onBack) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            OrvynTextField("Name", name, { name = it.take(24) }, helper = "${name.length}/24")
+            OrvynTextField("Name", name, { name = it.take(24) }, helper = "${name.length}/24", imeAction = androidx.compose.ui.text.input.ImeAction.Next) // Android moves on to Target (MASTER, Text field)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Picture", style = MaterialTheme.typography.titleMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp), maxItemsInEachRow = 4) {

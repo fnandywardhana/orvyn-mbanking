@@ -39,7 +39,7 @@ const txColumns = (sql: Sql) => sql`
   j.id, j.kind, j.created_at as at, p.amount, j.memo, j.reverses_id, ${categoryOf(sql)} as spend_category,
   exists (select 1 from journal_entries r where r.reverses_id = j.id) as reversed`
 
-/** [accountKind]: the side being read. On a Pocket's side a move says where the money went (Q-G10, PO-20), old ones too. */
+/** [accountKind]: the side being read. On a Pocket's side a move says where the money went (Q-G10, PO-20), old ones too; on a credit card's side a bill payment says where it came from. */
 function toTransaction(r: any, accountKind?: string) {
   const amount = Number(r.amount)
   const m = r.memo ?? {}
@@ -51,6 +51,7 @@ function toTransaction(r: any, accountKind?: string) {
     amount,
     title: r.kind === 'reversal' ? 'Reversed by ORVYN Bank'
       : pocketSide ? (amount > 0 ? 'Added from ORVYN Everyday' : 'Moved to ORVYN Everyday')
+      : r.kind === 'card_payment' && amount > 0 ? 'Payment from your savings' // the card's side (design.md 17.2), old payments too
       : (party?.name ?? m.channel ?? 'Transaction'),
     subtitle: m.channel ?? null,
     category: m.category ?? null,

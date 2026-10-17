@@ -42,7 +42,7 @@ export async function listCards(sql: Sql, customerId: string) {
   const rows = await sql`select c.*, a.balance, a.floor from cards c join accounts a on a.id = c.account_id where c.customer_id = ${customerId} order by c.kind desc, c.created_at`
   return rows.map(c => {
     const base = {
-      id: c.id, kind: c.kind, product: c.product, name: PRODUCTS[c.product as Product].name, last4: c.number.slice(-4),
+      id: c.id, accountId: c.account_id, kind: c.kind, product: c.product, name: PRODUCTS[c.product as Product].name, last4: c.number.slice(-4),
       frozen: c.frozen, online: c.online, overseas: c.overseas, contactless: c.contactless, dailyLimit: Number(c.daily_limit),
     }
     if (c.kind !== 'credit') return base

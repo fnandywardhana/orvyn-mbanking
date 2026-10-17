@@ -94,6 +94,10 @@ import id.orvyn.app.ui.isAcceptablePin
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
@@ -179,20 +183,23 @@ private fun PhoneStep(initial: String, progress: String, onBack: () -> Unit, onS
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    val keyboard = LocalSoftwareKeyboardController.current
+    fun send() {
+        busy = true
+        scope.launch {
+            try {
+                val (normalized, code) = Api.registerOtp(phone)
+                onSent(normalized, if (showOtp(context, code)) null else code)
+            } catch (e: ApiException) { error = e.message } finally { busy = false }
+        }
+    }
     LaunchedEffect(Unit) { if (Build.VERSION.SDK_INT >= 33) askNotify.launch(Manifest.permission.POST_NOTIFICATIONS) }
     FlowScreen("Open an account", "First, your phone number. We'll send a 6-digit code to confirm it. $progress.", onBack) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            OrvynTextField("Phone number", phone, { phone = it; error = null }, keyboardType = KeyboardType.Phone, error = error, helper = "For example 0812 3456 7890")
+            OrvynTextField("Phone number", phone, { phone = it; error = null }, keyboardType = KeyboardType.Phone, error = error, helper = "For example 0812 3456 7890",
+                imeAction = ImeAction.Done, onImeAction = { if (phone.length >= 10 && !busy) send() else keyboard?.hide() })
         }
-        OrvynButton("Send code", enabled = phone.length >= 10, loading = busy, modifier = Modifier.padding(vertical = 16.dp), onClick = {
-            busy = true
-            scope.launch {
-                try {
-                    val (normalized, code) = Api.registerOtp(phone)
-                    onSent(normalized, if (showOtp(context, code)) null else code)
-                } catch (e: ApiException) { error = e.message } finally { busy = false }
-            }
-        })
+        OrvynButton("Send code", enabled = phone.length >= 10, loading = busy, modifier = Modifier.padding(vertical = 16.dp), onClick = { send() })
     }
 }
 
@@ -203,6 +210,11 @@ internal fun CodeStep(phone: String, shownCode: String?, progress: String, onBac
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val grouped = phone.chunked(4).joinToString(" ")
+    val keyboard = LocalSoftwareKeyboardController.current
+    fun confirm() {
+        busy = true
+        scope.launch { try { onVerified(Api.registerVerify(phone, code)) } catch (e: ApiException) { error = e.message } finally { busy = false } }
+    }
     FlowScreen("Enter the code", "Enter the 6-digit code for $grouped. $progress.", onBack) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             if (shownCode != null) Row(
@@ -218,12 +230,10 @@ internal fun CodeStep(phone: String, shownCode: String?, progress: String, onBac
                     }, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
             }
-            OrvynTextField("6-digit code", code, { code = it.filter(Char::isDigit).take(6); error = null }, keyboardType = KeyboardType.NumberPassword, error = error)
+            OrvynTextField("6-digit code", code, { code = it.filter(Char::isDigit).take(6); error = null }, keyboardType = KeyboardType.NumberPassword, error = error,
+                imeAction = ImeAction.Done, onImeAction = { if (code.length == 6 && !busy) confirm() else keyboard?.hide() })
         }
-        OrvynButton("Confirm", enabled = code.length == 6, loading = busy, modifier = Modifier.padding(vertical = 16.dp), onClick = {
-            busy = true
-            scope.launch { try { onVerified(Api.registerVerify(phone, code)) } catch (e: ApiException) { error = e.message } finally { busy = false } }
-        })
+        OrvynButton("Confirm", enabled = code.length == 6, loading = busy, modifier = Modifier.padding(vertical = 16.dp), onClick = { confirm() })
     }
 }
 
@@ -269,6 +279,7 @@ private fun AboutStep(d: JSONObject, token: String, progress: String, onBack: ()
     val errAddress = if (tried && address.isBlank()) "Enter your address." else null
     val errs = listOf(errName != null, errNik != null, errDob != null, errAddress != null, tried && work.isEmpty(), tried && income.isEmpty(), tried && purpose.isEmpty())
     val focus = List(4) { remember { FocusRequester() } }
+    val focusManager = LocalFocusManager.current
     val bring = List(7) { remember { androidx.compose.foundation.relocation.BringIntoViewRequester() } }
     var jump by remember { mutableIntStateOf(0) }
     LaunchedEffect(jump) {
@@ -282,15 +293,19 @@ private fun AboutStep(d: JSONObject, token: String, progress: String, onBack: ()
     FlowScreen("About you", "As written on your KTP. $progress.", onBack) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             val bringMod = { i: Int -> Modifier.bringIntoViewRequester(bring[i]) }
-            OrvynTextField("Full name", name, { name = it }, error = errName, modifier = bringMod(0), fieldModifier = Modifier.focusRequester(focus[0]))
+            // Next moves down the text fields; Done on Address only closes the keyboard and brings Work up (design.md 17.3).
+            OrvynTextField("Full name", name, { name = it }, error = errName, modifier = bringMod(0), fieldModifier = Modifier.focusRequester(focus[0]),
+                capitalization = KeyboardCapitalization.Words, autoCorrect = false, imeAction = ImeAction.Next, onImeAction = { focus[1].requestFocus() })
             Column(bringMod(1)) {
                 OrvynTextField("NIK", nik, { nik = it.filter(Char::isDigit).take(16); nikServer = null; tooMany = false }, keyboardType = KeyboardType.Number, error = errNik,
-                    fieldModifier = Modifier.focusRequester(focus[1]))
+                    fieldModifier = Modifier.focusRequester(focus[1]), imeAction = ImeAction.Next, onImeAction = { focus[2].requestFocus() })
                 if (tooMany) OrvynTextButton("Start again", onClick = onRestart)
             }
             OrvynTextField("Date of birth", dob, { dob = dobInput(dob, it) }, keyboardType = KeyboardType.Number, helper = "DD/MM/YYYY", error = errDob, visualTransformation = DobTransformation,
-                modifier = bringMod(2), fieldModifier = Modifier.focusRequester(focus[2]))
-            OrvynTextField("Address", address, { address = it }, error = errAddress, modifier = bringMod(3), fieldModifier = Modifier.focusRequester(focus[3]))
+                modifier = bringMod(2), fieldModifier = Modifier.focusRequester(focus[2]), imeAction = ImeAction.Next, onImeAction = { focus[3].requestFocus() })
+            OrvynTextField("Address", address, { address = it }, error = errAddress, modifier = bringMod(3), fieldModifier = Modifier.focusRequester(focus[3]),
+                capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done,
+                onImeAction = { focusManager.clearFocus(); scope.launch { runCatching { bring[4].bringIntoView() } } })
             Choices("Work", WORK, work, errs[4], bringMod(4)) { work = it }
             Choices("Monthly income", INCOME, income, errs[5], bringMod(5)) { income = it }
             Choices("Main reason for the account", PURPOSE, purpose, errs[6], bringMod(6)) { purpose = it }
@@ -399,9 +414,11 @@ private fun PhotoStep(title: String, body: String, card: Boolean, onBack: () -> 
 private fun PasswordStep(progress: String, onBack: () -> Unit, onNext: (String) -> Unit) {
     var pw by remember { mutableStateOf("") }
     val strength = listOf(pw.length >= 8, pw.any(Char::isLetter), pw.any(Char::isDigit)).count { it }
+    val keyboard = LocalSoftwareKeyboardController.current
     FlowScreen("Create a password", "You'll use it once per phone, with your phone number. $progress.", onBack) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OrvynTextField("Password", pw, { pw = it }, password = true, helper = when (strength) { 3 -> "Strong enough."; else -> "At least 8 characters, with letters and numbers." })
+            OrvynTextField("Password", pw, { pw = it }, password = true, helper = when (strength) { 3 -> "Strong enough."; else -> "At least 8 characters, with letters and numbers." },
+                imeAction = ImeAction.Done, onImeAction = { if (strength == 3) onNext(pw) else keyboard?.hide() })
         }
         OrvynButton("Continue", enabled = strength == 3, onClick = { onNext(pw) }, modifier = Modifier.padding(vertical = 16.dp))
     }
