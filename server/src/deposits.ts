@@ -17,6 +17,8 @@ export function addMonths(date: string, months: number) {
   const last = new Date(Date.UTC(y, m - 1 + months + 1, 0)).getUTCDate()
   return new Date(Date.UTC(y, m - 1 + months, Math.min(d, last))).toISOString().slice(0, 10)
 }
+/** Interest postings can round to Rp0, and the ledger refuses a zero posting (Q-02-F4): leave those out. */
+const nonZero = (postings: { accountId: string, amount: number }[]) => postings.filter(p => p.amount !== 0)
 const days = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / 86400_000)
 
 /** Interest for a term: gross, the 20% tax, and what the customer receives. */
@@ -109,7 +111,7 @@ export async function matureDeposit(sql: Sql, id: string, now = new Date()) {
     if (d.instruction === 'rollover') {
       if (i.gross > 0) await postJournal(tx, {
         kind: 'deposit_interest', memo: { from: { name: 'ORVYN Bank' }, to: { name }, channel: `Interest after 20% tax (${rp(i.tax)})`, category: 'income' },
-        postings: [{ accountId: expense, amount: -i.gross }, { accountId: tax, amount: i.tax }, { accountId: id, amount: i.net }],
+        postings: nonZero([{ accountId: expense, amount: -i.gross }, { accountId: tax, amount: i.tax }, { accountId: id, amount: i.net }]),
       })
       const [r] = await tx`select value from settings where key = 'deposit_rates'`
       const rateBp = Number(r.value[String(d.tenor_months)])
@@ -118,7 +120,7 @@ export async function matureDeposit(sql: Sql, id: string, now = new Date()) {
     } else {
       await postJournal(tx, {
         kind: 'deposit_close', memo: { from: { name }, to: { name: savings.name }, channel: `Time deposit matured · interest ${rp(i.net)} after tax`, category: 'income' },
-        postings: [{ accountId: id, amount: -principal }, { accountId: expense, amount: -i.gross }, { accountId: tax, amount: i.tax }, { accountId: savings.id, amount: principal + i.net }],
+        postings: nonZero([{ accountId: id, amount: -principal }, { accountId: expense, amount: -i.gross }, { accountId: tax, amount: i.tax }, { accountId: savings.id, amount: principal + i.net }]),
       })
       await tx`update time_deposits set closed_at = now() where account_id = ${id}`
       note = [d.customer_id, 'Deposit paid out', `Your ${name} matured: ${rp(principal + i.net)} is in ORVYN Everyday, including ${rp(i.net)} interest after tax.`]
@@ -129,8 +131,9 @@ export async function matureDeposit(sql: Sql, id: string, now = new Date()) {
   return result
 }
 
-/** Runs every minute; anything due today or earlier (Jakarta) matures once. */
+/** Runs every minute; anything due today or earlier (Jakarta) matures once. Each deposit is its own transaction (H-7):
+ *  one that fails rolls back, stays open, is logged, and is tried again next minute without holding up the rest. */
 export async function runMaturities(sql: Sql, now = new Date()) {
-  const due = await sql`select account_id from time_deposits where closed_at is null and maturity_date <= ${jakartaDate(now)}`
-  for (const d of due) await matureDeposit(sql, d.account_id, now)
+  const due = await sql`select account_id from time_deposits where closed_at is null and maturity_date <= ${jakartaDate(now)} order by maturity_date, account_id`
+  for (const d of due) await matureDeposit(sql, d.account_id, now).catch(e => console.error(`deposit ${d.account_id} failed to mature`, e))
 }
