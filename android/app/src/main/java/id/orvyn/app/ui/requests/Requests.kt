@@ -420,7 +420,7 @@ fun SplitFlow(startTotal: Long?, onExit: () -> Unit) {
                     }
                     Row(Modifier.fillMaxWidth().padding(12.dp)) {
                         Text("Your share", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                        Text(Money.format(total - friendsTotal), style = MaterialTheme.typography.titleMedium, color = if (friendsTotal > total) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground)
+                        Text((if (friendsTotal > total) "−" else "") + Money.format(total - friendsTotal), style = MaterialTheme.typography.titleMedium, color = if (friendsTotal > total) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground)
                     }
                     OrvynTextField("What for (optional)", note, { note = it.take(50) }, helper = "Your friends see this, like \"Dinner at Bakmi 88\"")
                     if (friendsTotal > total) Text("Your friends' shares add up to more than the bill.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
