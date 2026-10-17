@@ -171,8 +171,12 @@ An account number a Customer has saved for quick Transfers.
 _Avoid_: beneficiary, payee, contact
 
 **Money Request**:
-A request one Customer sends another to pay a set amount to their Savings Account. The payer opens it from the inbox, then pays through the usual review screen and PIN, or declines it. It expires after 7 days. A Split Bill is a group of Money Requests.
+A request one Customer sends another to pay a set amount to their Savings Account. The payer opens it from the inbox, then pays through the usual review screen and PIN, or declines it. It expires after 7 days. Paying it is an Internal Transfer, so it can't be created below the smallest Transfer (Rp10,000); the server uses one minimum for both. The minimum is checked only when the request is created, so an open request can always be paid at its amount.
 _Avoid_: invoice, bill (that is a Biller's), payment request
+
+**Split Bill**:
+A total shared between the Customer who made it and 1 to 9 friends, sent as one Money Request per friend. Each friend's share and the total are at least the Money Request minimum; the creator's own share is what's left and can be Rp0.
+_Avoid_: group bill, shared payment
 
 **Merchant**:
 A made-up shop that accepts QRIS payments. Money paid to a Merchant lands in the Merchant Settlement House Account.

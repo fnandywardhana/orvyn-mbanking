@@ -2,6 +2,7 @@
 
 Sumber: `PRD-ORVYN.md` (F11–F17) dan sisa Fase 1 (push notification), istilah dari `CONTEXT.md`.
 **Desain:** design system di `design-system/MASTER.md`. Layar dibuat dengan skill ui-ux-pro-max, grafik dengan skill dataviz.
+**Perubahan:** AC bertanda "(diubah 0.9.0)" mengikuti `docs/features/2026-10-16-quality-pass/prd.md` bagian 8 dan 14 (PO-27).
 **Definisi selesai:** sama dengan Fase 0 dan 1 (lihat `STORIES-F0-F1.md`), ditambah: setiap fitur bisa dimatikan dari Settings admin.
 
 **Peran:** Nasabah, Petugas, dan Pemilik proyek (sama dengan Fase 1).
@@ -82,8 +83,8 @@ Sumber: `PRD-ORVYN.md` (F11–F17) dan sisa Fase 1 (push notification), istilah 
 **Sebagai** nasabah, **saya ingin** meminta uang ke sesama nasabah ORVYN, **supaya** teman yang berutang tinggal membayar.
 
 1. Nasabah memasukkan nomor rekening ORVYN atau memilih penerima tersimpan, nominal, dan catatan singkat.
-2. Penerima mendapat push dan kartu permintaan di kotak masuk, dengan tombol "Pay" dan "Decline".
-3. "Pay" membuka layar periksa yang sudah terisi. Pembayaran tetap memakai PIN.
+2. Penerima mendapat push dan kartu permintaan di kotak masuk. Kartu itu membuka detail permintaan yang punya tombol "Pay" dan "Decline". (diubah 0.9.0)
+3. "Pay" membuka layar periksa yang sudah terisi, baik dari detail permintaan maupun dari layar Requests. Pembayaran tetap memakai PIN. (diubah 0.9.0)
 4. Permintaan kedaluwarsa setelah 7 hari. Peminta bisa membatalkannya selama belum dibayar.
 5. Peminta mendapat push saat permintaan dibayar atau ditolak.
 6. Satu nasabah bisa membuat maksimal 20 permintaan per hari, supaya tidak ada spam.
@@ -199,7 +200,7 @@ Sumber: `PRD-ORVYN.md` (F11–F17) dan sisa Fase 1 (push notification), istilah 
 ### S2.18 Widget layar utama
 **Sebagai** nasabah, **saya ingin** widget ORVYN di layar utama HP, **supaya** saya bisa scan QRIS dengan satu ketukan.
 
-1. Widget berisi tombol "Scan QRIS" dan "Balance". Saldo tersembunyi secara default.
+1. Widget berisi tombol "Scan QRIS" dan "Show balance". Saldo tersembunyi secara default dan tertulis "Balance hidden". (diubah 0.9.0)
 2. Ketukan "Balance" menampilkan saldo terakhir yang tersimpan selama 10 detik, lalu tersembunyi lagi. Jika belum ada data tersimpan, widget meminta nasabah membuka aplikasi.
 3. "Scan QRIS" membuka ORVYN dan meminta PIN, lalu langsung ke kamera QRIS.
 4. Setelah nasabah keluar, widget tidak menampilkan saldo lagi.
@@ -214,4 +215,4 @@ Sumber: `PRD-ORVYN.md` (F11–F17) dan sisa Fase 1 (push notification), istilah 
 
 1. Halaman nasabah di admin menampilkan kantong (saldo dan target), jadwal transfer, dan permintaan yang masih terbuka.
 2. Persona baru otomatis punya 1–2 kantong dan beberapa anggaran, supaya layar insight dan kantong langsung terisi saat demo.
-3. Settings admin punya sakelar untuk kantong, jadwal transfer, minta uang, insight, Vyna, e-statement, dan widget.
+3. Settings admin punya sakelar untuk kantong, jadwal transfer, minta uang, insight, Vyna, dan e-statement. Widget tidak punya sakelar, karena widget hanya menampilkan saldo yang tersimpan di HP dan tidak memanggil server. (diubah 0.9.0)

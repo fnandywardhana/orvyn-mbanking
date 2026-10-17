@@ -1,6 +1,7 @@
 # User Stories ORVYN: Fase 3 "bank yang menumbuhkan"
 
 Sumber: `PRD-ORVYN.md` (F18–F23, KR7), istilah dari `CONTEXT.md`, keputusan di `docs/adr/0003-holdings-outside-the-ledger.md`.
+**Perubahan:** AC bertanda "(diubah 0.9.0)" mengikuti `docs/features/2026-10-16-quality-pass/prd.md` bagian 8 dan 14 (PO-27).
 **Definisi selesai:** sama dengan Fase 1 dan 2. Setiap fitur bisa dimatikan dari Settings admin.
 
 **Urutan pengerjaan:** valas, deposito, investasi (profil risiko, reksadana, SBN, emas), total aset, Prestige dan RM, passkey, lalu dokumentasi portofolio.
@@ -43,7 +44,7 @@ Sumber: `PRD-ORVYN.md` (F18–F23, KR7), istilah dari `CONTEXT.md`, keputusan di
 
 1. Saat jatuh tempo, bunga bersih dibayar dari House Account bunga. Jika diperpanjang, pokok dan bunga menjadi deposito baru dengan tenor yang sama. Jika dicairkan, semuanya masuk ke tabungan.
 2. Nasabah mendapat push dan pesan di kotak masuk.
-3. Nasabah bisa mencairkan lebih awal dengan PIN. Bunga hangus dan aplikasi menjelaskannya sebelum PIN.
+3. Nasabah bisa mencairkan lebih awal dengan PIN. Bunga hangus dan aplikasi menjelaskannya di layar periksa sebelum PIN. Setelah berhasil, layar sukses menampilkan nominal yang masuk ke tabungan. (diubah 0.9.0)
 4. Petugas bisa menjalankan "Mature now" untuk demo, tanpa menunggu berbulan-bulan.
 
 ---
@@ -91,7 +92,7 @@ Sumber: `PRD-ORVYN.md` (F18–F23, KR7), istilah dari `CONTEXT.md`, keputusan di
 1. Satu angka Total Aset dalam Rupiah: tabungan, kantong, deposito, valas (kurs beli), dan investasi (nilai hari ini).
 2. Grafik komposisi aset per jenis, dengan label dan persen sehingga tidak bergantung pada warna saja.
 3. Tagihan kartu kredit tampil di bawahnya sebagai kewajiban, tidak dikurangkan dari total aset.
-4. Setiap jenis aset bisa diketuk untuk membuka layarnya.
+4. Setiap jenis aset bisa diketuk untuk membuka layarnya, termasuk "Savings and pockets" yang membuka detail rekening. (diubah 0.9.0)
 
 ---
 

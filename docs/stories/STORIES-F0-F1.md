@@ -2,6 +2,7 @@
 
 Sumber: `PRD-ORVYN.md` (F1–F10), istilah dari `CONTEXT.md`.
 **Desain:** arah brand di [blueprint](https://claude.ai/artifact/BreTE3cUrXoVTRu7mVeStV) bagian 01. Layar final dibuat dengan skill ui-ux-pro-max di atas design system ORVYN sebelum tiap story dikodekan.
+**Perubahan:** AC bertanda "(diubah 0.9.0)" mengikuti `docs/features/2026-10-16-quality-pass/prd.md` bagian 8 dan 14 (PO-27).
 
 **Peran**
 - **Nasabah:** penguji yang memakai aplikasi ORVYN (Customer).
@@ -95,7 +96,7 @@ Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
 1. Pendaftar mengisi nomor HP, lalu kode OTP 6 digit muncul sebagai notifikasi di HP yang sama.
 2. Pendaftar mengisi nama, NIK, tanggal lahir, alamat, pekerjaan, rentang penghasilan, dan tujuan membuka rekening.
 3. NIK wajib 16 digit angka. Umur minimal 17 tahun. Pesan error muncul di bawah kolom yang salah.
-4. Nomor HP atau NIK yang sudah terdaftar ditolak dengan pesan yang jelas.
+4. Nomor HP atau NIK yang sudah terdaftar ditolak dengan pesan yang jelas. NIK diperiksa saat Continue di langkah About you, dan server memeriksanya lagi saat pendaftaran dikirim. (diubah 0.9.0)
 5. Data yang sudah diisi tidak hilang jika aplikasi ditutup di tengah jalan.
 
 #### S1.2 Foto KTP dan selfie
@@ -111,7 +112,7 @@ Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
 **Sebagai** calon nasabah, **saya ingin** membuat password dan PIN, **supaya** rekening saya terlindungi.
 
 1. Password minimal 8 karakter dan memuat huruf serta angka. Kekuatannya ditampilkan saat diketik.
-2. PIN terdiri dari 6 digit, dimasukkan dua kali, dan tidak boleh berupa urutan (123456) atau angka yang sama semua (111111).
+2. PIN terdiri dari 6 digit, dimasukkan dua kali, dan tidak boleh berupa urutan (123456) atau angka yang sama semua (111111). PIN lemah ditolak langsung di langkah pertama sebelum diulang, dan PIN kedua yang tidak cocok kembali ke langkah pertama dengan pesan "Those PINs didn't match. Start again." (diubah 0.9.0)
 3. Setelah selesai, pendaftar melihat layar "Sedang diverifikasi" dengan penjelasan langkah berikutnya.
 4. Password dan PIN disimpan dalam bentuk hash di server.
 
@@ -121,7 +122,7 @@ Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
 1. Admin menampilkan daftar pendaftaran yang menunggu, dengan data yang diketik pendaftar.
 2. Persetujuan membuat Customer, Savings Account dengan nomor rekening unik, dan Debit Card.
 3. Petugas memilih tier saat menyetujui. Defaultnya Everyday.
-4. Penolakan wajib menyertakan alasan, yang dikirim ke pendaftar.
+4. Penolakan wajib menyertakan alasan, yang dikirim ke pendaftar. Server menolak penolakan tanpa alasan, bukan hanya formulir admin. (diubah 0.9.0)
 5. Pendaftar menerima push notification dan pesan di kotak masuk untuk kedua hasil.
 
 #### S1.5 Masuk pertama di HP
@@ -136,10 +137,11 @@ Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
 **Sebagai** nasabah, **saya ingin** masuk dengan PIN atau sidik jari, **supaya** membuka ORVYN terasa cepat.
 
 1. Di Registered Device, nasabah masuk dengan PIN 6 digit atau biometrik.
-2. PIN salah 5 kali mengunci nasabah, dan sisa percobaan ditampilkan.
+2. PIN atau password salah 5 kali, dihitung bersama di layar Unlock, pembayaran, Ganti PIN, dan Ganti password, mengunci nasabah. Sisa percobaan ditampilkan di setiap tempat itu. (diubah 0.9.0)
 3. Aplikasi keluar otomatis setelah 5 menit tidak aktif, termasuk saat aplikasi berada di latar belakang.
 4. Dari ketukan ikon sampai beranda tampil, waktunya kurang dari 2 detik di Galaxy Note10+.
 5. Layar masuk menampilkan label kecil "Demo".
+6. Layar Unlock punya "Forgot PIN?" yang mengarah ke masuk dengan password lalu membuat PIN baru, tanpa melupakan HP. Setelah selesai, beranda menampilkan snackbar "Your PIN is changed". (diubah 0.9.0)
 
 ### F2. Beranda
 
@@ -149,7 +151,7 @@ Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
 1. Beranda menampilkan sapaan sesuai waktu, label tier, total saldo, empat aksi cepat, daftar rekening, dan 5 transaksi terakhir.
 2. Satu ketukan menyembunyikan atau menampilkan semua nominal, dan pilihan itu diingat.
 3. Tarik ke bawah untuk memperbarui data.
-4. Saat offline, data terakhir tetap tampil dengan keterangan waktu pembaruan, dan aksi transaksi dinonaktifkan.
+4. Saat offline, data terakhir tetap tampil, dan banner di bawah hero menyebut hari dan jam data. Aksi transaksi tampil redup dan, bila diketuk, menjelaskan bahwa nasabah sedang offline. (diubah 0.9.0)
 5. Saldo yang berubah tampil dengan animasi angka yang halus.
 
 #### S1.8 Banner promo
@@ -159,6 +161,7 @@ Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
 2. Banner bisa digeser jika ada lebih dari satu.
 3. Ketukan pada banner membuka halaman detail promo.
 4. Jika tidak ada banner aktif, bagian ini tidak ditampilkan dan tidak menyisakan ruang kosong.
+5. Banner tampil di bawah transaksi terakhir. Putar otomatis berhenti bila TalkBack aktif. Ketuk pil aksi langsung menjalankan aksinya. (diubah 0.9.0)
 
 ### F3. Rekening dan mutasi
 
@@ -174,7 +177,7 @@ Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
 
 1. Mutasi dikelompokkan per tanggal, dari yang terbaru.
 2. Data dimuat bertahap saat digulir, tanpa batas.
-3. Filter tersedia untuk rentang tanggal, uang masuk/keluar, dan jenis transaksi.
+3. Filter tersedia untuk rentang tanggal, uang masuk/keluar, dan jenis transaksi: Date (This month, Last month, Last 3 months, Pick dates) dan Type (Transfers, QRIS, Bills, Cards, Pockets, Wealth). Reversal ikut Type transaksi yang dibatalkannya. Simulated Inflow, Adjustment, dan saldo pembukaan hanya tampil tanpa filter Type, dan Simulated Inflow juga tampil di "Money in". (diubah 0.9.0)
 4. Pencarian bisa memakai nama lawan transaksi, catatan, atau nominal.
 5. Riwayat 6 bulan dari template persona tampil lengkap dan konsisten dengan saldo.
 
@@ -344,7 +347,7 @@ Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
 #### S1.30 Keamanan akun
 **Sebagai** nasabah, **saya ingin** mengganti PIN dan password, **supaya** saya tetap memegang kendali atas akun saya.
 
-1. Mengganti PIN membutuhkan PIN lama. Mengganti password membutuhkan password lama.
+1. Mengganti PIN membutuhkan PIN lama. Mengganti password membutuhkan password lama. PIN lama diperiksa sebelum PIN baru diketik, dan setiap PIN atau password lama yang salah dihitung seperti S1.6 AC2. (diubah 0.9.0)
 2. Biometrik bisa dinyalakan dan dimatikan.
 3. Tombol keluar meminta konfirmasi, lalu kembali ke layar masuk.
 
@@ -352,8 +355,9 @@ Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
 **Sebagai** nasabah, **saya ingin** mencari jawaban sendiri dan tahu data apa yang dipakai aplikasi, **supaya** saya merasa aman.
 
 1. FAQ dari admin tampil per kategori dan bisa dicari.
-2. Halaman Privasi menjelaskan isi PRD 7.4 dengan bahasa sederhana.
+2. Halaman Privasi menjelaskan isi PRD 7.4 dengan bahasa sederhana dan menyebut semua barisnya, termasuk kamera saat pendaftaran dan mikrofon Vyna. (diubah 0.9.0)
 3. Halaman Tentang menampilkan versi aplikasi dan keterangan bahwa ORVYN Bank adalah bank fiktif.
+4. Setiap pertanyaan FAQ menunjukkan bisa dibuka (chevron, status terbuka/tertutup untuk TalkBack). Di bawah FAQ ada "Still need help?" dengan "Ask Vyna" yang membuka Vyna. Tidak ada nomor telepon. (diubah 0.9.0)
 
 ### F10. ORVYN Admin
 
@@ -385,7 +389,7 @@ Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
 #### S1.35 Daftar transaksi dan pembatalan
 **Sebagai** petugas Operator, **saya ingin** melihat semua transaksi dan membatalkan yang salah, **supaya** demo tetap rapi.
 
-1. Daftar transaksi bisa dicari dan difilter berdasarkan nasabah, jenis, tanggal, dan nominal.
+1. Daftar transaksi bisa dicari dan difilter berdasarkan nasabah, jenis, tanggal, dan nominal. Pilihan jenis mencakup setiap jenis transaksi yang ada di buku besar, termasuk kantong, valas, deposito, dan investasi. (diubah 0.9.0)
 2. Pembatalan membuat Journal Entry baru yang membalik transaksi asli. Transaksi asli tidak diubah.
 3. Pembatalan ditolak jika akan membuat saldo tabungan siapa pun menjadi minus. Pesannya menyebut rekening dan kekurangannya.
 4. Satu transaksi hanya bisa dibatalkan sekali.
@@ -394,7 +398,7 @@ Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
 #### S1.36 Konten aplikasi
 **Sebagai** petugas Konten, **saya ingin** mengatur banner, FAQ, dan artikel, **supaya** isi aplikasi bisa diganti tanpa update APK.
 
-1. Banner punya gambar, judul dan teks, halaman detail, jadwal tayang, dan urutan.
+1. Banner punya gambar, judul dan teks, halaman detail, jadwal tayang (tanggal mulai dan tanggal berakhir), dan urutan. Banner yang sudah ada bisa diedit. (diubah 0.9.0)
 2. FAQ dan artikel punya kategori dan teks.
 3. Perubahan langsung terlihat di aplikasi saat beranda diperbarui.
 4. Gambar yang diunggah diperkecil otomatis supaya cepat dimuat.
@@ -405,7 +409,7 @@ Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
 1. Daily Limit per tier dan biaya transfer bisa diubah.
 2. External Directory bisa diisi nomor rekening dan nama tertentu.
 3. Fitur bisa dinyalakan atau dimatikan per fitur, dan aplikasi menyembunyikan fitur yang mati.
-4. Mode maintenance menampilkan layar pemberitahuan di aplikasi dan menolak transaksi.
+4. Mode maintenance menampilkan layar pemberitahuan di aplikasi dan menolak transaksi. Aplikasi yang sedang terbuka berganti ke layar maintenance dalam 60 detik atau pada jawaban server berikutnya, mana yang lebih dulu. (diubah 0.9.0)
 
 #### S1.38 Petugas, audit log, dan reset demo
 **Sebagai** petugas Super Admin, **saya ingin** mengatur petugas lain dan melacak perubahan, **supaya** demo aman dikelola beberapa orang.
@@ -413,5 +417,5 @@ Sebuah story baru dianggap selesai jika semua poin ini terpenuhi:
 1. Super Admin bisa menambah, menonaktifkan, dan mengubah peran petugas.
 2. Setiap perubahan oleh petugas tercatat sebagai Audit Entry: siapa, apa, kapan, nilai sebelum, dan nilai sesudah.
 3. Audit log bisa difilter per petugas, jenis perubahan, dan tanggal, dan tidak bisa diubah atau dihapus.
-4. Reset demo mengembalikan semua data ke kondisi awal, setelah petugas mengetik "RESET" dan memasukkan passwordnya.
+4. Reset demo mengembalikan semua data ke kondisi awal, termasuk passkeys dan semua data lain yang terkait nasabah, setelah petugas mengetik "RESET" dan memasukkan passwordnya. (diubah 0.9.0)
 5. Reset demo tidak menghapus akun petugas maupun audit log.
