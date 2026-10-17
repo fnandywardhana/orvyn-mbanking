@@ -12,7 +12,7 @@ import { QUIZ, setRiskProfile, listProducts, priceHistory, listHoldings, buy as 
 import { registrationOptions, finishRegistration, signInOptions, signInWithPasskey, listPasskeys, deletePasskey, PasskeyError } from './passkeys.ts'
 import { statement, statementMonths } from './statements.ts'
 import { askVyna, vynaAllowance, vynaAvailable } from './vyna.ts'
-import { insights, insightCard, setBudget, setCategory, categoryOf, SPEND_KINDS, CATEGORIES } from './insights.ts'
+import { insights, insightCard, setBudget, setCategory, categoryOf, spendWhere, thisMonth, SPEND_KINDS, CATEGORIES } from './insights.ts'
 import { createRequest, createSplit, listRequests, listSplits, getRequest, payRequest, declineRequest, cancelRequest } from './requests.ts'
 import { createSchedule, listSchedules, updateSchedule } from './scheduled.ts'
 import { listPockets, createPocket, updatePocket, movePocket, closePocket, PocketError, POCKET_IMAGES } from './pockets.ts'
@@ -345,6 +345,17 @@ export function apiRoutes(sql: Sql) {
   // Insights and budgets (stories S2.8–S2.11)
   app.get('/insights', async c => c.json(await insights(sql, c.get('customer').id)))
   app.get('/insights/card', async c => c.json({ card: await insightCard(sql, c.get('customer').id) }))
+  // H91-2: one category this month, savings and credit cards together, by the same rule as its Insights total. [accountId] opens the row on its own side.
+  // ponytail: one month of one category in one answer, no paging; page it like History if a month ever gets that long.
+  app.get('/insights/categories/:key/transactions', async c => {
+    const m = thisMonth()
+    const rows = await sql`
+      select ${txColumns(sql)}, a.id as account_id, a.kind as account_kind
+      from postings p join journal_entries j on j.id = p.journal_id join accounts a on a.id = p.account_id
+      where ${spendWhere(sql, c.get('customer').id, m.from, m.to)} and ${categoryOf(sql)} = ${c.req.param('key')}
+      order by j.created_at desc, j.id desc`
+    return c.json({ items: rows.map(r => ({ ...toTransaction(r), accountId: r.account_id })) })
+  })
   app.post('/budgets', async c => {
     const b = await c.req.json().catch(() => ({}))
     if (!CATEGORIES.includes(b.category)) return c.json({ error: 'BAD_INPUT', message: 'Pick a category.' }, 400)

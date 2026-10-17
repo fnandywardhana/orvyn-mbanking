@@ -24,14 +24,21 @@ export function monthKey(now: Date, delta = 0) {
 }
 const monthStart = (key: string) => new Date(`${key}-01T00:00:00+07:00`)
 
+/** What counts as spending, over `postings p join journal_entries j join accounts a`. Insights totals and the category detail share it (H91-2). */
+export const spendWhere = (sql: Sql, customerId: string, from: Date, to: Date) => sql`
+  a.customer_id = ${customerId} and a.kind in ('savings', 'credit') and p.amount < 0
+  and j.kind in ${sql(SPEND_KINDS)} and j.created_at >= ${from} and j.created_at < ${to}
+  and not exists (select 1 from journal_entries r where r.reverses_id = j.id)`
+
+/** This month in Jakarta, from its 1st up to the 1st of next month. */
+export const thisMonth = (now = new Date()) => ({ from: monthStart(monthKey(now)), to: monthStart(monthKey(now, 1)) })
+
 /** Spending per month and category from `from` (inclusive) up to `to` (exclusive). */
 export async function spending(sql: Sql, customerId: string, from: Date, to: Date) {
   const rows = await sql`
     select to_char(j.created_at at time zone 'Asia/Jakarta', 'YYYY-MM') as month, ${categoryOf(sql)} as category, sum(-p.amount)::bigint as total
     from postings p join journal_entries j on j.id = p.journal_id join accounts a on a.id = p.account_id
-    where a.customer_id = ${customerId} and a.kind in ('savings', 'credit') and p.amount < 0
-      and j.kind in ${sql(SPEND_KINDS)} and j.created_at >= ${from} and j.created_at < ${to}
-      and not exists (select 1 from journal_entries r where r.reverses_id = j.id)
+    where ${spendWhere(sql, customerId, from, to)}
     group by 1, 2`
   return rows.map(r => ({ month: r.month as string, category: r.category as Category, total: Number(r.total) }))
 }

@@ -2,7 +2,9 @@ import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { connect, migrate } from '../src/db.ts'
 import { createCustomer } from '../src/customers.ts'
-import { postJournal, houseAccount } from '../src/ledger.ts'
+import { postJournal, houseAccount, reverse } from '../src/ledger.ts'
+import { issueCard, spendOnCard } from '../src/cards.ts'
+import { apiRoutes } from '../src/api.ts'
 import { insights, insightCard, setBudget, setCategory, runBudgetAlerts } from '../src/insights.ts'
 
 const sql = connect()
@@ -62,4 +64,45 @@ test('budget reminders come once at 80% and once at 100% each month', async () =
   await runBudgetAlerts(sql, NOW)
   const titles = (await sql`select title from inbox_messages where customer_id = ${raka.id} order by created_at`).map(r => r.title)
   assert.deepEqual(titles, ['Budget nearly used', 'Budget used up'])
+})
+
+// Hotfix 0.9.1, H91-2 (Q-02-F3): a category's detail lists savings and credit card spending, and adds up to its Insights total.
+test('H91-2: category detail mixes savings and card rows, newest first, and matches the Insights total', async () => {
+  const api = apiRoutes(sql)
+  let session = ''
+  const get = async (path: string) => (await api.request(path, { headers: { Authorization: `Bearer ${session}` } })).json() as Promise<any>
+  const r = await sql.begin(tx => createCustomer(tx, { fullName: 'Hendra Wijaya', phone: '081300000042', password: 'rahasia123' }))
+  const card = await sql.begin(tx => issueCard(tx, r.customer.id, 'voyage', { savingsId: r.savings.id }))
+  const settle = await houseAccount(sql, 'MERCHANT_SETTLEMENT')
+  await postJournal(sql, { kind: 'adjustment', postings: [{ accountId: await houseAccount(sql, 'DEMO_EQUITY'), amount: -5_000_000 }, { accountId: r.savings.id, amount: 5_000_000 }] })
+  const qris = (category: string, amount: number, name: string) => postJournal(sql, { kind: 'qris_payment', memo: { to: { name }, channel: 'QRIS', category },
+    postings: [{ accountId: r.savings.id, amount: -amount }, { accountId: settle, amount }] })
+  await qris('shopping', 240_000, 'Minimarket Sejahtera')
+  const tokopedia = await spendOnCard(sql, { cardId: card.id, merchant: 'Tokopedia', amount: 850_000, channel: 'online' })
+  const gone = await spendOnCard(sql, { cardId: card.id, merchant: 'Returned', amount: 100_000, channel: 'online' })
+  if (!tokopedia.approved || !gone.approved) throw new Error('card spend declined')
+  await reverse(sql, gone.journalId, {}) // reversed spending counts nowhere
+  const cinema = await spendOnCard(sql, { cardId: card.id, merchant: 'Bioskop XXI', amount: 75_000, channel: 'in_store' })
+  if (!cinema.approved) throw new Error('card spend declined')
+  await setCategory(sql, r.customer.id, cinema.journalId, 'entertainment') // a category with card spending only
+
+  session = (await (await api.request('/auth/password', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: '081300000042', password: 'rahasia123' }) })).json() as any).sessionToken
+  const totals = Object.fromEntries((await insights(sql, r.customer.id)).categories.map(c => [c.key, c.total]))
+
+  const shopping = (await get('/insights/categories/shopping/transactions')).items
+  assert.deepEqual(shopping.map((t: any) => [t.title, t.amount]), [['Tokopedia', -850_000], ['Minimarket Sejahtera', -240_000]])
+  assert.equal(-shopping.reduce((s: number, t: any) => s + t.amount, 0), totals.shopping)
+  assert.equal(shopping[0].subtitle, `ORVYN Voyage ·••• ${card.number.slice(-4)}`)
+  assert.equal(shopping[0].accountId, card.account_id, 'a card row opens on the card side, like Cards')
+  assert.equal(shopping[1].accountId, r.savings.id)
+
+  const fun = (await get('/insights/categories/entertainment/transactions')).items
+  assert.deepEqual(fun.map((t: any) => t.title), ['Bioskop XXI'])
+  assert.equal(-fun[0].amount, totals.entertainment)
+  assert.deepEqual((await get('/insights/categories/food/transactions')).items, [])
+
+  // The 0.9.0 app's savings-only list is unchanged.
+  const old = (await get(`/accounts/${r.savings.id}/transactions?category=shopping`)).items
+  assert.deepEqual(old.map((t: any) => t.title), ['Minimarket Sejahtera'])
 })
