@@ -174,3 +174,87 @@ Catatan uji: menghapus `adb reverse` tidak memutus koneksi HTTP yang masih hidup
 - Setelan dev: semua fitur menyala (`requests` dimatikan sebentar lalu dinyalakan lagi), maintenance off. Vyna 0 pesan.
 - Data uji baru di dev: transfer BI-FAST Rp10,000 Raka ke BCA `5550004040`, PLN token Rp20,000, permintaan Raka→Sinta Rp10,000 (dibayar), split Rp15,000 bagian Sinta Rp10,000 (dibayar), permintaan lama Rp5,000 dibayar, permintaan Rp10,000 dari APK 0.9.0 (terbuka), transfer Raka→Sinta Rp10,000 (APK 0.9.0), transaksi kartu Voyage Hendra Rp5,000 `Apotek QA Sehat` dengan kategori `Transport`, deposito Hendra Rp1,000,000 `Pay out` dicairkan, deposito Hendra Rp1,000,000 `Renew` masih terbuka. Tema ORVYN di HP debug sempat diubah ke `Light` (hilang bersama uninstall). Buku besar akhir OK, 1152 Journal Entry.
 - `git status`: hanya `test-plan.md`, `qa-report.md`, dan `qa-shots/` di folder ini. Tidak ada commit.
+
+---
+
+# Putaran 2 (18 Okt 2026 dini hari WIB)
+
+Build: `main` 1256846 (perbaikan IT `72c499b`), debug **0.9.1 (versionCode 13)** yang di-build setelah commit perbaikan, di Galaxy Note10+ lewat `adb reverse tcp:8790`, dev server lokal (PID sendiri), DB dev. Render 200% di `qa-shots/r200-r2/` (file test sementara, dihapus setelah dipakai). Pembanding "sebelum perbaikan" dirender dengan test yang sama di worktree `e523ae4` (dihapus).
+
+## R2.0 Ringkasan dan putusan
+
+Ketiga temuan putaran 1 **tertutup**. Server 118/118, Android `--rerun-tasks` 111/111, izin identik dengan 0.9.0, buku besar Balanced (1152 → 1153, satu split dibayar = satu `internal_transfer`, 0 Posting Rp0).
+
+Tetapi perbaikan H91-F3 (avatar tumbuh dengan font di semua layar) membuat **regresi baru di daftar Requests** pada font 200%: kolom teks menyempit dan kata biasa patah di tengah (`Pratam` / `a`, `aske` / `d`, `Hend` / `ra`). Ini jenis cacat yang sama dengan yang membuat H91-F3 ditolak di putaran 1, dan sebelum perbaikan baris yang sama di 360dp tidak patah.
+
+| Severity | Jumlah | Temuan dan pemilik |
+|---|---|---|
+| Blocker | 0 | |
+| Major | 0 | |
+| Minor | 1 | H91-F4 (IT) |
+
+**Putusan putaran 2: NOT READY.** Perbaikannya kecil dan di satu tempat (`RequestRow` di `Requests.kt`). Uji ulang cukup render 200% Requests, detail permintaan, dan daftar penerima.
+
+## R2.1 Otomatis dan build
+
+| Cek | Hasil |
+|---|---|
+| `cd server && npm test` | **118/118 lolos** |
+| `./gradlew --rerun-tasks testDebugUnitTest` (sekali) | BUILD SUCCESSFUL, **111/111 lolos**, 0 gagal, 0 skip (termasuk `FontScaleTest.checkShares` dan test H91-F2 baru) |
+| `assembleDebug`, badging | APK 20:40:12 UTC (setelah commit perbaikan 20:37:56), `versionCode='13' versionName='0.9.1'` |
+| Izin vs `releases/orvyn-0.9.0.apk` | **Identik** (`diff` kosong) |
+| Rahasia di `c1d303b..1256846` | Tidak ada file rahasia |
+
+## R2.2 Uji ulang temuan putaran 1
+
+| Temuan | Hasil | Bukti |
+|---|---|---|
+| H91-F2 | **Tertutup.** Langkah sama di HP: split Rp15,000 → Sinta dari daftar + Hendra lewat nomor rekening dan Enter → `Next: 2 friends` → `This bill is too small for 2 friends at Rp10,000 each. Go back and pick fewer friends.` → panah kembali: Hendra dan Sinta tampil, keduanya `checked=true`. Ketuk Hendra → `Next: 1 friend` (H91-1 AC4 lolos) | `r2-h91-f2-whos-in-both-friends-dark.png` |
+| H91-F3 | **Tertutup.** Render 200%, 360dp dan 411dp, terang dan gelap, dua teman (bagian Rp8,333): baris bertumpuk (nama, `Needs at least Rp10,000`, lalu nominal di barisnya sendiri), `Rp10,000` utuh, inisial `SM`/`HW` utuh di avatar 60dp. Satu kata yang lebih lebar dari kolom (`Kusumawardhani`, 14 huruf di 360dp) tetap terbagi; itu batas lebar, bukan tata letak | `r200-r2/shares-*.png` |
+| H91-F1 | **Tertutup.** `uiautomator dump` detail transaksi kartu Raka: `Type` `ORVYN Cashback ·••• 8014` dengan label `ORVYN Cashback card ending 8014` | `r2-h91-f1-card-detail.png` |
+
+## R2.3 Regresi split di HP dan buku besar
+
+Raka: split Rp15,000 dengan Sinta, sheet bagian `Minimum Rp10,000` → Rp10,000 `Save` → `Your share` Rp5,000 → ketuk ganda `Send 1 request` → `Requests sent`, tepat satu permintaan baru (20 → 21). Sinta membayar lewat API dengan PIN → satu `internal_transfer` (1153), status `paid`, `checkLedger` OK, 0 Posting Rp0.
+
+## R2.4 Avatar yang tumbuh dengan font (render 200%, 360dp dan 411dp, terang dan gelap)
+
+| Layar | Hasil |
+|---|---|
+| Daftar penerima (Send money) | Lolos: avatar 60dp, nama, bank dan nomor membungkus rapi, ikon edit di tempat |
+| `Who's in?` | Lolos: `SM`/`HW` utuh, nama dan nomor rekening utuh |
+| `Check the shares` | Lolos (R2.2) |
+| Detail permintaan (`Money request`) | Lolos: avatar dan judul `You asked …` membungkus per kata; satu kata 14 huruf terbagi di 360dp (batas lebar) |
+| Layar nominal Transfer (`RecipientHeader`) | Sama dengan sebelum perbaikan: di 360×640 kepala penerima tergulir ke atas, keypad dan `Continue` utuh. Tidak ada perubahan karena avatar |
+| Kartu RM | Tidak memakai `InitialsAvatar` (monogram 52dp sendiri), tidak berubah; `AP` utuh |
+| **Daftar Requests** | **Regresi, H91-F4** |
+
+## R2.5 Temuan baru
+
+### H91-F4 (minor, IT): daftar Requests di font 200% mematahkan kata di tengah setelah avatar membesar
+
+**Langkah:** render 200% `RequestsScreen` dengan permintaan `Raka Pratama asks you` Rp10,000 dan `You asked Hendra Wijaya Kusumawardhani` Rp150,000,000.
+**Diharapkan:** seperti kriteria yang IT pakai di `FontScaleTest.checkShares`: nama tidak patah di tengah kata, baris bertumpuk di font besar (MASTER List row).
+**Aktual:** `RequestRow` tetap tiga kolom (avatar, teks, kolom nominal + chip status). Avatar sekarang 60dp, jadi kolom teks lebih sempit:
+- 360dp, nominal Rp10,000: `Raka` / `Pratam` / `a asks` / `you` (sebelum perbaikan: `Raka` / `Pratama` / `asks you`, utuh).
+- 411dp, nominal Rp150,000,000: `You` / `aske` / `d` / `Hend` / `ra` / `Wijay` / `a` … (sebelum perbaikan baris ini juga sudah sempit, `Kusum` / `award` / `hani`, dan inisial terpotong `H`).
+Di HP pemilik (font setelan pemilik) daftar tampil normal. Saran: `RequestRow` bertumpuk saat `isLargeFont()` seperti `ShareRow` (nominal dan chip di bawah teks), dan tambahkan Requests ke `FontScaleTest`.
+**Bukti:** `qa-shots/r200-r2/requests-w360dp-light.png`, `requests-w411dp-dark.png`; pembanding sebelum perbaikan `before-fix-requests-w360dp-light.png`, `before-fix-requests-w411dp-dark.png`
+
+### Catatan (sudah ada sebelum 0.9.1, bukan karena avatar)
+
+Di 200% 360dp beberapa tombol berdampingan mematahkan kata: `New recipien` / `t`, `Schedul` / `ed` (Send money), `Messa` / `ge` (kartu RM). Untuk backlog font besar.
+
+## R2.6 Yang tidak teruji
+
+- Font 200% dan TalkBack asli di HP (setelan HP): diganti render dan `uiautomator dump`.
+- Pembayaran split di HP sebagai Sinta: dibayar lewat API (alur bayar di HP sudah diuji putaran 1, tidak berubah).
+
+## R2.7 Kondisi HP dan lingkungan di akhir sesi
+
+- Awal: launcher di depan dengan release 0.9.0. Release di-uninstall, debug 0.9.1 dipasang, Raka masuk. Penjaga `mCurrentFocus` sebelum setiap input; tidak ada aplikasi lain atau jendela sistem yang disentuh, Back tidak dikirim di beranda, kamera tidak dipakai, setelan HP tidak diubah.
+- Akhir: debug di-uninstall, `releases/orvyn.apk` **0.9.0** terpasang lagi, launcher di depan, `adb reverse --remove-all` (kosong), file dump di HP dihapus.
+- Dev server dimatikan dengan `kill` PID node-nya (port 8790 bebas). Tidak ada proxy. Worktree `e523ae4` dihapus, file test sementara dan folder render di `build/` dihapus.
+- Produksi: `orvyn-server-1` waktu mulai tetap `2026-10-17T16:01:00Z`, `RestartCount=0`.
+- Setelan dev: semua fitur menyala, maintenance off. Data baru: split Raka Rp15,000 (bagian Sinta Rp10,000, dibayar). Buku besar akhir OK, 1153.
+- Tidak ada commit. `git status`: hanya file QA di folder ini.
