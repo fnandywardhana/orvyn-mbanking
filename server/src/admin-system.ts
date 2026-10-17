@@ -5,6 +5,7 @@ import type { Sql } from './db.ts'
 import { shell, audit, requireRole, type Officer } from './admin.ts'
 import { hashPassword, verifyPassword } from './auth.ts'
 import { BANKS } from './transfers.ts'
+import { getCookie } from 'hono/cookie'
 
 type Env = { Variables: { officer: Officer } }
 const sel = 'style="height:40px;border-radius:10px;padding:0 10px;font:inherit"'
@@ -182,12 +183,25 @@ ${directory.map(d => html`<form method="post" action="/admin/settings/directory/
     return c.redirect('/admin/settings')
   })
 
-  // Officers (S1.38 AC1)
-  app.get('/officers', async c => {
+  // Officers (S1.38 AC1). Q-C8: a new officer's starting password waits in memory for the officer who made it, keyed by
+  // their session, and is shown once on the next page. It never goes into a URL, a log or the audit log.
+  // ponytail: in memory, so a server restart between the two requests loses it (the officer just resets it from the list).
+  const added = new Map<string, { name: string, email: string, password: string }>()
+  app.get('/officers', async c => officersPage(c))
+  const officersPage = async (c: any, error?: string) => {
     const rows = await sql`select id, email, name, role, active, created_at from officers order by created_at`
     const done = c.req.query('done')
+    const token = getCookie(c, 'orvyn_admin') ?? ''
+    const fresh = added.get(token)
+    added.delete(token)
     return c.html(shell(c.get('officer'), '/admin/officers', 'Officers', html`<div class="formgrid" style="max-width:760px">
 ${done ? html`<div class="ok-box"><pre>${done}</pre></div>` : ''}
+${error ? html`<div class="err-box" role="alert">${error}</div>` : ''}
+${fresh ? html`<div class="ok-box" role="status"><b>Officer added</b>
+<span>Name: ${fresh.name}</span><span>Email: ${fresh.email}</span>
+<span>Starting password: <span class="mono" id="pw">${fresh.password}</span></span>
+<button type="button" class="btn secondary" style="width:max-content" onclick="navigator.clipboard.writeText(document.getElementById('pw').innerText).then(()=>{this.textContent='Copied';setTimeout(()=>this.textContent='Copy password',2000)})">Copy password</button>
+<span class="hint">This is the only time it's shown. ${fresh.name.split(' ')[0]} must change it at first sign-in.</span></div>` : ''}
 <div class="tablewrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody>
 ${rows.map(o => html`<tr><td>${o.name}</td><td>${o.email}</td>
 <td><form method="post" action="/admin/officers/${o.id}/role" style="display:flex;gap:6px"><select name="role" ${sel}>${Object.entries(ROLES).map(([k, l]) => html`<option value="${k}" ${o.role === k ? 'selected' : ''}>${l}</option>`)}</select><button class="btn secondary">Save</button></form></td>
@@ -199,15 +213,16 @@ ${rows.map(o => html`<tr><td>${o.name}</td><td>${o.email}</td>
 <label>Role<select name="role" ${sel}>${Object.entries(ROLES).map(([k, l]) => html`<option value="${k}">${l}</option>`)}</select></label>
 <button class="btn" style="width:max-content">Add officer</button>
 <p class="hint">They get a starting password, shown once, and must change it when they first sign in.</p></form></div>`))
-  })
+  }
   app.post('/officers', async c => {
     const v = await form(c)
     const pw = 'orvyn' + String(randomInt(100000, 999999))
     try {
       const [o] = await sql`insert into officers (email, name, role, password_hash) values (${v.email.toLowerCase()}, ${v.name}, ${ROLES[v.role] ? v.role : 'operator'}, ${await hashPassword(pw)}) returning id`
       await audit(sql, c.get('officer').id, 'officer.add', o.id, null, { email: v.email, role: v.role })
-      return flash(c, '/admin/officers', `Added ${v.name}.\nEmail: ${v.email}\nStarting password: ${pw}\nThis is the only time it's shown.`)
-    } catch { return flash(c, '/admin/officers', 'That email already has an officer account.') }
+      added.set(getCookie(c, 'orvyn_admin') ?? '', { name: v.name, email: v.email.toLowerCase(), password: pw })
+      return c.redirect('/admin/officers')
+    } catch { return officersPage(c, 'That email already has an officer account.') }
   })
   app.post('/officers/:id/role', async c => {
     const role = (await form(c)).role

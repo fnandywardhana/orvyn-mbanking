@@ -21,6 +21,9 @@ export function operatorFor(phone: string) {
 
 const hash = (s: string) => { let h = 7; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h }
 const period = (d = new Date()) => new Date(d.getTime() + 7 * 3_600_000).toISOString().slice(0, 7) // WIB month
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+/** "2026-10" → "Oct 2026" */
+export const monthLabel = (p: string) => `${MONTHS[Number(p.slice(5, 7)) - 1]} ${p.slice(0, 4)}`
 const POWER = ['900 VA', '1,300 VA', '2,200 VA', '3,500 VA', '5,500 VA']
 
 export type Inquiry = {
@@ -80,7 +83,7 @@ export async function payBill(sql: Sql, customer: { id: string; tier: string },
   input: { biller: string; number: string; productId?: string; amount?: number; pin: string; idempotencyKey: string }) {
   const q = await inquire(sql, input.biller, input.number)
   let amount: number, label: string
-  if (q.bill) { amount = q.bill.amount; label = `${q.billerName} · ${q.bill.period}` }
+  if (q.bill) { amount = q.bill.amount; label = `${q.billerName} · ${monthLabel(q.bill.period)}` } // Q-G4: "Oct 2026", not "2026-10"
   else if (q.products.length) {
     const p = q.products.find(x => x.id === input.productId)
     if (!p) throw new TransferError('BAD_AMOUNT', 'Pick one of the options.')

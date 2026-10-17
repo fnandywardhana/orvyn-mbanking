@@ -159,9 +159,11 @@ export async function buy(sql: Sql, customer: Customer, input: { productId: stri
   if (p.kind === 'gold') {
     const { sell } = await goldPrice(sql)
     if (input.grams) {
-      quantity = Math.floor(Number(input.grams) * 10_000) / 10_000
+      // Whole ten-thousandths of a gram and integer maths: 0.05 g at Rp1,500,000 is exactly Rp75,000, never Rp75,001 (Q-F6 AC4).
+      const tenThousandths = Math.floor(Math.round(Number(input.grams) * 1e6) / 100)
+      quantity = tenThousandths / 10_000
       if (!(quantity >= 0.01)) throw new TransferError('BAD_AMOUNT', 'The smallest purchase is 0.01 g.')
-      idr = Math.ceil(quantity * sell)
+      idr = Math.ceil(tenThousandths * sell / 10_000)
     } else {
       idr = Math.floor(Number(input.amount))
       quantity = Math.floor(idr / sell * 10_000) / 10_000

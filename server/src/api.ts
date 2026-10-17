@@ -39,15 +39,19 @@ const txColumns = (sql: Sql) => sql`
   j.id, j.kind, j.created_at as at, p.amount, j.memo, j.reverses_id, ${categoryOf(sql)} as spend_category,
   exists (select 1 from journal_entries r where r.reverses_id = j.id) as reversed`
 
-function toTransaction(r: any) {
+/** [accountKind]: the side being read. On a Pocket's side a move says where the money went (Q-G10, PO-20), old ones too. */
+function toTransaction(r: any, accountKind?: string) {
   const amount = Number(r.amount)
   const m = r.memo ?? {}
   const party = amount < 0 ? m.to : m.from
+  const pocketSide = r.kind === 'pocket_move' && (accountKind ?? r.account_kind) === 'pocket'
   return {
     id: r.id,
     at: r.at,
     amount,
-    title: r.kind === 'reversal' ? 'Reversed by ORVYN Bank' : (party?.name ?? m.channel ?? 'Transaction'),
+    title: r.kind === 'reversal' ? 'Reversed by ORVYN Bank'
+      : pocketSide ? (amount > 0 ? 'Added from ORVYN Everyday' : 'Moved to ORVYN Everyday')
+      : (party?.name ?? m.channel ?? 'Transaction'),
     subtitle: m.channel ?? null,
     category: m.category ?? null,
     spendCategory: amount < 0 && SPEND_KINDS.includes(r.kind) ? r.spend_category : null, // S2.8: one of the seven, for spending only
@@ -203,7 +207,7 @@ export function apiRoutes(sql: Sql) {
   // Story S1.10: newest first, keyset paging, filters for dates, direction, kind and text.
   app.get('/accounts/:id/transactions', async c => {
     const me = c.get('customer')
-    const [account] = await sql`select id from accounts where id = ${c.req.param('id')} and customer_id = ${me.id}`
+    const [account] = await sql`select id, kind from accounts where id = ${c.req.param('id')} and customer_id = ${me.id}`
     if (!account) return c.json({ error: 'not_found', message: "We couldn't find that account." }, 404)
     const q = c.req.query()
     const limit = Math.min(Number(q.limit) || 30, 100)
@@ -224,7 +228,7 @@ export function apiRoutes(sql: Sql) {
         ${q.category ? sql`and p.amount < 0 and j.kind in ${sql(SPEND_KINDS)} and ${categoryOf(sql)} = ${q.category}` : sql``}
         ${text ? sql`and (j.memo::text ilike ${'%' + text + '%'} ${digits ? sql`or abs(p.amount)::text = ${digits}` : sql``})` : sql``}
       order by j.created_at desc, j.id desc limit ${limit + 1}`
-    const items = rows.slice(0, limit).map(toTransaction)
+    const items = rows.slice(0, limit).map(r => toTransaction(r, account.kind))
     const last = rows.length > limit ? rows[limit - 1] : null
     return c.json({ items, next: last ? `${last.at.toISOString()}|${last.id}` : null })
   })
@@ -232,7 +236,7 @@ export function apiRoutes(sql: Sql) {
   app.get('/transactions/:id', async c => {
     const me = c.get('customer')
     const [r] = await sql`
-      select ${txColumns(sql)}, a.number as account_number from postings p
+      select ${txColumns(sql)}, a.number as account_number, a.kind as account_kind from postings p
       join journal_entries j on j.id = p.journal_id join accounts a on a.id = p.account_id
       where j.id = ${c.req.param('id')} and a.customer_id = ${me.id}
         ${c.req.query('account') ? sql`and a.id = ${c.req.query('account')!}` : sql``}

@@ -7,7 +7,17 @@ import { notifyJournal } from './inbox.ts'
 
 type Env = { Variables: { officer: Officer } }
 const rp = (n: number) => (n < 0 ? '−' : '') + 'Rp' + Math.abs(n).toLocaleString('en-US')
-const KINDS = ['internal_transfer', 'external_transfer', 'qris_payment', 'bill_payment', 'card_spend', 'card_payment', 'inflow', 'adjustment', 'reversal', 'opening']
+/** Q-F8 AC1 (design.md 12.4): every kind of Journal Entry, grouped, with the label also used in the table. */
+export const KIND_GROUPS: [string, [string, string][]][] = [
+  ['Transfers', [['internal_transfer', 'ORVYN transfer'], ['external_transfer', 'Transfer to another bank']]],
+  ['Payments', [['qris_payment', 'QRIS payment'], ['bill_payment', 'Bill payment']]],
+  ['Cards', [['card_spend', 'Card spend'], ['card_payment', 'Credit card bill payment']]],
+  ['Pockets', [['pocket_move', 'Pocket move']]],
+  ['Wealth', [['fx_exchange', 'Foreign currency exchange'], ['deposit_open', 'Time deposit opened'], ['deposit_close', 'Time deposit closed'],
+    ['deposit_interest', 'Time deposit interest'], ['investment', 'Investment buy or sell'], ['bond_coupon', 'Bond coupon']]],
+  ['Admin', [['inflow', 'Simulated money in'], ['adjustment', 'Balance adjustment'], ['reversal', 'Reversal'], ['opening', 'Opening balance']]],
+]
+export const KIND_LABEL: Record<string, string> = Object.fromEntries(KIND_GROUPS.flatMap(([, ks]) => ks))
 
 // Story S1.35: every journal entry, searchable, with Reversals.
 export function transactionRoutes(sql: Sql) {
@@ -35,8 +45,8 @@ export function transactionRoutes(sql: Sql) {
     return c.html(shell(c.get('officer'), '/admin/transactions', 'Transactions', html`
 <form method="get" class="toolbar" style="justify-content:flex-start">
 <input name="q" placeholder="Customer, phone or account" ${sel('q', '')} style="min-width:220px">
-<select name="kind" style="height:40px;border-radius:10px;padding:0 10px;font:inherit"><option value="">All kinds</option>
-${KINDS.map(k => html`<option value="${k}" ${q.kind === k ? 'selected' : ''}>${k.replace('_', ' ')}</option>`)}</select>
+<select name="kind" aria-label="Kind" style="height:40px;border-radius:10px;padding:0 10px;font:inherit"><option value="">All kinds</option>
+${KIND_GROUPS.map(([g, ks]) => html`<optgroup label="${g}">${ks.map(([k, l]) => html`<option value="${k}" ${q.kind === k ? 'selected' : ''}>${l}</option>`)}</optgroup>`)}</select>
 <input type="date" name="from" ${sel('from', '')} aria-label="From"><input type="date" name="to" ${sel('to', '')} aria-label="To">
 <input name="min" type="number" placeholder="Min amount" ${sel('min', '')} style="min-width:120px">
 <button class="btn secondary">Filter</button></form>
@@ -44,7 +54,7 @@ ${c.req.query('done') ? html`<div class="ok-box" style="margin-bottom:16px"><pre
 <div class="tablewrap"><table><thead><tr><th>When (WIB)</th><th>Kind</th><th>What</th><th>Customers</th><th></th></tr></thead><tbody>
 ${rows.map(r => html`<tr>
 <td class="mono">${r.created_at.toLocaleString('en-GB', { timeZone: 'Asia/Jakarta', dateStyle: 'short', timeStyle: 'short' })}</td>
-<td>${r.kind.replace('_', ' ')}</td>
+<td>${KIND_LABEL[r.kind] ?? r.kind}</td>
 <td>${[r.memo?.to?.name ?? r.memo?.from?.name, r.memo?.channel].filter(Boolean).join(' · ')}${r.memo?.note ? html` <span class="hint">“${r.memo.note}”</span>` : ''}</td>
 <td>${(r.parties ?? []).map((p: any) => html`<a href="/admin/customers/${p.customer}">${p.name}</a> <span class="mono">${rp(Number(p.amount))}</span><br>`)}</td>
 <td>${r.reversed ? html`<span class="chip bad">Reversed</span>` : r.kind === 'reversal' || r.kind === 'opening' ? '' : html`<a class="btn secondary" href="/admin/transactions/${r.id}/reverse">Reverse</a>`}</td></tr>`)}
