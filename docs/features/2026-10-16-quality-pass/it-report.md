@@ -159,3 +159,47 @@ Semua perubahan API menambah field atau endpoint; tidak ada field yang dihapus. 
 - Design 6.6 "banner hilang dengan fade 150ms" dan design 4.8 "fokus TalkBack ke headline saat sukses tampil" tidak diimplementasikan khusus (headline diumumkan lewat live region).
 - Server dev dijalankan sebentar di port 8790 untuk menerapkan migrasi 026 ke DB dev (berhasil, buku besar dev `ok: true`), lalu dimatikan.
 - `docs/features/2026-10-16-quality-pass/test-plan.md` milik QA tidak saya commit.
+
+## 9. Perbaikan QA putaran 1
+
+IT, 17 Okt 2026. Sumber: `qa-report.md` bagian 7, `design.md` (4.7, 4.11, 4.12, 9.6, 11.1, bagian 17 dan perubahan 4.8, 5, 13), `design-system/MASTER.md` (Money colors, Text field, Success screen). Tanpa HP, tanpa produksi, tanpa push, tanpa build release.
+
+### 9.1 Peta temuan → perbaikan
+
+| Temuan | Perbaikan | File |
+|---|---|---|
+| Q-01-F1 (major) | `accountDetail` menggulir ke `Share account details` dan ke `Copy number` sebelum memeriksa keduanya, jadi hasilnya tidak lagi bergantung pada banner offline (sudah muncul atau belum). Test render juga tidak pernah menyentuh dev server di mesin ini: `Api.url` diarahkan ke port tertutup (dev server yang menyala menjawab 401 dan mengubah tampilan). Percobaan menunggu banner muncul sudah dicoba dan ditolak: di Robolectric pemuatan kadang tidak selesai dalam 20 detik, jadi justru menjadi sumber flaky baru | `FontScaleTest.kt`, `data/Api.kt` |
+| Q-01-F2 | Snackbar berada tepat di atas area aksi menempel yang paling tinggi di layar (4.11). Area menempel ditandai `Modifier.snackAnchor()`: keypad dan tombol di `AmountScreen`, aksi di `SuccessScreen` (`Save as a recipient`, `Share receipt`, `Done`), dan bottom nav. Layar tanpa tanda tetap memakai posisi lama, 76dp di atas tepi bawah | `components/Patterns.kt`, `Screens.kt`, `Success.kt`, `App.kt` |
+| Q-01-F3 | Pengumuman TalkBack dan `Read replies aloud` memakai `spoken()`: teks yang sama dengan tampilan, tanpa `- `, `* `, dan `**`. Nomor daftar (`1. `) tetap dibacakan | `vyna/Vyna.kt` |
+| Q-01-F4 | `Try again` di baris rincian review Transfer: setelah rincian berhasil dimuat, kotak error lama hilang (4.12 "Hilang: saat mencoba lagi") | `transfer/TransferFlow.kt` |
+| Q-01-F6 | Tombol layar nominal mengikuti 4.7: Fund, Bond, dan Gold mode Rupiah `Enter an amount` (0), `Minimum {minBuy}` (beli di bawah minimum), lalu `Buy/Sell {Rp…}`; buka deposito `Enter an amount`, `Minimum Rp1,000,000`, lalu `Next` | `wealth/Invest.kt`, `wealth/Deposits.kt` |
+| Q-01-F8 | `Balance after` disembunyikan bila saldo kurang, di bayar permintaan uang dan di review Transfer. Kotak `You're {Rp…} short.` sudah menyebut kekurangannya. Akar masalahnya `Money.format` memakai nilai absolut; fungsi itu tidak diubah karena banyak pemanggil sengaja mengirim nominal negatif | `requests/Requests.kt`, `transfer/TransferFlow.kt` |
+| Q-01-F9 | Label TalkBack banner `bannerLabel()`: tanpa titik kedua bila judul sudah diakhiri `.`, `!`, atau `?` (`Scan. Pay. Done. Pay at any…`, `Flying soon? Switch on…`) | `home/HomeScreen.kt` |
+| Q-01-F10 | `AmountText` dengan `textAlign` mengisi lebar penuh, jadi `USD 100.00` rata tengah seperti layar nominal lain. Tidak ada perubahan tampilan di pemanggil lain (sukses, QRIS nominal tetap) | `components/Patterns.kt` |
+| Q-01-F5 (17.1) | `Save as a recipient`, lalu `Saved to your recipients` dengan ikon `ph_check` 16dp putih, live region polite. Tombol putih ber-role Button | `transfer/TransferFlow.kt`, `components/Success.kt` |
+| Q-01-F7 (17.2) | Server: judul pembayaran kartu di sisi kartu kredit dihitung saat dibaca, `Payment from your savings` (entri lama ikut, memo tidak berubah); `/cards` mengirim `accountId`. App: baris `RECENT CARD PAYMENTS` membuka `tx/{id}?account={accountId}`, jadi judul, tanda `+`, warna, dan gambar bukti di detail sama dengan barisnya. Sisi tabungan tetap `ORVYN Voyage bill` / `−` | `server/src/api.ts`, `server/src/cards.ts`, `data/Api.kt`, `cards/CardsScreen.kt`, `App.kt` |
+| Q-01-F11 (17.3) | `Phone number` Done = `Send code` bila aktif, selain itu tutup keyboard; `6-digit code` Done = `Confirm` bila 6 digit; `About you`: `Full name` (huruf besar tiap kata, tanpa koreksi otomatis) → `NIK` → `Date of birth` → `Address` dengan Next, `Address` (huruf besar awal kalimat) Done menutup keyboard, melepas fokus, dan menggulir `Work` ke layar tanpa menjalankan `Continue`; `Password` Done = `Continue` bila cukup kuat. Next tidak memvalidasi. Varian `OrvynTextField` untuk `TextFieldValue` sekarang menerima `imeAction`/`onImeAction`. Field tanpa `onImeAction` kini memakai aksi bawaan Android (Next pindah, Done menutup keyboard); sebelumnya tombol itu tidak berbuat apa-apa | `register/RegisterFlow.kt`, `components/Fields.kt` |
+| MASTER Text field | Selain pendaftaran: `Name` kantong → `Target` dengan Next. Sign in dan Change password sudah mengikuti aturan sejak 0.9.0 | `pockets/Pockets.kt` |
+
+### 9.2 Test
+
+- Server `npm test`: **111/111 lolos** (110 + 1 baru: Q-01-F7, pembayaran kartu sama di daftar kartu dan detail dari sisi kartu, sisi tabungan tetap, buku besar OK).
+- Android `testDebugUnitTest`: **97/97 lolos** (92 + 5 baru di `QualityPassTest`: teks Vyna yang diumumkan tanpa simbol, label banner, tombol buka deposito `Enter an amount`/`Minimum Rp1,000,000`, snackbar di atas aksi layar sukses, aksi keyboard Next/Done). `FontScaleTest` disesuaikan: deposito `Enter an amount`, sukses Transfer `Save as a recipient`, detail rekening deterministik.
+- Q-01-F1: `./gradlew testDebugUnitTest --rerun-tasks` dijalankan **4 kali berturut-turut** setelah perbaikan F1 (96/96 setiap kali) dan **3 kali berturut-turut** lagi setelah semua perbaikan (97/97 setiap kali), semuanya tanpa gagal. `assembleDebug` lolos.
+- Izin APK debug: identik dengan `releases/orvyn-0.8.1.apk`.
+
+### 9.3 Commit
+
+| Commit | Isi |
+|---|---|
+| `bc43b15` | Perbaikan app F2, F3, F4, F6, F8, F9, F10 + test |
+| `2b3952a` | F1: test font 2,0 detail rekening deterministik |
+| `88e242e` | Bagian 17: F5, F7 (server + app), F11, aksi keyboard kantong |
+
+### 9.4 Catatan dan yang belum
+
+- **Q-01-F6 dan design 5.2:** tabel 5.2 menulis tombol nonaktif deposito dan Fund/Bond/Gold sebagai "0.8.1", sedangkan 4.7 (dan QA) meminta `Enter an amount`/`Minimum …`. Saya mengikuti 4.7 sesuai tugas orkestrator. Bond dengan nominal bukan kelipatan Rp1,000,000 tetap `Buy {Rp…}` nonaktif (kalimat `Bonds are bought in steps of Rp1,000,000.` di atasnya); design tidak menentukan label lain.
+- **Q-01-F8:** QA memberi dua pilihan (tanda minus atau sembunyikan). Saya menyembunyikan baris karena kotak error sudah menyebut kekurangannya. CX bisa memilih sebaliknya.
+- **Sejenis, tidak diubah:** `Your share` di split bill memakai `Money.format` juga, jadi bila bagian teman melebihi tagihan angkanya tampil positif (merah, dengan kalimat `Your friends' shares add up to more than the bill.`). Di luar temuan; CX/PO bisa memutuskan.
+- **Snackbar:** layar dengan tombol menempel yang bukan `AmountScreen`/`SuccessScreen` (misalnya layar periksa) tetap memakai posisi 76dp, cukup untuk satu tombol 52dp. Bila QA menemukan layar dengan dua tombol menempel yang tertutup, cukup tambahkan `Modifier.snackAnchor()` di area itu.
+- **Aksi keyboard di HP** (keyboard fisik, `input keyevent 66`) dan TalkBack untuk `Saved to your recipients` belum dicek di HP: tugas QA.
