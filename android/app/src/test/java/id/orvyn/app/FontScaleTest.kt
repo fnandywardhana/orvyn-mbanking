@@ -74,6 +74,8 @@ class FontScaleTest(private val night: Boolean, private val qualifiers: String) 
     private val tag get() = "${qualifiers.substringBefore('-')}-${if (night) "dark" else "light"}"
 
     private fun render(name: String, content: @Composable () -> Unit) {
+        // Never the dev server on this machine: a running one would answer 401 and change what screens show (Q-01-F1).
+        id.orvyn.app.data.Api.url = "http://127.0.0.1:1/api"
         RuntimeEnvironment.setQualifiers(qualifiers); RuntimeEnvironment.setQualifiers(if (night) "+night" else "+notnight")
         compose.setContent {
             val d = LocalDensity.current
@@ -185,8 +187,11 @@ class FontScaleTest(private val night: Boolean, private val qualifiers: String) 
     @Test fun accountDetail() {
         val s = store("everyday")
         render("account") { AccountScreen(s, onBack = {}, onOpenTransaction = {}) }
+        // The offline banner may or may not be up yet (the load runs in the background), and at 360dp it pushes the buttons
+        // below the fold. The details scroll as one list (design.md 10.1), so each button is checked after scrolling to it.
+        compose.onNode(hasText("Share account details")).performScrollTo()
         inside("account", "Share" to hasText("Share account details"))
-        compose.onNode(hasText("Copy number")).performScrollTo() // the details scroll as one list (design.md 10.1)
+        compose.onNode(hasText("Copy number")).performScrollTo()
         inside("account", "Copy" to hasText("Copy number"))
     }
 }

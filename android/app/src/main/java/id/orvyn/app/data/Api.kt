@@ -144,8 +144,11 @@ object Api {
     /** Set when a PIN or password check just locked the customer (K6): the app shows the locked screen. */
     var lockedNow by androidx.compose.runtime.mutableStateOf(false)
 
+    /** The server; render tests point it at a closed port so every screen is offline the same way. */
+    @Volatile internal var url: String = BuildConfig.API_URL
+
     /** Every network step, sending the body included, is inside the try, so a lost connection always ends as "offline". Tests swap [base]. */
-    internal suspend fun call(method: String, path: String, body: JSONObject? = null, base: String = BuildConfig.API_URL): JSONObject = withContext(Dispatchers.IO) {
+    internal suspend fun call(method: String, path: String, body: JSONObject? = null, base: String = url): JSONObject = withContext(Dispatchers.IO) {
         val hadSession = session != null
         val conn = (URL(base + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
