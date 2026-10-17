@@ -26,6 +26,14 @@ _Avoid_: segment, level, class
 The one phone a Customer is currently signed in on, identified by a random code the app creates at install. Signing in on another phone replaces it.
 _Avoid_: device ID, IMEI
 
+**Lock**:
+A state in which a Customer can't sign in or approve anything until an Officer unlocks them. It starts after 5 wrong tries counted together across the unlock screen, payments, Change PIN, Change password and password sign-in, or when an Officer locks the Customer. A correct try resets the count.
+_Avoid_: block, freeze (that is for Cards), suspend
+
+**Passkey**:
+A sign-in key kept by the phone's password manager. The server stores only its public half, so deleting it on the server (or a demo reset) makes the copy on the phone useless.
+_Avoid_: biometric login, FIDO key
+
 **Officer**:
 A person who signs in to the admin website. Each Officer has one Role: Super Admin, Operator or Content.
 _Avoid_: admin user, staff, operator (for the person)
@@ -162,6 +170,10 @@ _Avoid_: fake accounts, mock bank
 An account number a Customer has saved for quick Transfers.
 _Avoid_: beneficiary, payee, contact
 
+**Money Request**:
+A request one Customer sends another to pay a set amount to their Savings Account. The payer opens it from the inbox, then pays through the usual review screen and PIN, or declines it. It expires after 7 days. A Split Bill is a group of Money Requests.
+_Avoid_: invoice, bill (that is a Biller's), payment request
+
 **Merchant**:
 A made-up shop that accepts QRIS payments. Money paid to a Merchant lands in the Merchant Settlement House Account.
 _Avoid_: store, seller
@@ -194,7 +206,11 @@ _Avoid_: block, lock, suspend
 ### Content
 
 **Banner**:
-A promotional image with text in both languages, shown on the home screen between a start and end date.
+A promotional image with text in both languages, shown on the home screen below recent transactions between a start and end date, in the order an Officer sets.
+
+**Maintenance Mode**:
+A setting a Super Admin turns on to stop all transactions. The server rejects them, and an open app switches to the maintenance screen within a minute.
+_Avoid_: downtime, offline (that means the phone has no connection)
 
 **Announcement**:
 A one-time pop-up message shown to Customers when they open the app.
