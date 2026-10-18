@@ -90,3 +90,10 @@ Permintaan tim bisnis: uji ulang seluruh alur end to end dan audit UI dengan ski
 | README dan cerita proyek | S3.13 | ✅ `README.md`, `docs/STORY.md`, di github.com/fnandywardhana/orvyn-mbanking, publik sejak 15 Okt (KR7 tercapai) |
 
 **Test otomatis:** 92 test server, test aplikasi, dan evaluasi Vyna 30/30.
+
+## Backlog (ditahan, menunggu item lain dari tim bisnis)
+
+Dari QA hotfix 0.9.1 putaran 3 (`docs/features/2026-10-17-hotfix-091/qa-report.md`). Tidak menghalangi rilis.
+- Layar QRIS tanpa izin kamera, font 200% di 360dp: pesannya baru terlihat setelah digulir.
+- Kartu RM: pemisah " · " antara nomor dan email kadang jatuh sendirian di satu baris.
+- `FontScaleTest.accountDetail` pernah crash sekali saat FontScaleTest dijalankan sendiri; lolos di 9 run berikutnya.
