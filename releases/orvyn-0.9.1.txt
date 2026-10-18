@@ -1,0 +1,23 @@
+ORVYN 0.9.1
+
+What's new
+- Requests and split bills use the same minimum as transfers, Rp10,000. Before, you could ask for less, and your friend then couldn't pay it. A request that's already open can still be paid.
+- Splitting a bill shows which shares are below the minimum, and a friend you add by account number stays on the list when you go back.
+- Insights: a category's detail now lists your credit card spending too, so the list adds up to the total.
+- Fixed: paying out a time deposit that earned no interest no longer fails.
+- Done on the keyboard runs the screen's button on every form.
+- With large text, buttons that sit side by side stack instead of breaking words, and request rows stay readable.
+- The offline message no longer covers the QRIS button, and TalkBack reads card numbers as "card ending 1234".
+
+Permissions this app asks for
+No change from 0.9.0.
+- INTERNET: to talk to the ORVYN server.
+- CAMERA: only while scanning a QR code or taking the sign-up photos. Nothing is uploaded.
+- POST_NOTIFICATIONS: to show your sign-up code and account activity (Android 13 and newer ask first).
+- RECEIVE (Firebase), WAKE_LOCK, ACCESS_NETWORK_STATE: added by Firebase so push notifications arrive. None of them reads anything about you or your phone.
+- USE_BIOMETRIC / USE_FINGERPRINT: only if you turn on fingerprint sign-in.
+- RECORD_AUDIO: only while you hold Vyna's microphone open, on phones that can recognise speech by themselves. Your voice never leaves the phone. Android asks the first time.
+No contacts, location, SMS, storage, device IDs, analytics or ads.
+
+How to update
+Open the download link on your phone, download, tap the file, then Update.

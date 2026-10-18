@@ -1,6 +1,6 @@
 # Progres ORVYN
 
-Terakhir diperbarui: 17 Okt 2026 malam WIB. Versi online: **0.9.0** di `https://orvyn.delvault.uk` (unduh: `/download/orvyn-0.9.0.apk`).
+Terakhir diperbarui: 18 Okt 2026 pagi WIB. Versi online: **0.9.1** di `https://orvyn.delvault.uk` (unduh: `/download/orvyn-0.9.1.apk`).
 
 ## Fase 0: Fondasi ✅
 
@@ -57,6 +57,16 @@ Dua bug dari tim bisnis, dikerjakan lewat alur tim (PO, CX, IT, QA). Folder: `do
 - Temuan QA yang ikut diperbaiki: aplikasi tidak lagi crash saat offline, dan kursor tanggal lahir tidak lagi melompat.
 - QA: READY FOR RELEASE (dua putaran). Temuan minor F3–F5 masuk rilis perbaikan berikutnya.
 
+## Hotfix 0.9.1 ✅ (18 Okt)
+
+Menutup sisa temuan QA quality pass (Q-02-F1..F5). Folder: `docs/features/2026-10-17-hotfix-091/`.
+- Satu minimum (Rp10,000) untuk transfer, minta uang, dan bagian split; permintaan yang sudah terbuka tetap bisa dibayar.
+- Detail kategori Insights ikut menampilkan belanja kartu kredit.
+- Pencairan deposito dengan bunga Rp0 tidak lagi gagal; job jatuh tempo memproses setiap deposito sendiri-sendiri.
+- Done di keyboard menjalankan tombol utama di semua form; snackbar tidak menutupi tombol QRIS.
+- Temuan QA selama hotfix ikut diperbaiki: teman yang ditambah lewat nomor rekening tetap tampil di Who's in?, baris split dan Requests serta tombol berpasangan tahan font 200%.
+- Test: 118 server, 127 aplikasi. QA tiga putaran, putaran 3 READY FOR RELEASE. Server di-deploy, ledger produksi OK.
+
 ## Quality pass 0.9.0 ✅ (17 Okt)
 
 Permintaan tim bisnis: uji ulang seluruh alur end to end dan audit UI dengan skill impeccable, lalu jadikan requirement perbaikan. Folder: `docs/features/2026-10-16-quality-pass/`.
@@ -64,7 +74,7 @@ Permintaan tim bisnis: uji ulang seluruh alur end to end dan audit UI dengan ski
 - Yang berubah bagi nasabah: tahan font 200% di HP kecil, tidak ada lagi kegagalan yang diam, Share receipt dan tanggal di layar sukses, detail rekening (S1.9), filter Date dan Type di riwayat (S1.10), Forgot PIN, batas 5 percobaan juga di Ganti PIN/password, cek NIK dan PIN lemah di langkah yang benar, nominal di QR-ku, beli emas dalam gram, senter QRIS, banner di bawah transaksi terakhir.
 - Admin: penolakan wajib alasan, password awal petugas tidak lewat URL, filter semua jenis transaksi, banner dengan tanggal mulai, urutan, dan edit. Reset demo berhasil walau ada passkey.
 - Test: 111 test server, 97 test aplikasi (termasuk 48 render font 2,0 di 360dp dan 411dp). Izin APK sama dengan 0.8.1.
-- QA: putaran 1 NOT READY (1 major di test render), putaran 2 READY FOR RELEASE. Sisa 3 minor dan 2 polish (Q-02-F1..F5) masuk 0.9.1.
+- QA: putaran 1 NOT READY (1 major di test render), putaran 2 READY FOR RELEASE. Sisa 3 minor dan 2 polish (Q-02-F1..F5) ditutup di 0.9.1.
 - Dirilis tanpa menunggu persetujuan, sesuai izin tim bisnis ("klo udah ready mah rilis aja ga perlu persetujuan saya"). Server di-deploy (migration 026), ledger produksi OK.
 
 ## Fase 3: selesai ✅ (0.8.0)
