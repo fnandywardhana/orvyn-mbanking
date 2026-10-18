@@ -82,7 +82,7 @@ Sumber: `PRD-ORVYN.md` (F11–F17) dan sisa Fase 1 (push notification), istilah 
 ### S2.6 Meminta uang
 **Sebagai** nasabah, **saya ingin** meminta uang ke sesama nasabah ORVYN, **supaya** teman yang berutang tinggal membayar.
 
-1. Nasabah memasukkan nomor rekening ORVYN atau memilih penerima tersimpan, nominal, dan catatan singkat.
+1. Nasabah memasukkan nomor rekening ORVYN atau memilih penerima tersimpan, nominal, dan catatan singkat. Nominal minimal sama dengan minimum Transfer (sekarang Rp10,000). Server menolak permintaan di bawah minimum saat dibuat. Permintaan yang sudah terbuka tetap bisa dibayar dengan nominal aslinya walau minimum naik. (diubah 0.9.1)
 2. Penerima mendapat push dan kartu permintaan di kotak masuk. Kartu itu membuka detail permintaan yang punya tombol "Pay" dan "Decline". (diubah 0.9.0)
 3. "Pay" membuka layar periksa yang sudah terisi, baik dari detail permintaan maupun dari layar Requests. Pembayaran tetap memakai PIN. (diubah 0.9.0)
 4. Permintaan kedaluwarsa setelah 7 hari. Peminta bisa membatalkannya selama belum dibayar.
@@ -93,7 +93,7 @@ Sumber: `PRD-ORVYN.md` (F11–F17) dan sisa Fase 1 (push notification), istilah 
 **Sebagai** nasabah, **saya ingin** membagi tagihan makan ke beberapa teman, **supaya** saya tidak perlu menghitung dan menagih satu-satu.
 
 1. Nasabah memasukkan total, lalu memilih 1–9 teman dari penerima tersimpan atau nomor rekening.
-2. Pembagian default sama rata dan dibulatkan ke rupiah. Sisanya ditanggung pembuat. Nominal per orang bisa diubah.
+2. Pembagian default sama rata dan dibulatkan ke rupiah. Sisanya ditanggung pembuat. Nominal per orang bisa diubah. Total serta setiap bagian teman minimal sama dengan minimum Transfer (sekarang Rp10,000). Bagian di bawah minimum ditandai dan harus diubah sebelum dikirim. (diubah 0.9.1)
 3. Setiap teman menerima permintaan terpisah (S2.6).
 4. Layar split menampilkan siapa yang sudah bayar, belum, atau menolak.
 5. Jika transaksi asal dipilih dari riwayat, totalnya terisi otomatis.
@@ -115,7 +115,7 @@ Sumber: `PRD-ORVYN.md` (F11–F17) dan sisa Fase 1 (push notification), istilah 
 
 1. Grafik batang menampilkan total pengeluaran 6 bulan terakhir, dengan bulan ini disorot.
 2. Daftar kategori bulan ini menampilkan nominal, porsi, dan perubahan dibanding bulan lalu (naik atau turun, dalam persen).
-3. Ketukan pada kategori membuka riwayat yang sudah difilter ke kategori itu.
+3. Ketukan pada kategori membuka transaksi bulan ini di kategori itu, dari tabungan dan kartu kredit, dengan penanda sumbernya. Jumlahnya sama dengan nominal kategori. (diubah 0.9.1)
 4. Grafik punya label nilai yang bisa dibaca TalkBack, dan warnanya tidak menjadi satu-satunya penanda.
 5. Jika belum ada transaksi bulan ini, layar menampilkan keadaan kosong yang jelas.
 

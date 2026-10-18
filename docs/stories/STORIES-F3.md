@@ -45,7 +45,7 @@ Sumber: `PRD-ORVYN.md` (F18–F23, KR7), istilah dari `CONTEXT.md`, keputusan di
 1. Saat jatuh tempo, bunga bersih dibayar dari House Account bunga. Jika diperpanjang, pokok dan bunga menjadi deposito baru dengan tenor yang sama. Jika dicairkan, semuanya masuk ke tabungan.
 2. Nasabah mendapat push dan pesan di kotak masuk.
 3. Nasabah bisa mencairkan lebih awal dengan PIN. Bunga hangus dan aplikasi menjelaskannya di layar periksa sebelum PIN. Setelah berhasil, layar sukses menampilkan nominal yang masuk ke tabungan. (diubah 0.9.0)
-4. Petugas bisa menjalankan "Mature now" untuk demo, tanpa menunggu berbulan-bulan.
+4. Petugas bisa menjalankan "Mature now" untuk demo, tanpa menunggu berbulan-bulan, juga untuk deposito dengan bunga Rp0. Satu deposito yang gagal jatuh tempo tidak menahan deposito lain. (diubah 0.9.1)
 
 ---
 
