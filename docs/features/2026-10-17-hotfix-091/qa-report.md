@@ -258,3 +258,84 @@ Di 200% 360dp beberapa tombol berdampingan mematahkan kata: `New recipien` / `t`
 - Produksi: `orvyn-server-1` waktu mulai tetap `2026-10-17T16:01:00Z`, `RestartCount=0`.
 - Setelan dev: semua fitur menyala, maintenance off. Data baru: split Raka Rp15,000 (bagian Sinta Rp10,000, dibayar). Buku besar akhir OK, 1153.
 - Tidak ada commit. `git status`: hanya file QA di folder ini.
+
+---
+
+# Putaran 3 (18 Okt 2026)
+
+Build: `main` 800e8ba (perbaikan IT `c46791e`: `RequestRow` bertumpuk di font besar, komponen `ButtonRow`). Debug **0.9.1 (versionCode 13)** di-build 21:00:06 UTC, setelah commit `c46791e` (20:57:49 UTC; `800e8ba` hanya mengubah `it-report.md`). Render 200% di `qa-shots/r200-r3/`, screenshot HP `qa-shots/r3-*.png`. Produksi tidak disentuh.
+
+## R3.0 Ringkasan dan putusan
+
+H91-F4 dan catatan tombol R2.5 **tertutup**. Render 200% (360dp dan 411dp, terang dan gelap) di kedelapan layar yang diminta tidak menunjukkan kata yang patah padahal muat satu baris (`avoidableWordBreaks()` kosong di 32 render) dan tidak ada yang terpotong. Di HP (font setelan pemilik) Send money, Requests, kantong, Invest, dan kartu RM tampil sama dengan sebelumnya, dan tombolnya berfungsi. Flake `FontScaleTest.accountDetail` **tidak muncul** di 9 run (3 penuh, 3 `FontScaleTest` saja, 3 `FontScaleTest` saja dalam mode rekam Roborazzi, kondisi saat IT melihatnya). Server 118/118, izin identik dengan 0.9.0, buku besar dev Balanced (1153, tidak ada uang bergerak di putaran ini).
+
+| Severity | Jumlah |
+|---|---|
+| Blocker | 0 |
+| Major | 0 |
+| Minor | 0 |
+| Polish | 0 |
+
+**Putusan akhir: READY FOR RELEASE.** Semua AC H91-1 sampai H91-5 lolos (putaran 1 dan 2), Q-02-F1..F5 dan H91-F1..F4 tertutup, build stabil, izin sama dengan 0.9.0.
+
+## R3.1 Otomatis, stabilitas, dan izin
+
+| Cek | Hasil |
+|---|---|
+| `cd server && npm test` | **118/118 lolos** |
+| `./gradlew --rerun-tasks testDebugUnitTest`, run 1 / 2 / 3 | BUILD SUCCESSFUL ketiganya, **127/127 lolos** tiap run, 0 gagal, 0 skip |
+| `FontScaleTest` saja (`--rerun-tasks --tests id.orvyn.app.FontScaleTest`), run 1 / 2 / 3 | BUILD SUCCESSFUL ketiganya, **68/68 lolos** (termasuk `accountDetail` 360dp/411dp terang/gelap) |
+| `FontScaleTest` saja, mode rekam Roborazzi (`-Proborazzi.test.record=true`), run 1 / 2 / 3 | BUILD SUCCESSFUL ketiganya, **68/68 lolos** |
+| `assembleDebug`, badging | BUILD SUCCESSFUL, `versionCode='13' versionName='0.9.1'` |
+| Izin vs `releases/orvyn-0.9.0.apk` | **Identik** (`diff` kosong) |
+| Rahasia di `c1d303b..800e8ba` | Tidak ada file rahasia |
+
+Flake yang dicatat IT tidak bisa direproduksi dalam 9 run, jadi build tidak saya nilai flaky. Penyebab yang ditulis IT (data `AccountScreen` dimuat di latar belakang saat test menggulir) masuk akal untuk backlog test; `AccountScreen` dan test-nya tidak berubah di 0.9.1.
+
+## R3.2 Render 200% (360dp dan 411dp, terang dan gelap)
+
+Test sementara (dihapus setelah dipakai) dengan data dari dev server (Hendra: kantong, investasi, harga) dan data panjang buatan QA (nama 29 huruf, nominal Rp150,000,000). Setiap render diperiksa dengan `avoidableWordBreaks()` milik IT dan dilihat langsung.
+
+| Layar | Hasil |
+|---|---|
+| Daftar Requests | Lolos: baris bertumpuk (avatar, `Raka Pratama asks you`, catatan, `Rp10,000`, chip `To pay`), `Ask for money` dan `Split a bill` bertumpuk selebar layar. Tidak ada `Pratam`/`a` lagi |
+| Detail permintaan | Lolos: judul membungkus per kata. `Kusumawardhani` di 360dp lebih lebar dari baris dan tetap terbagi (batas lebar, seperti putaran 2) |
+| Daftar penerima / Send money | Lolos: `New recipient` dan `Scheduled` bertumpuk utuh, baris penerima rapi |
+| Kartu RM | Lolos: `Call` dan `Message` bertumpuk utuh (tidak ada `Messa`/`ge`), monogram `AP` utuh. Alamat email lebih lebar dari baris dan terbagi di titik (batas lebar) |
+| Kantong (`Kevin's school`) | Lolos: `Add money` / `Take out` bertumpuk, riwayat utuh |
+| Invest (`Cahaya Ekuitas Indonesia`) | Lolos: `Buy` / `Sell` bertumpuk, chip rentang dan grafik utuh |
+| Pemindai QRIS | Lolos: CameraX tidak punya kamera di Robolectric, jadi `ButtonRow` pemindai (`Gallery`, `My QR`, tombol Secondary di latar hitam) dirender sendiri persis seperti di `QrisFlow.Scanner`: bertumpuk, label utuh |
+| QRIS tanpa izin kamera | Tombol `Allow camera`, `Pick from gallery`, `Show my QR` utuh. Lihat catatan |
+
+## R3.3 HP, font setelan pemilik
+
+| Layar | Hasil |
+|---|---|
+| Send money (Raka) | Sama dengan putaran 1: `New recipient` dan `Scheduled` berdampingan di posisi yang sama; keduanya membuka layarnya (`New recipient`, `Scheduled transfers`) | 
+| Requests (Raka) | Tombol berdampingan, baris tetap tiga kolom (nominal dan chip di kanan) seperti sebelumnya; `Ask for money` dan `Split a bill` membuka alurnya |
+| Kantong (Hendra) | `Add money` / `Take out` berdampingan; membuka `Add to Kevin's school` dan `Take out of Kevin's school` |
+| Invest (Hendra) | `Buy` / `Sell` berdampingan di bawah; membuka `Buy …` dan `Sell Cahaya Ekuitas Indonesia` |
+| Kartu RM (beranda Hendra) | `Call` / `Message` berdampingan seperti sebelumnya. **Tidak diketuk**, karena keduanya membuka aplikasi telepon/SMS di HP pemilik (aturan HP) |
+
+Bukti: `r3-send-money.png`, `r3-requests.png`, `r3-pocket.png`, `r3-invest-product.png`, `r3-home-rm-card.png`. Tidak ada uang yang bergerak; semua alur dibatalkan dengan panah `Back` sebelum PIN.
+
+## R3.4 Catatan (bukan temuan 0.9.1)
+
+- Layar QRIS tanpa izin kamera di 360×640 font 200%: judul `Point your camera at a QRIS code` dan penjelasannya berada di bawah lipatan dan harus digulir (area itu bisa digulir, tidak terpotong). Kode layar ini tidak berubah sejak 0.9.0. Untuk backlog font besar.
+- Di kartu RM, pemisah ` · ` antara nomor dan email bisa berdiri sendiri di satu baris pada 360dp 200%. Kosmetik.
+
+## R3.5 Yang tidak teruji
+
+- Font 200% dan TalkBack asli di HP (setelan HP): diganti render.
+- `Call` / `Message` RM di HP: membuka aplikasi lain.
+- Pemindai QRIS dengan kamera menyala: tidak di HP (kamera hanya ditolak) dan tidak bisa di Robolectric; `ButtonRow`-nya dirender sendiri.
+
+## R3.6 Kondisi HP dan lingkungan di akhir sesi
+
+- Awal putaran: tidak ada dev server berjalan (satu-satunya proses `node src/main.ts` adalah server produksi di dalam container, dibiarkan), `adb reverse` kosong, release 0.9.0 terpasang, launcher di depan.
+- Debug 0.9.1 dipasang (release di-uninstall), Raka lalu Hendra masuk. Penjaga `mCurrentFocus` sebelum setiap input; tidak ada aplikasi lain atau jendela sistem yang disentuh, tombol `Call`/`Message` tidak diketuk, Back tidak dikirim di beranda, kamera tidak dipakai, setelan HP tidak diubah.
+- Akhir: debug di-uninstall, `releases/orvyn.apk` **0.9.0** terpasang lagi, launcher di depan, `adb reverse --remove-all` (kosong), file dump di HP dihapus.
+- Dev server dimatikan dengan `kill` PID node-nya sendiri, port 8790 bebas. Tidak ada proxy, tidak ada worktree. File test sementara dan folder render di `build/` dihapus.
+- Produksi: `orvyn-server-1` waktu mulai tetap `2026-10-17T16:01:00Z`, `RestartCount=0`.
+- Setelan dev: semua fitur menyala, maintenance off. Buku besar dev OK, 1153 Journal Entry (tidak berubah di putaran ini).
+- Tidak ada commit. `git status`: hanya screenshot QA baru dan `qa-report.md` di folder ini.
